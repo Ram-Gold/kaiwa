@@ -4,12 +4,13 @@
 KAIwa is a fully local Japanese learning tutor (like Pingo) built for a capstone.
 Core features:
 - JLPT test reviewer, starting at N5 level
-- "AI Kaiwa" — local conversational practice powered by LocalAI (no external API calls)
+- "AI Kaiwa" — conversational practice powered by Ollama (local-first, with option for user-provided external AI API keys)
 - Persistent memory: user identity, skill level, and N5 score persist across sessions
 
 ## Stack & Conventions
-- Runtime: Node.js LTS
-- AI inference: LocalAI (self-hosted, local-only — never call external LLM APIs for Kaiwa mode)
+- Frontend: Flutter (Dart) — Cross-platform (iOS, Android, Desktop)
+- AI Inference: Ollama (default local inference) or external AI services (via user-provided API keys)
+- Storage: Persistent local database/storage (e.g., Isar, Hive, or SQLite/Drift)
 - Commit style: Conventional Commits (feat:, fix:, docs:, chore:, refactor:, test:)
 - Branching: main is always deployable; feature branches per task
 
@@ -19,5 +20,5 @@ Core features:
 - Comment any AI-prompt-construction logic clearly, since prompt design is core to tutoring quality
 
 ## Things to avoid
-- No cloud LLM calls in the "AI Kaiwa" conversational feature — it must stay local via LocalAI
+- Avoid external cloud calls by default in the "AI Kaiwa" conversational feature unless the user has configured their own API keys
 - Don't hardcode JLPT question content directly in UI components — keep content data-driven
