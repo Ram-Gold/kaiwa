@@ -79,6 +79,7 @@ textarea {
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
+select:focus-visible,
 textarea:focus-visible {
   outline: 4px solid var(--main);
   outline-offset: 3px;

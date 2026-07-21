@@ -1,8 +1,8 @@
 const variants = {
-  primary: 'bg-shu text-paper shadow-shadow hover:translate-x-boxShadowX hover:translate-y-boxShadowY hover:shadow-none',
-  secondary: 'bg-mustard text-ink shadow-shadow hover:translate-x-boxShadowX hover:translate-y-boxShadowY hover:shadow-none',
-  ghost: 'bg-paper text-ink hover:bg-mustard',
-  dark: 'bg-ink text-paper shadow-shadow hover:translate-x-boxShadowX hover:translate-y-boxShadowY hover:shadow-none',
+  primary: 'bg-shu text-paper shadow-shadow enabled:hover:translate-x-boxShadowX enabled:hover:translate-y-boxShadowY enabled:hover:shadow-none',
+  secondary: 'bg-mustard text-ink shadow-shadow enabled:hover:translate-x-boxShadowX enabled:hover:translate-y-boxShadowY enabled:hover:shadow-none',
+  ghost: 'bg-paper text-ink enabled:hover:bg-mustard',
+  dark: 'bg-ink text-paper shadow-shadow enabled:hover:translate-x-boxShadowX enabled:hover:translate-y-boxShadowY enabled:hover:shadow-none',
 };
 
 export default function Button({
