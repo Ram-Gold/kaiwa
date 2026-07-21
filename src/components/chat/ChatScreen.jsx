@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { sendMessage, translateMessage } from '../../lib/openrouter.js';
+import { sendMessage, translateMessage } from '../../lib/ai.js';
 import { getPersonaById } from '../../prompts/personas.js';
 import Button from '../ui/Button.jsx';
 import ChatBubble from './ChatBubble.jsx';
@@ -7,7 +7,7 @@ import SuggestionChips from './SuggestionChips.jsx';
 
 let messageCounter = 0;
 
-export default function ChatScreen({ apiKey, personaId, onBackToDashboard }) {
+export default function ChatScreen({ provider, apiKey, personaId, onBackToDashboard }) {
   const persona = useMemo(() => getPersonaById(personaId), [personaId]);
   const [messages, setMessages] = useState(() => [
     createMessage('assistant', getOpeningLine(persona)),
@@ -40,7 +40,7 @@ export default function ChatScreen({ apiKey, personaId, onBackToDashboard }) {
     setIsLoading(true);
 
     try {
-      const reply = await sendMessage(apiKey, persona, historyForApi, cleanMessage);
+      const reply = await sendMessage(provider, apiKey, persona, historyForApi, cleanMessage);
       setMessages((current) => [
         ...current,
         createMessage('assistant', reply.text),
@@ -54,7 +54,7 @@ export default function ChatScreen({ apiKey, personaId, onBackToDashboard }) {
           role: 'error',
           content:
             error?.userMessage ||
-            'Something went wrong while contacting OpenRouter. Try again.',
+            'Something went wrong while contacting the AI provider. Try again.',
         },
       ]);
     } finally {
@@ -87,14 +87,14 @@ export default function ChatScreen({ apiKey, personaId, onBackToDashboard }) {
     setTranslatingIds((current) => ({ ...current, [message.id]: true }));
 
     try {
-      const english = await translateMessage(apiKey, message.content);
+      const english = await translateMessage(provider, apiKey, message.content);
       setTranslations((current) => ({ ...current, [message.id]: english }));
     } catch (error) {
       setTranslations((current) => ({
         ...current,
         [message.id]:
           error?.userMessage ||
-          'Could not translate this message. Check your key and try again.',
+          'Could not translate this message. Check your settings and try again.',
       }));
     } finally {
       setTranslatingIds((current) => ({ ...current, [message.id]: false }));

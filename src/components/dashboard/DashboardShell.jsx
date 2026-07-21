@@ -1,12 +1,13 @@
-import ApiKeyCard from './ApiKeyCard.jsx';
+import AiProviderSettingsCard from './AiProviderSettingsCard.jsx';
 import PersonaGrid from './PersonaGrid.jsx';
 import Button from '../ui/Button.jsx';
 import HankoStamp from '../ui/HankoStamp.jsx';
 
 export default function DashboardShell({
-  apiKey,
+  provider,
+  apiKeys,
   notice,
-  onApiKeySaved,
+  onSettingsSaved,
   onBackHome,
   onSelectPersona,
 }) {
@@ -32,12 +33,16 @@ export default function DashboardShell({
       )}
 
       <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-        <ApiKeyCard apiKey={apiKey} onApiKeySaved={onApiKeySaved} />
+        <AiProviderSettingsCard
+          provider={provider}
+          apiKeys={apiKeys}
+          onSettingsSaved={onSettingsSaved}
+        />
         <div className="brutal-border bg-white/50 p-5 shadow-shadow">
           <p className="label-mono text-shu">Status</p>
           <h2 className="mt-2 font-display text-3xl">V1 scope</h2>
           <ul className="mt-4 space-y-3 font-semibold leading-7">
-            <li>✓ API key saved only in this browser.</li>
+            <li>✓ AI settings saved only in this browser.</li>
             <li>✓ Conversations reset when the page refreshes.</li>
             <li>✓ No accounts, database, or backend server.</li>
           </ul>

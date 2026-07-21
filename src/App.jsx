@@ -1,17 +1,26 @@
 import { useEffect, useState } from 'react';
 import ChatScreen from './components/chat/ChatScreen.jsx';
 import DashboardShell from './components/dashboard/DashboardShell.jsx';
-import { loadStoredApiKey } from './components/dashboard/ApiKeyCard.jsx';
+import {
+  loadStoredProvider,
+  loadStoredApiKeys,
+} from './components/dashboard/AiProviderSettingsCard.jsx';
 import LandingPage from './components/landing/LandingPage.jsx';
 
 export default function App() {
   const [view, setView] = useState('landing');
-  const [apiKey, setApiKey] = useState('');
+  const [provider, setProvider] = useState('ollama');
+  const [apiKeys, setApiKeys] = useState({
+    openai: '',
+    gemini: '',
+    claude: '',
+  });
   const [selectedPersonaId, setSelectedPersonaId] = useState('');
   const [dashboardNotice, setDashboardNotice] = useState('');
 
   useEffect(() => {
-    setApiKey(loadStoredApiKey());
+    setProvider(loadStoredProvider());
+    setApiKeys(loadStoredApiKeys());
   }, []);
 
   function openDashboard(notice = '') {
@@ -20,8 +29,10 @@ export default function App() {
   }
 
   function openChat(personaId) {
-    if (!apiKey) {
-      openDashboard('Save your OpenRouter API key before opening a persona chat.');
+    if (provider !== 'ollama' && !apiKeys[provider]) {
+      const displayProvider =
+        provider === 'openai' ? 'OpenAI' : provider === 'gemini' ? 'Gemini' : 'Claude';
+      openDashboard(`Save your ${displayProvider} API key before opening a persona chat.`);
       return;
     }
 
@@ -30,10 +41,16 @@ export default function App() {
     setView('chat');
   }
 
+  function handleSettingsSaved(newProvider, newKeys) {
+    setProvider(newProvider);
+    setApiKeys(newKeys);
+  }
+
   if (view === 'chat') {
     return (
       <ChatScreen
-        apiKey={apiKey}
+        provider={provider}
+        apiKey={apiKeys[provider] || ''}
         personaId={selectedPersonaId}
         onBackToDashboard={() => openDashboard()}
       />
@@ -43,9 +60,10 @@ export default function App() {
   if (view === 'dashboard') {
     return (
       <DashboardShell
-        apiKey={apiKey}
+        provider={provider}
+        apiKeys={apiKeys}
         notice={dashboardNotice}
-        onApiKeySaved={setApiKey}
+        onSettingsSaved={handleSettingsSaved}
         onBackHome={() => setView('landing')}
         onSelectPersona={openChat}
       />
