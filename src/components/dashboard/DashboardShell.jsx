@@ -1,12 +1,12 @@
-import ApiKeyCard from './ApiKeyCard.jsx';
+import AiConnectionCard from './AiConnectionCard.jsx';
 import PersonaGrid from './PersonaGrid.jsx';
 import Button from '../ui/Button.jsx';
 import HankoStamp from '../ui/HankoStamp.jsx';
 
 export default function DashboardShell({
-  apiKey,
+  settings,
   notice,
-  onApiKeySaved,
+  onOpenSettings,
   onBackHome,
   onSelectPersona,
 }) {
@@ -20,9 +20,14 @@ export default function DashboardShell({
             <h1 className="font-display text-4xl sm:text-5xl">会話 starts here</h1>
           </div>
         </div>
-        <Button variant="ghost" onClick={onBackHome}>
-          Home
-        </Button>
+        <div className="flex gap-3">
+          <Button variant="ghost" onClick={onOpenSettings}>
+            ⚙ Settings
+          </Button>
+          <Button variant="ghost" onClick={onBackHome}>
+            Home
+          </Button>
+        </div>
       </header>
 
       {notice && (
@@ -32,14 +37,14 @@ export default function DashboardShell({
       )}
 
       <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-        <ApiKeyCard apiKey={apiKey} onApiKeySaved={onApiKeySaved} />
+        <AiConnectionCard settings={settings} onOpenSettings={onOpenSettings} />
         <div className="brutal-border bg-white/50 p-5 shadow-shadow">
           <p className="label-mono text-shu">Status</p>
           <h2 className="mt-2 font-display text-3xl">V1 scope</h2>
           <ul className="mt-4 space-y-3 font-semibold leading-7">
-            <li>✓ API key saved only in this browser.</li>
+            <li>✓ Multiple AI providers supported (OpenRouter, OpenAI, local Ollama).</li>
+            <li>✓ Credentials stored locally in browser.</li>
             <li>✓ Conversations reset when the page refreshes.</li>
-            <li>✓ No accounts, database, or backend server.</li>
           </ul>
         </div>
       </div>
@@ -50,3 +55,4 @@ export default function DashboardShell({
     </main>
   );
 }
+
