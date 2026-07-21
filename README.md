@@ -1,48 +1,44 @@
-# KAIwa 🇯🇵
+# Kaiwa 🇯🇵
 
-A fully local, privacy-first Japanese learning tutor — like Pingo, but powered by Ollama running entirely on your machine.
+Kaiwa (会話, “conversation”) is a local-first Japanese conversation-practice
+capstone app. Users roleplay with AI personas through their own OpenRouter API
+key, stored client-side in the browser.
 
-## Overview & Capstone Context
+## Current v1 scope
 
-KAIwa is designed to solve two main friction points in modern AI-assisted language learning:
-1. **Data Privacy**: Language practice is highly personal. KAIwa ensures all conversations, skill levels, and progress data remain 100% local.
-2. **Cost & Accessibility**: By leveraging offline local LLMs via Ollama, users avoid recurring API subscription fees and can practice without an active internet connection.
-
-Additionally, KAIwa offers the flexibility to configure custom/external AI API keys for users who prefer using cloud models (like OpenAI, Gemini, or Claude).
-
-This project is built as a capstone project focusing on cross-platform application design and offline-first AI architecture.
-
-## Core Features
-- **JLPT Reviewer** — Practice questions and progress tracking, starting at the N5 level.
-- **AI Kaiwa (会話)** — Real-time conversational practice powered by Ollama (local) or external API keys (cloud).
-- **Persistent Memory** — Locally persisted user profiles, skill levels, and JLPT scores across sessions.
-- **Privacy-First** — User data is stored locally and never sent to remote servers.
-
-## System Architecture
-
-```mermaid
-graph TD
-    User([User]) <--> FlutterApp[Flutter Client App]
-    FlutterApp <--> LocalDB[(Local DB: Isar/Hive)]
-    FlutterApp <--> Ollama[Ollama Local Service]
-    FlutterApp <--> CloudAI[External Cloud AI API]
-    subgraph local_machine [Local Device Sandbox]
-        FlutterApp
-        LocalDB
-        Ollama
-    end
-```
-
-## Tech Stack
-- **Frontend / Client**: Flutter (Dart) — Cross-platform (iOS, Android, Desktop)
-- **AI Inference**: Ollama (default local inference) or custom external APIs (OpenAI, Gemini, etc.)
-- **Storage**: Local persistent storage (such as Isar, Hive, or Drift)
-
-## Status
-🚧 Early development — capstone project in progress.
+- React + Vite + Tailwind CSS
+- No backend server, user accounts, or database
+- OpenRouter requests are made directly from the browser
+- API key is stored in `localStorage` with an in-app disclaimer
+- Chat history is kept only in component state and resets on refresh
+- Personas: Sensei, Crush, Idol
 
 ## Setup
-Instructions coming soon.
+
+```bash
+npm install
+npm run dev
+```
+
+To build for production:
+
+```bash
+npm run build
+```
+
+Optional: choose a specific OpenRouter model by setting:
+
+```bash
+VITE_OPENROUTER_MODEL=openrouter/auto
+```
+
+## Important privacy note
+
+This v1 is local-first in the sense that it has no hosted backend and does not
+persist chat history. OpenRouter chat requests are still external network calls
+made with the user-provided key. The key is saved in browser `localStorage`, not
+encrypted.
 
 ## License
-See [LICENSE](./LICENSE)
+
+See [LICENSE](./LICENSE).
