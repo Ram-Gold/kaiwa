@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 10, "column": 0}, "map": {"version":3,"sources":["file:///home/ram/Projects/Cross-platform/KAIwa/src/app/page.jsx"],"sourcesContent":["import Link from 'next/link';\n\nexport default function Home() {\n  return (\n    <div className=\"flex flex-col items-center justify-center min-h-[60vh] text-center\">\n      <h1 className=\"text-4xl md:text-6xl font-extrabold tracking-tight mb-4\">\n        Master Japanese with <span className=\"text-blue-600\">KAIwa</span>\n      </h1>\n      <p className=\"text-lg md:text-xl text-gray-600 mb-8 max-w-2xl\">\n        A fully local AI-powered tutor for your JLPT preparation. \n        Practice natural conversations and level up your skills.\n      </p>\n      <Link href=\"/dashboard\" className=\"bg-blue-600 text-white px-8 py-3 rounded-full font-semibold hover:bg-blue-700 transition shadow-lg hover:shadow-xl\">\n        Go to Dashboard\n      </Link>\n    </div>\n  );\n}\n"],"names":["Home","className","href"],"mappings":";;;;;AAAA;;;AAEe,SAASA;IACtB,qBACE,8OAAC;QAAIC,WAAU;;0BACb,8OAAC;gBAAGA,WAAU;;oBAA0D;kCACjD,8OAAC;wBAAKA,WAAU;kCAAgB;;;;;;;;;;;;0BAEvD,8OAAC;gBAAEA,WAAU;0BAAkD;;;;;;0BAI/D,8OAAC,0LAAI;gBAACC,MAAK;gBAAaD,WAAU;0BAAqH;;;;;;;;;;;;AAK7J"}}]
+}
