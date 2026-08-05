@@ -2,7 +2,7 @@ import Link from 'next/link';
 import Badge from '../components/ui/Badge.jsx';
 import Button from '../components/ui/Button.jsx';
 import Card from '../components/ui/Card.jsx';
-import HankoStamp from '../components/ui/HankoStamp.jsx';
+import LogoMark from '../components/ui/LogoMark.jsx';
 import StatCard from '../components/ui/StatCard.jsx';
 
 const practiceModes = [
@@ -19,7 +19,7 @@ export default function Home() {
       <section className="grid items-center gap-8 py-8 lg:grid-cols-[1.05fr_0.95fr] lg:py-14">
         <div className="space-y-6">
           <div className="flex flex-wrap items-center gap-4">
-            <HankoStamp />
+            <LogoMark className="brutal-border h-24 w-24 rotate-[-8deg] shadow-shadow" />
             <Badge tone="mustard" tilt="left">Clean neubrutal prototype</Badge>
             <Badge tone="moss">Private by default</Badge>
           </div>
@@ -30,7 +30,7 @@ export default function Home() {
               A crisp study notebook for Japanese practice.
             </h1>
             <p className="max-w-2xl text-lg font-bold leading-8 sm:text-xl">
-              KAIwa combines JLPT review, local-first AI settings, and tactile conversation cards — bold ink, clean paper, no purple AI haze.
+              KAIwa combines JLPT review, local-first AI settings, and tactile conversation cards — bold ink, clean paper, and a correction-red mark built for study momentum.
             </p>
           </div>
 
