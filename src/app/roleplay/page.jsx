@@ -17,7 +17,7 @@ const scenarios = [
     category: 'Beginner',
     difficulty: 'N5',
     minutes: 8,
-    bg: '/assets/bg_eki_homedoor_train_open.jpg',
+    bg: '/assets/backgrounds/bg_eki_homedoor_train_open.jpg',
     href: '/briefing/train-station',
     tone: 'mustard',
   },
@@ -27,7 +27,7 @@ const scenarios = [
     category: 'Fun',
     difficulty: 'N4',
     minutes: 6,
-    bg: '/assets/bg_music_live_stage.jpg',
+    bg: '/assets/backgrounds/bg_music_live_stage.jpg',
     href: '/briefing/idol-cheki',
     tone: 'correction',
   },
@@ -37,7 +37,7 @@ const scenarios = [
     category: 'Intermediate',
     difficulty: 'N3',
     minutes: 12,
-    bg: '/assets/bg_ryokan_hiroen.jpg',
+    bg: '/assets/backgrounds/bg_ryokan_hiroen.jpg',
     href: '/briefing/colleague-hiroen',
     tone: 'aizome',
   },
@@ -67,7 +67,7 @@ const scenarios = [
     category: 'Beginner',
     difficulty: 'N5',
     minutes: 10,
-    bg: '/assets/bg_school_room_back.jpg',
+    bg: '/assets/backgrounds/bg_school_room_back.jpg',
     href: '/briefing/teacher-teaching',
     tone: 'mustard',
   },
@@ -113,6 +113,17 @@ export default function RoleplayPage() {
           <ScenarioCard key={scenario.title} scenario={scenario} />
         ))}
       </section>
+
+      <section className="mt-8 brutal-border bg-aizome p-5 text-paper shadow-shadow sm:flex sm:items-center sm:justify-between sm:gap-6" aria-label="Completed roleplay review">
+        <div>
+          <p className="label-mono text-mustard">Finished a session?</p>
+          <h2 className="mt-2 font-display text-3xl leading-none">See your grading & review</h2>
+          <p className="mt-2 max-w-2xl font-bold leading-7 text-paper/80">Review your score, conversation history, grammar suggestions, and weak vocabulary after a roleplay.</p>
+        </div>
+        <Button as={Link} href="/grading" size="lg" className="mt-5 shrink-0 bg-mustard text-ink sm:mt-0">
+          View grading →
+        </Button>
+      </section>
     </div>
   );
 }
@@ -145,13 +156,15 @@ function ScenarioCard({ scenario }) {
           <img
             src={scenario.bg}
             alt=""
-            className="absolute inset-0 h-full w-full scale-100 object-cover opacity-20 transition-[opacity,transform] duration-500 ease-out group-hover:scale-[1.03] group-hover:opacity-45 group-focus-visible:scale-[1.03] group-focus-visible:opacity-45"
+            className="absolute inset-0 h-full w-full scale-100 object-cover opacity-10 transition-[opacity,transform] duration-500 ease-out group-hover:scale-[1.03] group-hover:opacity-30 group-focus-visible:scale-[1.03] group-focus-visible:opacity-30"
             draggable="false"
           />
         ) : (
-          <div className="absolute inset-0 notebook-panel opacity-80 transition-opacity duration-500 ease-out group-hover:opacity-100" aria-hidden="true" />
+          <>
+            <div className="absolute inset-0 notebook-panel opacity-80 transition-opacity duration-500 ease-out group-hover:opacity-100" aria-hidden="true" />
+            <div className="absolute inset-0 bg-paper/70 transition-colors duration-500 ease-out group-hover:bg-paper/35" aria-hidden="true" />
+          </>
         )}
-        <div className="absolute inset-0 bg-paper/70 transition-colors duration-500 ease-out group-hover:bg-paper/35" aria-hidden="true" />
 
         <div className="relative flex items-start justify-between gap-4">
           <Badge tone={scenario.tone}>{scenario.category}</Badge>

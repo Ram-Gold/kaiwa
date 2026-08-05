@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { getKnownRomajiGlosses } from '../../lib/japaneseText.js';
+import { IoVolumeHighSharp, IoLanguageSharp, IoGlobeOutline, IoCheckmarkSharp } from 'react-icons/io5';
+import { getKnownRomajiGlosses, toRomajiText } from '../../lib/japaneseText.js';
 import { speakJapanese } from '../../lib/speech.js';
+import { translateJapaneseToEnglish } from '../../lib/translation.js';
 import JapaneseText from './JapaneseText.jsx';
 import SuggestionChips from './SuggestionChips.jsx';
-import AnimatedPopover from '../ui/AnimatedPopover.jsx';
+import { cn } from '../../lib/utils.js';
 
 export default function ChatBubble({
   isTranslating = false,
@@ -16,10 +18,43 @@ export default function ChatBubble({
   translation,
 }) {
   const [showRomaji, setShowRomaji] = useState(false);
+  const [showTranslation, setShowTranslation] = useState(Boolean(translation));
+  const [currentTranslation, setCurrentTranslation] = useState(translation || '');
+  const [isTranslatingLocal, setIsTranslatingLocal] = useState(false);
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+
   const isUser = message.role === 'user';
   const isError = message.role === 'error';
   const canUseAiTools = message.role === 'assistant';
   const romajiGlosses = canUseAiTools ? getKnownRomajiGlosses(message.content) : [];
+  const romajiText = canUseAiTools ? toRomajiText(message.content) : '';
+
+  async function handleToggleTranslate() {
+    if (onTranslate) {
+      onTranslate(message);
+    }
+    
+    if (showTranslation) {
+      setShowTranslation(false);
+      return;
+    }
+
+    if (currentTranslation || translation) {
+      setShowTranslation(true);
+      return;
+    }
+
+    setIsTranslatingLocal(true);
+    const result = await translateJapaneseToEnglish(message.content);
+    setCurrentTranslation(result);
+    setShowTranslation(true);
+    setIsTranslatingLocal(false);
+  }
+
+  function handleToggleSpeaker() {
+    const active = speakJapanese(message.content);
+    setIsPlayingAudio(active);
+  }
 
   if (isUser) {
     return (
@@ -60,58 +95,82 @@ export default function ChatBubble({
             </p>
           </div>
 
-          <p className="mt-1 whitespace-pre-wrap font-semibold leading-7">
+          {/* Japanese text with clickable underlined dictionary words */}
+          <p className="mt-2 whitespace-pre-wrap font-jp text-lg font-bold leading-8">
             <JapaneseText text={message.content} />
           </p>
 
-          {translation && (
-            <div className="animate-panel-in mt-3 space-y-3 border-t-[3px] border-border pt-3">
+          {/* Romaji conversion box */}
+          {showRomaji && (
+            <div className="animate-panel-in mt-3 brutal-border bg-mustard/30 p-3 text-ink shadow-nav">
+              <span className="label-mono block text-ai text-[10px]">Romaji Reading</span>
+              <p className="mt-1 font-mono text-sm font-black italic">{romajiText || 'Nihongo'}</p>
+              {romajiGlosses.length > 0 && (
+                <div className="mt-2 border-t border-border/40 pt-2 text-xs">
+                  {romajiGlosses.map((item) => (
+                    <span key={item.term} className="mr-3 inline-block font-bold">
+                      <span className="font-black text-shu">{item.term}</span> ({item.romaji}): {item.meaning}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* English translation box */}
+          {showTranslation && (currentTranslation || translation) && (
+            <div className="animate-panel-in mt-3 border-t-[3px] border-border pt-3">
               <div className="brutal-border bg-white px-3 py-2 text-sm font-bold leading-6 text-ink shadow-shadow">
-                <span className="label-mono block text-shu">English</span>
-                {translation}
+                <span className="label-mono block text-shu">English Translation</span>
+                {currentTranslation || translation}
               </div>
             </div>
           )}
 
-          <div className="mt-3 flex items-center justify-end gap-2 border-t-[3px] border-border pt-3 relative">
-            <IconButton
-              disabled={isTranslating}
-              label="Translate to English"
-              onClick={() => onTranslate(message)}
+          {/* 3 Circular Action Icons matching wireframe */}
+          <div className="mt-4 flex items-center gap-3 border-t-[3px] border-border pt-3">
+            {/* 1. Speaker Icon */}
+            <button
+              type="button"
+              aria-label="Speak Japanese audio"
+              title="Speak Japanese (Web Speech API)"
+              onClick={handleToggleSpeaker}
+              className={cn(
+                'brutal-border grid h-9 w-9 place-items-center rounded-full bg-white transition-all hover:bg-mustard active:scale-95',
+                isPlayingAudio && 'bg-mustard ring-2 ring-ink'
+              )}
             >
-              translate
-            </IconButton>
-            <div className="relative">
-              <IconButton
-                label="Show romaji and meanings"
-                onClick={() => setShowRomaji((visible) => !visible)}
-              >
-                abc
-              </IconButton>
-              <AnimatedPopover
-                show={showRomaji}
-                className="absolute right-1/2 translate-x-1/2 top-full mt-4 z-20 w-64 flex flex-col"
-              >
-                <div className="brutal-border bg-mustard px-3 py-2 text-sm font-bold leading-6 text-ink shadow-shadow before:absolute before:left-1/2 before:-translate-x-1/2 before:-top-[9px] before:w-4 before:h-4 before:bg-mustard before:border-l-[3px] before:border-t-[3px] before:border-border before:rotate-45">
-                  <span className="label-mono block text-ai">Romaji + glosses</span>
-                  {romajiGlosses.length ? (
-                    <div className="mt-2 space-y-2 relative z-10">
-                      {romajiGlosses.map((item) => (
-                        <p key={item.term}>
-                          <span className="font-black">{item.term}</span> · {item.romaji} ·{' '}
-                          {item.meaning}
-                        </p>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="mt-2 relative z-10">No local dictionary matches yet.</p>
-                  )}
-                </div>
-              </AnimatedPopover>
-            </div>
-            <IconButton label="Speak Japanese" onClick={() => speakJapanese(message.content)}>
-              volume_up
-            </IconButton>
+              <IoVolumeHighSharp className="text-base text-ink" />
+            </button>
+
+            {/* 2. Romaji Icon */}
+            <button
+              type="button"
+              aria-label="Toggle Romaji reading"
+              title="Toggle Romaji conversion"
+              onClick={() => setShowRomaji(!showRomaji)}
+              className={cn(
+                'brutal-border grid h-9 w-9 place-items-center rounded-full bg-white transition-all hover:bg-mustard active:scale-95',
+                showRomaji && 'bg-mustard ring-2 ring-ink'
+              )}
+            >
+              <IoLanguageSharp className="text-base text-ink" />
+            </button>
+
+            {/* 3. Translate Icon */}
+            <button
+              type="button"
+              aria-label="Translate Japanese to English"
+              title="Translate with API"
+              disabled={isTranslating || isTranslatingLocal}
+              onClick={handleToggleTranslate}
+              className={cn(
+                'brutal-border grid h-9 w-9 place-items-center rounded-full bg-white transition-all hover:bg-mustard active:scale-95 disabled:opacity-50',
+                showTranslation && 'bg-mustard ring-2 ring-ink'
+              )}
+            >
+              <IoGlobeOutline className={cn("text-base text-ink", isTranslatingLocal && "animate-spin")} />
+            </button>
           </div>
         </article>
 
@@ -140,20 +199,5 @@ function Avatar({ label, tone = 'normal' }) {
     >
       {label}
     </div>
-  );
-}
-
-function IconButton({ children, disabled = false, label, onClick }) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      disabled={disabled}
-      className="brutal-border grid h-9 w-9 place-items-center bg-paper shadow-nav transition-all hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-none hover:bg-mustard disabled:cursor-not-allowed disabled:opacity-60"
-    >
-      <span className="material-symbols-outlined text-[18px] leading-none">{children}</span>
-    </button>
   );
 }

@@ -67,11 +67,8 @@ export default async function BriefingPage({ params }) {
           </div>
 
           <div className="absolute bottom-6 right-6 flex flex-wrap justify-end gap-3">
-            <Button as={Link} href={briefing.startHref} variant="ghost" className="bg-paper">
-              Got it
-            </Button>
             <Button as={Link} href={briefing.startHref} size="lg">
-              Wakarimashita →
+              わかります →
             </Button>
           </div>
         </Card>

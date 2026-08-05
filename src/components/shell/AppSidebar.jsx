@@ -31,6 +31,19 @@ export default function AppSidebar() {
         {NAV_ITEMS.map(([label, href]) => {
           const isActive = href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`);
 
+          if (label === 'Settings') {
+            return (
+              <button
+                key={label}
+                type="button"
+                onClick={() => window.dispatchEvent(new Event('kaiwa:open-settings'))}
+                className="brutal-border whitespace-nowrap bg-paper px-4 py-3 text-left font-mono text-sm font-black uppercase tracking-[0.12em] text-ink shadow-nav transition-all hover:translate-x-[3px] hover:translate-y-[3px] hover:bg-mustard hover:shadow-none lg:w-full"
+              >
+                {label}
+              </button>
+            );
+          }
+
           return (
             <Link
               key={label}

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
+import { IoCheckmarkSharp, IoCloseSharp } from 'react-icons/io5';
 
 import LogoMark from '../ui/LogoMark.jsx';
 import { cn } from '../../lib/utils.js';
@@ -11,6 +12,7 @@ import { NAV_ITEMS } from './AppSidebar.jsx';
 export default function CompactNavigationMenu() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
+  const isChat = pathname === '/chat' || pathname.startsWith('/chat/');
 
   return (
     <div className="fixed left-4 top-4 z-40 sm:left-6 sm:top-6">
@@ -47,23 +49,39 @@ export default function CompactNavigationMenu() {
               const isActive = href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`);
 
               return (
-                <Link
-                  key={label}
-                  href={href}
-                  aria-current={isActive ? 'page' : undefined}
-                  onClick={() => setIsOpen(false)}
-                  className={cn(
-                    'brutal-border bg-paper px-4 py-3 font-mono text-sm font-black uppercase tracking-[0.12em] text-ink shadow-nav transition-all hover:translate-x-[3px] hover:translate-y-[3px] hover:bg-mustard hover:shadow-none',
-                    isActive && 'bg-mustard',
-                  )}
-                >
-                  {label}
-                </Link>
+                label === 'Settings' ? (
+                  <button
+                    key={label}
+                    type="button"
+                    aria-label="Open settings"
+                    onClick={() => {
+                      setIsOpen(false);
+                      window.dispatchEvent(new Event('kaiwa:open-settings'));
+                    }}
+                    className="brutal-border bg-paper px-4 py-3 text-left font-mono text-sm font-black uppercase tracking-[0.12em] text-ink shadow-nav transition-all hover:translate-x-[3px] hover:translate-y-[3px] hover:bg-mustard hover:shadow-none"
+                  >
+                    {label}
+                  </button>
+                ) : (
+                  <Link
+                    key={label}
+                    href={href}
+                    aria-current={isActive ? 'page' : undefined}
+                    onClick={() => setIsOpen(false)}
+                    className={cn(
+                      'brutal-border bg-paper px-4 py-3 font-mono text-sm font-black uppercase tracking-[0.12em] text-ink shadow-nav transition-all hover:translate-x-[3px] hover:translate-y-[3px] hover:bg-mustard hover:shadow-none',
+                      isActive && 'bg-mustard',
+                    )}
+                  >
+                    {label}
+                  </Link>
+                )
               );
             })}
           </nav>
         </div>
       ) : null}
+
     </div>
   );
 }

@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { sendMessage, translateMessage } from '../../lib/ai.js';
 import { getPersonaById } from '../../prompts/personas.js';
 import Button from '../ui/Button.jsx';
 import ChatBubble from './ChatBubble.jsx';
 import SuggestionChips from './SuggestionChips.jsx';
+import { DictionaryPopover } from './JapaneseText.jsx';
 
 let messageCounter = 0;
 
@@ -22,6 +23,16 @@ export default function ChatScreen({ provider, apiKey, personaId, onBackToDashbo
   const [isLoading, setIsLoading] = useState(false);
   const [translations, setTranslations] = useState({});
   const [translatingIds, setTranslatingIds] = useState({});
+  const [activeDictionaryEntry, setActiveDictionaryEntry] = useState(null);
+
+  useEffect(() => {
+    function handleShowDictionary(event) {
+      const incoming = event.detail;
+      setActiveDictionaryEntry((current) => (current?.term === incoming?.term ? null : incoming));
+    }
+    window.addEventListener('kaiwa:show-dictionary', handleShowDictionary);
+    return () => window.removeEventListener('kaiwa:show-dictionary', handleShowDictionary);
+  }, []);
 
   async function submitMessage(messageText) {
     const cleanMessage = messageText.trim();
@@ -116,7 +127,20 @@ export default function ChatScreen({ provider, apiKey, personaId, onBackToDashbo
   }
 
   return (
-    <main className="screen-shell flex min-h-screen flex-col">
+    <main className="mx-auto max-w-4xl relative">
+      {activeDictionaryEntry && (
+        <div className="absolute right-full mr-6 top-8 z-50 hidden md:block">
+          <DictionaryPopover entry={activeDictionaryEntry} onClose={() => setActiveDictionaryEntry(null)} />
+        </div>
+      )}
+
+      {/* Mobile Overlay version */}
+      {activeDictionaryEntry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 md:hidden">
+          <DictionaryPopover entry={activeDictionaryEntry} onClose={() => setActiveDictionaryEntry(null)} />
+        </div>
+      )}
+
       <header className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="label-mono text-shu">Roleplay chat</p>
