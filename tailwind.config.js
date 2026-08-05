@@ -8,9 +8,13 @@ export default {
         paper: '#FAF7F0',
         ink: '#1C1C1C',
         shu: '#D6432B',
+        correction: '#D6432B',
         ai: '#2F4858',
+        aizome: '#2F4858',
         mustard: '#F2C14E',
         moss: '#4A7A63',
+        'soft-blue': '#9FD3C7',
+        blush: '#F7B7A3',
 
         /* ── Neobrutalism semantic tokens ──────────────────── */
         background: 'var(--background)',
@@ -56,8 +60,9 @@ export default {
 
       fontFamily: {
         display: ['"Archivo Black"', '"Arial Black"', 'Impact', 'sans-serif'],
-        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        sans: ['"Atkinson Hyperlegible"', '"IBM Plex Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         mono: ['"IBM Plex Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        jp: ['"Noto Sans JP"', '"Hiragino Sans"', 'sans-serif'],
       },
     },
   },

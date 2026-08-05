@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@500;700&family=Noto+Sans+JP:wght@500;700;900&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -26,6 +28,11 @@
     --main-foreground: #1C1C1C;     /* ink */
 
     --main: #F2C14E;                /* mustard */
+    --correction: #D6432B;          /* red correction mark */
+    --aizome: #2F4858;              /* ai/chat indigo */
+    --moss: #4A7A63;                /* saved/success */
+    --soft-blue: #9FD3C7;           /* calm info */
+    --blush: #F7B7A3;               /* sparing warmth */
     --border: #1C1C1C;              /* ink */
     --ring: #1C1C1C;
     --overlay: rgba(28, 28, 28, 0.8);
@@ -53,10 +60,12 @@ body {
   min-width: 320px;
   min-height: 100vh;
   background:
+    radial-gradient(circle at 12% 8%, rgba(242, 193, 78, 0.2), transparent 22rem),
     linear-gradient(rgba(28, 28, 28, 0.045) 1px, transparent 1px),
     linear-gradient(90deg, rgba(28, 28, 28, 0.045) 1px, transparent 1px),
     var(--background);
-  background-size: 28px 28px;
+  background-size: auto, 28px 28px, 28px 28px, auto;
+  font-family: 'Atkinson Hyperlegible', 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
 }
 
 button,
@@ -104,6 +113,22 @@ textarea:focus-visible {
 
   .screen-shell {
     @apply mx-auto min-h-screen w-full max-w-7xl px-4 py-5 sm:px-6 lg:px-8;
+  }
+
+  .notebook-panel {
+    background:
+      linear-gradient(rgba(28, 28, 28, 0.055) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(28, 28, 28, 0.055) 1px, transparent 1px),
+      #fff;
+    background-size: 24px 24px;
+  }
+
+  .field-brutal {
+    @apply brutal-border w-full bg-paper px-4 py-3 font-semibold shadow-shadow transition-colors placeholder:text-ink/45 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .japanese-text {
+    @apply font-jp text-lg font-bold leading-8;
   }
 
   .animate-message-in {
@@ -179,5 +204,16 @@ textarea:focus-visible {
   30% {
     transform: translateY(-3px);
     opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
   }
 }

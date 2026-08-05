@@ -1,3 +1,8 @@
-{"timestamp":"00:00:01.183","source":"Server","level":"LOG","message":""}
-{"timestamp":"00:00:06.807","source":"Server","level":"LOG","message":"○ Compiling / ..."}
-{"timestamp":"00:00:07.771","source":"Browser","level":"INFO","message":"%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold"}
+{"timestamp":"00:00:00.795","source":"Server","level":"LOG","message":""}
+{"timestamp":"00:00:16.267","source":"Browser","level":"INFO","message":"%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold"}
+{"timestamp":"00:33:55.169","source":"Server","level":"LOG","message":"✓ Compiled in 102ms"}
+{"timestamp":"00:33:55.274","source":"Server","level":"LOG","message":"✓ Compiled in 77ms"}
+{"timestamp":"00:34:09.389","source":"Server","level":"LOG","message":"✓ Compiled in 1111ms"}
+{"timestamp":"00:34:36.935","source":"Server","level":"LOG","message":"✓ Compiled in 385ms"}
+{"timestamp":"00:36:57.280","source":"Server","level":"WARN","message":"Error: Route \"/chat/[personaId]\" used `params.personaId`. `params` is a Promise and must be unwrapped with `await` or `React.use()` before accessing its properties. Learn more: https://nextjs.org/docs/messages/sync-dynamic-apis"}
+{"timestamp":"00:36:57.391","source":"Server","level":"WARN","message":"Error: Route \"/chat/[personaId]\" used `params.personaId`. `params` is a Promise and must be unwrapped with `await` or `React.use()` before accessing its properties. Learn more: https://nextjs.org/docs/messages/sync-dynamic-apis"}
