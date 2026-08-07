@@ -1,3 +1,5 @@
+import FlameIcon from '../icons/FlameIcon.jsx';
+import ZapIcon from '../icons/ZapIcon.jsx';
 import Badge from '../ui/Badge.jsx';
 import Card from '../ui/Card.jsx';
 import { cn } from '../../lib/utils.js';
@@ -12,12 +14,6 @@ const STREAK_DAYS = [
   ['Sun', false],
 ];
 
-const LEVEL_ROWS = [
-  { label: '0-99 XP', name: 'Kana Rookie', points: 0 },
-  { label: '100-249 XP', name: 'N5 Starter', points: 100 },
-  { label: '250-499 XP', name: 'Phrase Builder', points: 250 },
-  { label: '500+ XP', name: 'Kaiwa Regular', points: 500 },
-];
 
 const TASKS = [
   ['Review 5 phrases', '5 XP', true],
@@ -26,7 +22,6 @@ const TASKS = [
   ['Practice 10 minutes', '15 XP', false],
 ];
 
-const currentPoints = 286;
 
 export default function ProgressRail({ compact = false }) {
   return (
@@ -40,7 +35,6 @@ export default function ProgressRail({ compact = false }) {
       <div className="grid gap-5">
         <MiniStatsBar />
         <StreakCard />
-        <LevelCard />
         <TaskCard />
       </div>
     </aside>
@@ -49,20 +43,21 @@ export default function ProgressRail({ compact = false }) {
 
 function MiniStatsBar() {
   return (
-    <div className="grid grid-cols-3 gap-3">
-      <MiniStat icon="🔥" value="12" label="streak" tone="correction" />
-      <MiniStat icon="◆" value="286" label="xp" tone="aizome" />
-      <MiniStat icon="♥" value="5" label="focus" tone="moss" />
+    <div className="grid grid-cols-2 gap-3">
+      <MiniStat icon={FlameIcon} value="12" label="streak" tone="correction" />
+      <MiniStat icon={ZapIcon} value="286" label="xp" tone="aizome" />
     </div>
   );
 }
 
-function MiniStat({ icon, label, tone, value }) {
-  const toneClass = tone === 'correction' ? 'text-correction' : tone === 'aizome' ? 'text-aizome' : 'text-moss';
+function MiniStat({ icon: Icon, label, tone, value }) {
+  const toneClass = tone === 'correction' ? 'text-correction' : 'text-aizome';
 
   return (
     <div className="brutal-border bg-white p-3 text-center shadow-nav">
-      <p className={cn('text-xl font-black leading-none', toneClass)}>{icon}</p>
+      <div className="grid place-items-center">
+        <Icon aria-hidden="true" className={cn('block', toneClass)} size={24} />
+      </div>
       <p className="mt-1 font-display text-xl leading-none">{value}</p>
       <p className="mt-1 font-mono text-[9px] font-black uppercase tracking-[0.12em] text-ink/60">{label}</p>
     </div>
@@ -96,30 +91,6 @@ function StreakCard() {
   );
 }
 
-function LevelCard() {
-  const currentLevel = LEVEL_ROWS[2];
-  const nextLevel = LEVEL_ROWS[3];
-  const progress = Math.round(((currentPoints - currentLevel.points) / (nextLevel.points - currentLevel.points)) * 100);
-
-  return (
-    <Card padding="md" className="bg-white">
-      <p className="label-mono text-aizome">Level</p>
-      <div className="mt-3 brutal-border bg-mustard p-4 text-center shadow-nav">
-        <p className="font-display text-3xl">{currentLevel.name}</p>
-        <p className="mt-1 font-mono text-xs font-black uppercase tracking-[0.12em]">
-          {currentPoints} XP · {nextLevel.points - currentPoints} until {nextLevel.name}
-        </p>
-      </div>
-      <div className="mt-4">
-        <SegmentedProgress value={progress} segments={10} />
-      </div>
-      <div className="mt-4 flex items-center justify-between font-mono text-[10px] font-black uppercase tracking-[0.12em] text-ink/65">
-        <span>{currentLevel.name}</span>
-        <span>{nextLevel.name}</span>
-      </div>
-    </Card>
-  );
-}
 
 function TaskCard() {
   const completed = TASKS.filter(([, , done]) => done).length;
@@ -151,14 +122,3 @@ function TaskCard() {
   );
 }
 
-function SegmentedProgress({ segments, value }) {
-  const filled = Math.round((Math.max(0, Math.min(100, value)) / 100) * segments);
-
-  return (
-    <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${segments}, minmax(0, 1fr))` }}>
-      {Array.from({ length: segments }, (_, index) => (
-        <span key={index} className={cn('h-4 brutal-border shadow-nav', index < filled ? 'bg-moss' : 'bg-paper')} aria-hidden="true" />
-      ))}
-    </div>
-  );
-}

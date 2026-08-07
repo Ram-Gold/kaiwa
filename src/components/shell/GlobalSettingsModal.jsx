@@ -552,10 +552,22 @@ function CreditsSettings() {
       description: 'Space Mono, Noto Sans JP, Inter, and Outfit typography.'
     },
     {
+      name: 'Lucide',
+      category: 'Iconography',
+      url: 'https://lucide.dev/',
+      description: 'Open-source static icons used for interface actions, including the Roleplay navigation icon.'
+    },
+    {
+      name: 'Lucide Animated',
+      category: 'Animated Iconography',
+      url: 'https://lucide-animated.com/',
+      description: 'Motion-powered animated Lucide icons used for streak and XP indicators.'
+    },
+    {
       name: 'React Icons & Material Symbols',
       category: 'Iconography',
       url: 'https://react-icons.github.io/react-icons/',
-      description: 'Ionicons 5 and Google Material Symbols icons.'
+      description: 'Ionicons 5 and Google Material Symbols icons used elsewhere in the interface.'
     },
     {
       name: 'Web Speech API',

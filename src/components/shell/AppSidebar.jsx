@@ -2,16 +2,22 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import Card from '../ui/Card.jsx';
+import { useCallback, useRef } from 'react';
+import { Drama } from 'lucide-react';
+import { HistoryIcon } from '../ui/history.jsx';
+import { HomeIcon } from '../ui/home.jsx';
+import { SettingsIcon } from '../ui/settings.jsx';
+import { UserIcon } from '../ui/user.jsx';
+
 import LogoMark from '../ui/LogoMark.jsx';
 import { cn } from '../../lib/utils.js';
 
 export const NAV_ITEMS = [
-  ['Home', '/'],
-  ['Roleplay', '/roleplay'],
-  ['Past Practice', '/dashboard'],
-  ['Profile', '/dashboard'],
-  ['Settings', '/dashboard'],
+  ['Home', '/', HomeIcon],
+  ['Roleplay', '/roleplay', Drama],
+  ['Past Practice', '/history', HistoryIcon],
+  ['Profile', '/profile', UserIcon],
+  ['Settings', '/dashboard', SettingsIcon],
 ];
 
 export default function AppSidebar() {
@@ -28,44 +34,103 @@ export default function AppSidebar() {
       </Link>
 
       <nav className="mt-8 flex gap-2 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible lg:pb-0" aria-label="Primary navigation">
-        {NAV_ITEMS.map(([label, href]) => {
+        {NAV_ITEMS.map(([label, href, Icon]) => {
           const isActive = href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`);
 
           if (label === 'Settings') {
             return (
-              <button
+              <NavItem
                 key={label}
-                type="button"
+                as="button"
+                label={label}
+                Icon={Icon}
+                className="brutal-border flex whitespace-nowrap bg-paper px-4 py-3 text-left font-mono text-sm font-black uppercase tracking-[0.12em] text-ink shadow-nav transition-all hover:translate-x-[3px] hover:translate-y-[3px] hover:bg-mustard hover:shadow-none lg:w-full lg:items-center lg:gap-3"
+                iconClassName="hidden shrink-0 lg:block"
                 onClick={() => window.dispatchEvent(new Event('kaiwa:open-settings'))}
-                className="brutal-border whitespace-nowrap bg-paper px-4 py-3 text-left font-mono text-sm font-black uppercase tracking-[0.12em] text-ink shadow-nav transition-all hover:translate-x-[3px] hover:translate-y-[3px] hover:bg-mustard hover:shadow-none lg:w-full"
-              >
-                {label}
-              </button>
+              />
             );
           }
 
           return (
-            <Link
+            <NavItem
               key={label}
               href={href}
-              aria-current={isActive ? 'page' : undefined}
+              label={label}
+              Icon={Icon}
+              active={isActive}
               className={cn(
-                'brutal-border whitespace-nowrap bg-paper px-4 py-3 font-mono text-sm font-black uppercase tracking-[0.12em] text-ink shadow-nav transition-all hover:translate-x-[3px] hover:translate-y-[3px] hover:bg-mustard hover:shadow-none lg:w-full',
+                'brutal-border flex whitespace-nowrap bg-paper px-4 py-3 font-mono text-sm font-black uppercase tracking-[0.12em] text-ink shadow-nav transition-all hover:translate-x-[3px] hover:translate-y-[3px] hover:bg-mustard hover:shadow-none lg:w-full lg:items-center lg:gap-3',
                 isActive && 'bg-mustard',
               )}
-            >
-              {label}
-            </Link>
+              iconClassName="hidden shrink-0 lg:block"
+            />
           );
         })}
       </nav>
 
-      <Card padding="sm" className="mt-8 hidden bg-paper text-ink lg:block">
-        <p className="label-mono text-correction">Local-first</p>
-        <p className="mt-3 text-sm font-bold leading-6">
-          Lessons, roleplay progress, streaks, and profile memory are designed to stay on this device.
-        </p>
-      </Card>
+
     </aside>
+  );
+}
+
+function useIconPressAnimation() {
+  const iconRef = useRef(null);
+
+  const start = useCallback(() => {
+    iconRef.current?.startAnimation?.();
+  }, []);
+
+  const stop = useCallback(() => {
+    iconRef.current?.stopAnimation?.();
+  }, []);
+
+  return { iconRef, start, stop };
+}
+
+export function NavItem({
+  active = false,
+  as = 'link',
+  className = '',
+  href,
+  iconClassName = '',
+  Icon,
+  label,
+  onClick,
+}) {
+  const { iconRef, start, stop } = useIconPressAnimation();
+  const sharedHandlers = {
+    onBlur: stop,
+    onKeyDown: (event) => {
+      if (event.key === 'Enter' || event.key === ' ') start();
+    },
+    onKeyUp: (event) => {
+      if (event.key === 'Enter' || event.key === ' ') stop();
+    },
+    onPointerCancel: stop,
+    onPointerDown: start,
+    onPointerLeave: stop,
+    onPointerUp: stop,
+  };
+
+  const icon = <Icon ref={iconRef} aria-hidden="true" className={cn('shrink-0', iconClassName)} size={20} />;
+  const content = (
+    <>
+      {icon}
+      {label}
+    </>
+  );
+
+  if (as === 'button') {
+    return (
+      <button type="button" onClick={onClick} className={className} {...sharedHandlers}>
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <Link href={href} aria-current={active ? 'page' : undefined} onClick={onClick} className={cn(className, active && 'bg-mustard')} {...sharedHandlers}>
+      {content}
+    </Link>
   );
 }
