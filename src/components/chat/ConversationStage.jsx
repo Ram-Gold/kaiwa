@@ -897,28 +897,29 @@ function PhraseCard({ card, index, isSelected, isReturnDestination, returnPhase,
   }, [card.id, isReturnDestination, onReturnDestinationReady, returnPhase, rotation]);
 
   useLayoutEffect(() => {
-    if (!isReturnDestination || returnPhase !== 'returning' || !returnTransition?.originRect || !returnTransition?.destination?.cardRect) {
+    if (!isReturnDestination || returnPhase !== 'returning' || !returnTransition?.destination?.cardRect) {
       if (returnPhase !== 'handoff') {
         setDeckReturnStyle(null);
       }
       return undefined;
     }
 
-    const offset = getSharedElementOffset(returnTransition.originRect, returnTransition.destination.cardRect);
     setDeckReturnStyle({
-      transform: `translate(${offset.x}px, ${offset.y}px) scale(${offset.scale}) rotate(${-rotation}deg)`,
+      opacity: 0,
+      transform: 'translateY(-0.5rem) scale(0.96) rotate(0deg)',
       filter: 'blur(0)',
     });
 
     const frame = window.requestAnimationFrame(() => {
       setDeckReturnStyle({
-        transform: 'translate(0, 0) scale(1) rotate(0deg)',
+        opacity: 1,
+        transform: 'translateY(0) scale(1) rotate(0deg)',
         filter: 'blur(0)',
       });
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [isReturnDestination, returnPhase, returnTransition?.destination, returnTransition?.originRect, rotation]);
+  }, [isReturnDestination, returnPhase, returnTransition?.destination]);
 
   const interactiveCardMotion = !isReturnDestination
     ? 'hover:z-20 hover:-translate-y-24 hover:rotate-0 hover:scale-[1.15] hover:shadow-shadow focus-visible:z-20 focus-visible:-translate-y-24 focus-visible:rotate-0 focus-visible:scale-[1.15]'
@@ -930,6 +931,7 @@ function PhraseCard({ card, index, isSelected, isReturnDestination, returnPhase,
       className={cn(
         'absolute left-1/2 top-0 [transform:var(--rest-transform)] transition-transform duration-300 ease-out',
         !isReturningToHand && 'group-hover/hand:[transform:var(--spread-transform)] group-hover/hand:duration-500',
+        isReturnDestination && returnPhase === 'returning' && 'animate-card-return-settle',
       )}
       style={{
         '--rest-transform': `translateX(calc(-50% + ${translateX}rem)) rotate(${rotation}deg)`,
@@ -943,12 +945,13 @@ function PhraseCard({ card, index, isSelected, isReturnDestination, returnPhase,
         data-state={isSelected ? 'selected' : 'idle'}
         data-returning={isReturnDestination && returnPhase === 'returning' ? 'true' : 'false'}
         data-card-id={card.id}
+        data-return-mode={isReturnDestination ? 'slot-settle' : undefined}
         data-testid={isReturnDestination ? 'return-destination-card' : undefined}
         onClick={(event) => onUseCard(card, event.currentTarget)}
         onTransitionEnd={(event) => {
-          if (isReturnDestination && returnPhase === 'returning' && event.target === event.currentTarget) {
-            onReturnFlightComplete?.();
-          }
+          if (!isReturnDestination || returnPhase !== 'returning' || event.target !== event.currentTarget) return;
+          if (event.propertyName !== 'transform') return;
+          onReturnFlightComplete?.();
         }}
         disabled={isReturnDestination && returnPhase === 'measuring'}
         style={deckReturnStyle ?? undefined}
@@ -957,15 +960,17 @@ function PhraseCard({ card, index, isSelected, isReturnDestination, returnPhase,
           interactiveCardMotion,
           isSelected && 'z-30 -translate-y-36 rotate-0 scale-[1.3] shadow-shadow duration-200',
           isReturnDestination && returnPhase === 'measuring' && 'opacity-0 pointer-events-none',
-          isReturnDestination && returnPhase === 'returning' && 'opacity-100 pointer-events-none duration-[420ms] [transition-timing-function:cubic-bezier(.77,0,.175,1)] will-change-[transform,opacity,filter]',
+          isReturnDestination && returnPhase === 'returning' && 'opacity-100 pointer-events-none transition-[transform,opacity] duration-[260ms] [transition-timing-function:cubic-bezier(.2,1,.2,1)] will-change-[transform,opacity]',
           isReturnDestination && returnPhase === 'handoff' && 'opacity-100 duration-[80ms]',
           tone,
         )}
       >
-        <span data-testid={`phrase-card-text-${index}`} className="flex h-full items-start justify-start text-left font-jp text-2xl font-black leading-8">
-          {card.phrase}
+        <span data-testid="return-card-face" className="relative block h-full w-full">
+          <span data-testid={`phrase-card-text-${index}`} className="flex h-full items-start justify-start text-left font-jp text-2xl font-black leading-8">
+            {card.phrase}
+          </span>
+          <span className={cn('absolute bottom-3 right-3 h-6 w-6 brutal-border shadow-nav', theme.glow)} aria-hidden="true" />
         </span>
-        <span className={cn('absolute bottom-3 right-3 h-6 w-6 brutal-border shadow-nav', theme.glow)} aria-hidden="true" />
       </button>
     </div>
   );

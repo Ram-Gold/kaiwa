@@ -14,6 +14,12 @@ afterEach(() => {
 
 import ConversationStage, { buildPronunciationTokens, getMatchedTokenCount, getSharedElementOffset, isCompleteRecitation } from './ConversationStage.jsx';
 
+function fireTransitionEnd(element, propertyName) {
+  const event = new Event('transitionend', { bubbles: true });
+  Object.defineProperty(event, 'propertyName', { value: propertyName });
+  fireEvent(element, event);
+}
+
 const briefing = {
   title: 'Train Station',
   jpTitle: '駅で迷った時',
@@ -230,10 +236,11 @@ describe('ConversationStage', () => {
     const returnDestination = screen.getByTestId('return-destination-card');
     expect(returnDestination).toHaveAttribute('data-card-id', '___ に行きたいです-0');
     expect(returnDestination).toHaveAttribute('data-returning', 'true');
-    expect(returnDestination).toHaveClass('opacity-100', 'pointer-events-none', 'duration-[420ms]', '[transition-timing-function:cubic-bezier(.77,0,.175,1)]');
+    expect(returnDestination).toHaveAttribute('data-return-mode', 'slot-settle');
+    expect(returnDestination).toHaveClass('opacity-100', 'pointer-events-none', 'transition-[transform,opacity]', 'duration-[260ms]', '[transition-timing-function:cubic-bezier(.2,1,.2,1)]');
     expect(screen.getByLabelText(/Train Station conversation/i)).toHaveClass('z-50');
 
-    fireEvent.transitionEnd(returnDestination, { propertyName: 'transform' });
+    fireTransitionEnd(returnDestination, 'transform');
 
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: /skip recitation for ___ に行きたいです/i })).not.toBeInTheDocument();
@@ -254,7 +261,7 @@ describe('ConversationStage', () => {
     await waitFor(() => {
       expect(returningCard).toHaveAttribute('data-returning', 'true');
     });
-    fireEvent.transitionEnd(returningCard, { propertyName: 'transform' });
+    fireTransitionEnd(returningCard, 'transform');
 
     await waitFor(() => {
       expect(screen.getByTestId('recitation-backdrop')).toHaveClass('opacity-0');
@@ -279,15 +286,25 @@ describe('ConversationStage', () => {
 
     const returnDestination = screen.getByTestId('return-destination-card');
     expect(returnDestination).toHaveAttribute('data-card-id', '英語でヒントをください-4');
+    expect(returnDestination).toHaveAttribute('data-return-mode', 'slot-settle');
     expect(returnDestination).toHaveClass('opacity-100', 'pointer-events-none');
     expect(returnDestination).not.toHaveClass('hover:-translate-y-24');
     expect(returnDestination.parentElement?.getAttribute('style')).toContain('rotate(12deg)');
     expect(screen.getByLabelText(/Train Station conversation/i)).toHaveClass('z-50');
 
     await waitFor(() => {
-      expect(returnDestination.getAttribute('style')).toContain('rotate(0deg)');
-      expect(returnDestination.getAttribute('style')).toContain('blur(0)');
-      expect(returnDestination.getAttribute('style')).not.toContain('blur(2px)');
+      expect(returnDestination.parentElement).toHaveClass('animate-card-return-settle');
+      expect(returnDestination.getAttribute('style')).not.toMatch(/translate\(-?\d+(\.\d+)?px,/);
+    });
+
+    fireTransitionEnd(returnDestination, 'opacity');
+    expect(screen.getByTestId('return-destination-card')).toBeInTheDocument();
+
+    fireTransitionEnd(returnDestination, 'transform');
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /skip recitation for 英語でヒントをください/i })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /practice phrase 英語でヒントをください/i })).toBeInTheDocument();
     });
   });
 
