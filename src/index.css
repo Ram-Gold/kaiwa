@@ -177,6 +177,35 @@ textarea:focus-visible {
   }
 }
 
+@keyframes recitation-pop {
+  from {
+    opacity: 0;
+    transform: translateY(44px) scale(0.84) rotate(-5deg);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotate(0deg);
+  }
+}
+
+@keyframes shared-card-flight {
+  from {
+    opacity: 0.92;
+    transform: translate(var(--shared-x, 0), var(--shared-y, 0)) scale(var(--shared-scale, 1)) rotate(-5deg);
+  }
+
+  70% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1.04) rotate(1deg);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(0, 0) scale(1) rotate(0deg);
+  }
+}
+
 @keyframes panel-out {
   from {
     opacity: 1;

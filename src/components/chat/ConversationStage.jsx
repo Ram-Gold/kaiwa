@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { IoBatteryFullSharp, IoBulbSharp, IoCellularSharp, IoCloseSharp, IoMicSharp, IoSendSharp, IoWifiSharp, IoVolumeHighSharp, IoLanguageSharp, IoGlobeOutline } from 'react-icons/io5';
 
@@ -52,6 +52,104 @@ const EXTRA_CARDS = [
   '自然な言い方は？',
 ];
 
+const PHRASE_PRONUNCIATION_TOKENS = {
+  '___ に行きたいです': [
+    { kana: 'に', romaji: 'ni' },
+    { kana: 'い', romaji: 'i' },
+    { kana: 'き', romaji: 'ki' },
+    { kana: 'た', romaji: 'ta' },
+    { kana: 'い', romaji: 'i' },
+    { kana: 'で', romaji: 'de' },
+    { kana: 'す', romaji: 'su' },
+  ],
+  何番線ですか: [
+    { kana: 'なん', romaji: 'nan' },
+    { kana: 'ば', romaji: 'ba' },
+    { kana: 'ん', romaji: 'n' },
+    { kana: 'せ', romaji: 'se' },
+    { kana: 'ん', romaji: 'n' },
+    { kana: 'で', romaji: 'de' },
+    { kana: 'す', romaji: 'su' },
+    { kana: 'か', romaji: 'ka' },
+  ],
+  ありがとうございます: [
+    { kana: 'あ', romaji: 'a' },
+    { kana: 'り', romaji: 'ri' },
+    { kana: 'が', romaji: 'ga' },
+    { kana: 'と', romaji: 'to' },
+    { kana: 'う', romaji: 'u' },
+    { kana: 'ご', romaji: 'go' },
+    { kana: 'ざ', romaji: 'za' },
+    { kana: 'い', romaji: 'i' },
+    { kana: 'ま', romaji: 'ma' },
+    { kana: 'す', romaji: 'su' },
+  ],
+  聞き取れませんでした: [
+    { kana: 'き', romaji: 'ki' },
+    { kana: 'き', romaji: 'ki' },
+    { kana: 'と', romaji: 'to' },
+    { kana: 'れ', romaji: 're' },
+    { kana: 'ま', romaji: 'ma' },
+    { kana: 'せ', romaji: 'se' },
+    { kana: 'ん', romaji: 'n' },
+    { kana: 'で', romaji: 'de' },
+    { kana: 'し', romaji: 'shi' },
+    { kana: 'た', romaji: 'ta' },
+  ],
+  英語でヒントをください: [
+    { kana: 'え', romaji: 'e' },
+    { kana: 'い', romaji: 'i' },
+    { kana: 'ご', romaji: 'go' },
+    { kana: 'で', romaji: 'de' },
+    { kana: 'ひ', romaji: 'hi' },
+    { kana: 'ん', romaji: 'n' },
+    { kana: 'と', romaji: 'to' },
+    { kana: 'を', romaji: 'o' },
+    { kana: 'く', romaji: 'ku' },
+    { kana: 'だ', romaji: 'da' },
+    { kana: 'さ', romaji: 'sa' },
+    { kana: 'い', romaji: 'i' },
+  ],
+  '自然な言い方は？': [
+    { kana: 'し', romaji: 'shi' },
+    { kana: 'ぜ', romaji: 'ze' },
+    { kana: 'ん', romaji: 'n' },
+    { kana: 'な', romaji: 'na' },
+    { kana: 'い', romaji: 'i' },
+    { kana: 'い', romaji: 'i' },
+    { kana: 'か', romaji: 'ka' },
+    { kana: 'た', romaji: 'ta' },
+    { kana: 'は', romaji: 'wa' },
+  ],
+};
+
+const SPOKEN_READING_NORMALIZATIONS = [
+  ['行きたい', 'いきたい'],
+  ['何番線', 'なんばんせん'],
+  ['自然な言い方', 'しぜんないいかた'],
+  ['聞き取れませんでした', 'ききとれませんでした'],
+  ['英語', 'えいご'],
+];
+
+const KANA_ROMAJI = {
+  あ: 'a', い: 'i', う: 'u', え: 'e', お: 'o',
+  か: 'ka', き: 'ki', く: 'ku', け: 'ke', こ: 'ko',
+  が: 'ga', ぎ: 'gi', ぐ: 'gu', げ: 'ge', ご: 'go',
+  さ: 'sa', し: 'shi', す: 'su', せ: 'se', そ: 'so',
+  ざ: 'za', じ: 'ji', ず: 'zu', ぜ: 'ze', ぞ: 'zo',
+  た: 'ta', ち: 'chi', つ: 'tsu', て: 'te', と: 'to',
+  だ: 'da', ぢ: 'ji', づ: 'zu', で: 'de', ど: 'do',
+  な: 'na', に: 'ni', ぬ: 'nu', ね: 'ne', の: 'no',
+  は: 'ha', ひ: 'hi', ふ: 'fu', へ: 'he', ほ: 'ho',
+  ば: 'ba', び: 'bi', ぶ: 'bu', べ: 'be', ぼ: 'bo',
+  ぱ: 'pa', ぴ: 'pi', ぷ: 'pu', ぺ: 'pe', ぽ: 'po',
+  ま: 'ma', み: 'mi', む: 'mu', め: 'me', も: 'mo',
+  や: 'ya', ゆ: 'yu', よ: 'yo',
+  ら: 'ra', り: 'ri', る: 'ru', れ: 're', ろ: 'ro',
+  わ: 'wa', を: 'o', ん: 'n',
+  ー: '-',
+};
+
 export default function ConversationStage({ briefing = FALLBACK_BRIEFING }) {
   const scenario = briefing ?? FALLBACK_BRIEFING;
   const theme = ACCENT_THEME[scenario.accent] ?? ACCENT_THEME.aizome;
@@ -62,6 +160,13 @@ export default function ConversationStage({ briefing = FALLBACK_BRIEFING }) {
   const [showMessages, setShowMessages] = useState(true);
   const [readingMode, setReadingMode] = useState('Furigana');
   const [selectedCardId, setSelectedCardId] = useState(null);
+  const [recitationCard, setRecitationCard] = useState(null);
+  const [recitationOverlayVisible, setRecitationOverlayVisible] = useState(false);
+  const [recitationStatus, setRecitationStatus] = useState('idle');
+  const [spokenTranscript, setSpokenTranscript] = useState('');
+  const [recitationOrigin, setRecitationOrigin] = useState(null);
+  const [expToast, setExpToast] = useState(null);
+  const recognitionRef = useRef(null);
   const [showPhoneChrome, setShowPhoneChrome] = useState(true);
   const [notchStyle, setNotchStyle] = useState('dynamic-island');
   const [isTipOpen, setIsTipOpen] = useState(true);
@@ -91,16 +196,77 @@ export default function ConversationStage({ briefing = FALLBACK_BRIEFING }) {
     };
   }, []);
 
-  function useCard(card) {
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.stop?.();
+    };
+  }, []);
+
+  function useCard(card, sourceElement) {
     if (selectedCardId) return;
 
-    setMessage(card.phrase);
+    setRecitationOrigin(sourceElement?.getBoundingClientRect?.() ?? null);
     setSelectedCardId(card.id);
+    setAvailableCards((currentCards) => currentCards.filter((currentCard) => currentCard.id !== card.id));
+    setRecitationCard(card);
+    setRecitationOverlayVisible(true);
+    setSpokenTranscript('');
+    setRecitationStatus('starting');
+    startRecitation(card);
+  }
 
-    window.setTimeout(() => {
-      setAvailableCards((currentCards) => currentCards.filter((currentCard) => currentCard.id !== card.id));
-      setSelectedCardId(null);
-    }, 260);
+  function startRecitation(card) {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      setRecitationStatus('unsupported');
+      return;
+    }
+
+    recognitionRef.current?.stop?.();
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'ja-JP';
+    recognition.interimResults = true;
+    recognition.continuous = true;
+
+    recognition.onstart = () => setRecitationStatus('listening');
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results ?? [])
+        .map((result) => result?.[0]?.transcript ?? '')
+        .join(' ');
+
+      setSpokenTranscript(transcript);
+
+      if (isCompleteRecitation(card, transcript)) {
+        completeRecitation(card, { awardedExp: true });
+      } else {
+        setRecitationStatus('listening');
+      }
+    };
+    recognition.onerror = () => setRecitationStatus('try-again');
+    recognition.onend = () => {
+      setRecitationStatus((current) => (current === 'starting' || current === 'listening' ? 'try-again' : current));
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  }
+
+  function completeRecitation(card, { awardedExp = false } = {}) {
+    recognitionRef.current?.stop?.();
+    recognitionRef.current = null;
+    setMessage(card.phrase);
+    setSelectedCardId(null);
+    setRecitationOverlayVisible(false);
+    window.setTimeout(() => setRecitationCard(null), 220);
+    setRecitationStatus('idle');
+    setSpokenTranscript('');
+    setRecitationOrigin(null);
+
+    if (awardedExp) {
+      setExpToast('+10 EXP');
+      window.setTimeout(() => setExpToast(null), 1800);
+    }
   }
 
   return (
@@ -114,7 +280,7 @@ export default function ConversationStage({ briefing = FALLBACK_BRIEFING }) {
               <DictionaryPopover entry={activeDictionaryEntry} onClose={() => setActiveDictionaryEntry(null)} />
             </div>
           )}
-          
+
           {/* Mobile Overlay version */}
           {activeDictionaryEntry && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 md:hidden">
@@ -125,12 +291,35 @@ export default function ConversationStage({ briefing = FALLBACK_BRIEFING }) {
           <TipButton isOpen={isTipOpen} setIsOpen={setIsTipOpen} theme={theme} />
           <div className="relative z-10">
             <PhoneFrame scenario={scenario} theme={theme} showMessages={showMessages} showPhoneChrome={showPhoneChrome} notchStyle={notchStyle} readingMode={readingMode} message={message} setMessage={setMessage} isTipOpen={isTipOpen} setIsTipOpen={setIsTipOpen} />
+            {expToast ? <ExpToast text={expToast} /> : null}
           </div>
           {showCards ? <CardHand cards={availableCards} onUseCard={useCard} selectedCardId={selectedCardId} theme={theme} /> : null}
         </section>
       </div>
 
-      <div className="fixed bottom-6 left-6 z-50">
+      {recitationCard ? (
+        <div
+          data-testid="recitation-backdrop"
+          className={cn(
+            'fixed inset-0 z-30 bg-black/70 backdrop-blur-[2px] transition-opacity duration-200 ease-out',
+            recitationOverlayVisible ? 'opacity-100' : 'opacity-0'
+          )}
+          aria-hidden="true"
+        />
+      ) : null}
+      {recitationCard ? (
+        <RecitationCardOverlay
+          card={recitationCard}
+          flightOrigin={recitationOrigin}
+          onSkip={() => completeRecitation(recitationCard)}
+          spokenTranscript={spokenTranscript}
+          status={recitationStatus}
+          theme={theme}
+          isVisible={recitationOverlayVisible}
+        />
+      ) : null}
+
+      <div className="fixed bottom-6 left-6 z-20">
         <Link href="/grading" className="brutal-border bg-mustard text-ink px-5 py-3 font-mono text-sm font-black uppercase tracking-[0.1em] shadow-shadow transition-transform hover:-translate-y-1 active:scale-95 flex items-center gap-2">
           Finish & Grade
         </Link>
@@ -252,6 +441,7 @@ function PhoneNotch({ notchStyle }) {
 function MessageThread({ readingMode, scenario, theme }) {
   return (
     <div className="flex min-h-[30.5rem] flex-col justify-end gap-4">
+      <span className="sr-only">Reading mode: {readingMode}</span>
       <MessageBubble
         from="ai"
         theme={theme}
@@ -412,6 +602,133 @@ function HiddenMessages() {
   );
 }
 
+function RecitationCardOverlay({ card, flightOrigin, onSkip, spokenTranscript, status, theme, isVisible = true }) {
+  const [showRomaji, setShowRomaji] = useState(false);
+  const statusCopy = {
+    starting: 'Opening microphone…',
+    listening: 'Listening now. Say it out loud.',
+    'try-again': 'Try once more, slowly.',
+    unsupported: 'Speech recognition is unavailable here. Tap the card to skip.',
+    idle: 'Recite the card.',
+  };
+  const tone = getCardTone(card.toneIndex ?? 0);
+  const tokens = getCardTokens(card);
+  const matchedTokenCount = getMatchedTokenCount(tokens, spokenTranscript);
+  const romajiText = getRomajiText(tokens);
+  const cardRef = useRef(null);
+  const [flightStyle, setFlightStyle] = useState(null);
+
+  useLayoutEffect(() => {
+    if (!flightOrigin || !cardRef.current) {
+      setFlightStyle(null);
+      return;
+    }
+
+    const offset = getSharedElementOffset(flightOrigin, cardRef.current.getBoundingClientRect());
+    setFlightStyle({
+      '--shared-x': `${offset.x}px`,
+      '--shared-y': `${offset.y}px`,
+      '--shared-scale': offset.scale,
+    });
+  }, [flightOrigin]);
+
+  return (
+    <div
+      className={cn(
+        'pointer-events-none fixed inset-x-0 top-24 z-40 flex flex-col items-center px-4 transition-opacity duration-200 ease-out',
+        isVisible ? 'opacity-100' : 'opacity-0'
+      )}
+      aria-live="polite"
+    >
+      <button
+        type="button"
+        aria-label={`Skip recitation for ${card.phrase}`}
+        data-state="reciting"
+        onClick={onSkip}
+        ref={cardRef}
+        style={flightStyle ?? undefined}
+        className={cn(
+          'pointer-events-auto relative h-72 w-56 origin-center transform-gpu brutal-border p-5 text-left shadow-shadow transition-[transform,box-shadow,opacity] duration-200 ease-out will-change-transform hover:-translate-y-2 hover:scale-110 active:scale-105',
+          flightStyle
+            ? 'animate-[shared-card-flight_420ms_cubic-bezier(.2,1,.2,1)_both]'
+            : 'animate-[recitation-pop_360ms_cubic-bezier(.2,1.15,.2,1)_both]',
+          isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95',
+          tone,
+        )}
+      >
+        <span data-testid="recitation-card-text" className="flex h-full flex-col items-start justify-start text-left font-jp text-3xl font-black leading-9">
+          <PronunciationTokens phrase={card.phrase} matchedTokenCount={matchedTokenCount} />
+          {showRomaji ? (
+            <span data-testid="recitation-romaji" className="mt-2 font-mono text-xs font-black italic leading-4 text-current/75">
+              {romajiText}
+            </span>
+          ) : null}
+        </span>
+        <span className={cn('absolute bottom-3 right-3 h-6 w-6 brutal-border shadow-nav', theme.glow)} aria-hidden="true" />
+      </button>
+      <div className="pointer-events-auto absolute left-[calc(50%+7.5rem)] top-9 z-50 flex max-w-56 flex-col gap-2">
+        <button
+          type="button"
+          aria-label={`Speak phrase ${card.phrase}`}
+          onClick={() => speakJapanese(card.phrase)}
+          className="flex items-center gap-2 brutal-border bg-paper px-3 py-2 text-left text-ink shadow-shadow transition-transform hover:-translate-y-0.5 active:scale-95"
+        >
+          <IoVolumeHighSharp className="shrink-0 text-xl text-shu" aria-hidden="true" />
+          <span className="line-clamp-2 font-jp text-sm font-black leading-5">{card.phrase}</span>
+        </button>
+        <button
+          type="button"
+          aria-label={`${showRomaji ? 'Hide' : 'Show'} romaji for ${card.phrase}`}
+          onClick={() => setShowRomaji((current) => !current)}
+          className="flex items-center gap-2 brutal-border bg-mustard px-3 py-2 text-left font-mono text-xs font-black uppercase tracking-[0.08em] text-ink shadow-shadow transition-transform hover:-translate-y-0.5 active:scale-95"
+        >
+          <IoLanguageSharp className="shrink-0 text-lg" aria-hidden="true" />
+          Romaji
+        </button>
+      </div>
+      <p className="mt-5 w-72 max-w-[80vw] brutal-border bg-paper px-3 py-2 text-center font-mono text-[10px] font-black uppercase tracking-[0.1em] text-ink shadow-nav">
+        <span className="sr-only">Recite the card. </span>
+        {statusCopy[status] ?? statusCopy.idle}
+      </p>
+
+    </div>
+  );
+}
+
+function PronunciationTokens({ matchedTokenCount, phrase }) {
+  const displayUnits = Array.from(phrase);
+
+  return (
+    <span className="inline flex-wrap">
+      {displayUnits.map((unit, index) => {
+        const isSpoken = index < matchedTokenCount;
+
+        return (
+          <span
+            key={`${unit}-${index}`}
+            data-spoken={isSpoken ? 'true' : 'false'}
+            data-testid={`recitation-token-${index}`}
+            className={cn(
+              'inline rounded-sm px-0.5 transition-colors',
+              isSpoken && 'bg-mustard text-ink ring-2 ring-ink',
+            )}
+          >
+            {unit}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+function ExpToast({ text }) {
+  return (
+    <div className="pointer-events-none absolute left-1/2 top-8 z-50 -translate-x-1/2 animate-[recitation-pop_300ms_ease-out_both] brutal-border bg-mustard px-4 py-2 font-display text-2xl text-ink shadow-shadow" role="status">
+      {text}
+    </div>
+  );
+}
+
 function Composer({ message, setMessage }) {
   return (
     <div className="relative mt-4 grid grid-cols-[1fr_auto] gap-3">
@@ -451,7 +768,15 @@ function CardHand({ cards, onUseCard, selectedCardId, theme }) {
   return (
     <div className="group/hand pointer-events-none absolute -bottom-52 left-1/2 z-30 h-64 w-[38rem] max-w-[130vw] -translate-x-1/2" aria-label="Suggestion card hand">
       {cards.slice(0, 5).map((card, index) => (
-        <PhraseCard key={card.id} card={card} index={index} isSelected={selectedCardId === card.id} onUseCard={onUseCard} theme={theme} total={Math.min(cards.length, 5)} />
+        <PhraseCard
+          key={card.id}
+          card={card}
+          index={index}
+          isSelected={selectedCardId === card.id}
+          onUseCard={onUseCard}
+          theme={theme}
+          total={Math.min(cards.length, 5)}
+        />
       ))}
     </div>
   );
@@ -464,7 +789,7 @@ function PhraseCard({ card, index, isSelected, onUseCard, theme, total }) {
   const spreadRotation = offset * 13;
   const spreadX = offset * 6.9;
   const spreadY = -2.2 + Math.abs(offset) * 0.9;
-  const tone = index % 4 === 0 ? 'bg-correction text-paper' : index % 4 === 1 ? 'bg-mustard text-ink' : index % 4 === 2 ? 'bg-[#8DEB5E] text-ink' : 'bg-[#61CBE8] text-ink';
+  const tone = getCardTone(card.toneIndex ?? index);
 
   return (
     <div
@@ -476,12 +801,12 @@ function PhraseCard({ card, index, isSelected, onUseCard, theme, total }) {
     >
       <button
         type="button"
-        aria-label={`Use phrase ${card.phrase}`}
+        aria-label={`Practice phrase ${card.phrase}`}
         data-state={isSelected ? 'selected' : 'idle'}
-        onClick={() => onUseCard(card)}
+        onClick={(event) => onUseCard(card, event.currentTarget)}
         className={cn(
-          'pointer-events-auto h-64 w-48 origin-bottom transform-gpu brutal-border p-5 text-left shadow-nav transition-[transform,box-shadow] duration-200 ease-out will-change-transform hover:z-20 hover:-translate-y-24 hover:rotate-0 hover:scale-110 hover:shadow-shadow focus-visible:z-20 focus-visible:-translate-y-24 focus-visible:rotate-0 focus-visible:scale-110',
-          isSelected && 'z-30 -translate-y-36 rotate-0 scale-125 shadow-shadow duration-200',
+          'pointer-events-auto h-64 w-48 origin-bottom transform-gpu brutal-border p-5 text-left shadow-nav transition-[transform,box-shadow] duration-200 ease-out will-change-transform hover:z-20 hover:-translate-y-24 hover:rotate-0 hover:scale-[1.15] hover:shadow-shadow focus-visible:z-20 focus-visible:-translate-y-24 focus-visible:rotate-0 focus-visible:scale-[1.15]',
+          isSelected && 'z-30 -translate-y-36 rotate-0 scale-[1.3] shadow-shadow duration-200',
           tone,
         )}
       >
@@ -499,5 +824,103 @@ function buildCards(briefing) {
   return phrases.map((phrase, index) => ({
     id: `${phrase}-${index}`,
     phrase,
+    tokens: buildPronunciationTokens(phrase),
+    toneIndex: index,
   }));
+}
+
+function getCardTone(index) {
+  return index % 4 === 0 ? 'bg-correction text-paper' : index % 4 === 1 ? 'bg-mustard text-ink' : index % 4 === 2 ? 'bg-[#8DEB5E] text-ink' : 'bg-[#61CBE8] text-ink';
+}
+
+export function isCompleteRecitation(card, transcript) {
+  const tokens = getCardTokens(card);
+  const expected = normalizeSpokenJapanese(tokens.map((token) => token.kana).join(''));
+  const spoken = normalizeSpokenJapanese(transcript);
+
+  if (!expected || !spoken) {
+    return false;
+  }
+
+  if (spoken.includes(expected)) {
+    return true;
+  }
+
+  const matchedTokenCount = getMatchedTokenCount(tokens, transcript);
+  return matchedTokenCount / tokens.length >= 0.8;
+}
+
+export function getSharedElementOffset(sourceRect, targetRect) {
+  const sourceCenterX = sourceRect.left + sourceRect.width / 2;
+  const sourceCenterY = sourceRect.top + sourceRect.height / 2;
+  const targetCenterX = targetRect.left + targetRect.width / 2;
+  const targetCenterY = targetRect.top + targetRect.height / 2;
+
+  return {
+    x: sourceCenterX - targetCenterX,
+    y: sourceCenterY - targetCenterY,
+    scale: sourceRect.width && targetRect.width ? sourceRect.width / targetRect.width : 1,
+  };
+}
+
+export function getMatchedTokenCount(tokens, transcript) {
+  if (!Array.isArray(tokens) || tokens.length === 0) {
+    return 0;
+  }
+
+  const spoken = normalizeSpokenJapanese(transcript);
+  let normalizedPrefix = '';
+  let count = 0;
+
+  for (const token of tokens) {
+    normalizedPrefix += normalizeSpokenJapanese(token.kana);
+    if (!spoken.startsWith(normalizedPrefix)) {
+      break;
+    }
+    count += 1;
+  }
+
+  return count;
+}
+
+function getCardTokens(card) {
+  return Array.isArray(card?.tokens) && card.tokens.length > 0
+    ? card.tokens
+    : buildPronunciationTokens(card?.phrase ?? '');
+}
+
+function getRomajiText(tokens) {
+  return tokens
+    .map((token) => token.romaji)
+    .filter(Boolean)
+    .join(' ');
+}
+
+export function buildPronunciationTokens(phrase) {
+  const override = PHRASE_PRONUNCIATION_TOKENS[phrase];
+  if (override) {
+    return override;
+  }
+
+  const normalizedPhrase = normalizeSpokenJapanese(phrase);
+  return Array.from(normalizedPhrase).map((kana) => ({
+    kana,
+    romaji: KANA_ROMAJI[kana] ?? toRomajiText(kana) ?? kana,
+  }));
+}
+
+function normalizeSpokenJapanese(value) {
+  const normalized = SPOKEN_READING_NORMALIZATIONS.reduce(
+    (current, [term, reading]) => current.replaceAll(term, reading),
+    String(value || '').normalize('NFKC'),
+  );
+
+  return katakanaToHiragana(normalized)
+    .replace(/[_＿]+/g, '')
+    .replace(/[\s。．、，,.!?！？「」『』（）()\[\]{}]/g, '')
+    .trim();
+}
+
+function katakanaToHiragana(value) {
+  return value.replace(/[ァ-ン]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0x60));
 }

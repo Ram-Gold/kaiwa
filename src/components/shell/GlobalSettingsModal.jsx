@@ -12,6 +12,11 @@ const CHAT_NOTCH_STYLES = [
   { id: 'teardrop', label: 'Tear drop' },
 ];
 
+function getLocalStorage() {
+  if (typeof window === 'undefined') return null;
+  return window.localStorage ?? null;
+}
+
 const API_PROVIDERS = [
   { id: 'ollama', name: 'Ollama (Local)' },
   { id: 'lmstudio', name: 'LM Studio (Local API)' },
@@ -96,7 +101,8 @@ function ApiProvidersSettings() {
   const [successMsg, setSuccessMsg] = useState('');
 
   useEffect(() => {
-    const storedProvider = localStorage.getItem(PROVIDER_STORAGE_KEY) || 'ollama';
+    const storage = getLocalStorage();
+    const storedProvider = storage?.getItem?.(PROVIDER_STORAGE_KEY) || 'ollama';
     setProvider(storedProvider);
     
     // Set initial search value to the current provider's name
@@ -108,7 +114,7 @@ function ApiProvidersSettings() {
     const keys = {};
     API_PROVIDERS.forEach(p => {
       if (p.id !== 'ollama' && p.id !== 'lmstudio') {
-        keys[p.id] = localStorage.getItem(`${API_KEYS_STORAGE_PREFIX}${p.id}`) || '';
+        keys[p.id] = storage?.getItem?.(`${API_KEYS_STORAGE_PREFIX}${p.id}`) || '';
       }
     });
     setApiKeys(keys);
@@ -128,9 +134,10 @@ function ApiProvidersSettings() {
   }, [search, provider]);
 
   function handleSave() {
-    localStorage.setItem(PROVIDER_STORAGE_KEY, provider);
+    const storage = getLocalStorage();
+    storage?.setItem?.(PROVIDER_STORAGE_KEY, provider);
     if (provider !== 'ollama' && provider !== 'lmstudio') {
-      localStorage.setItem(`${API_KEYS_STORAGE_PREFIX}${provider}`, draftKey.trim());
+      storage?.setItem?.(`${API_KEYS_STORAGE_PREFIX}${provider}`, draftKey.trim());
       setApiKeys(prev => ({ ...prev, [provider]: draftKey.trim() }));
     }
     setSuccessMsg('Settings saved successfully!');
@@ -235,7 +242,8 @@ function EnginesSettings() {
   const [speechRate, setSpeechRate] = useState(1.0);
 
   useEffect(() => {
-    const savedRate = parseFloat(localStorage.getItem('kaiwa.speech.rate') || '1.0');
+    const storage = getLocalStorage();
+    const savedRate = parseFloat(storage?.getItem?.('kaiwa.speech.rate') || '1.0');
     if (!isNaN(savedRate)) {
       setSpeechRate(savedRate);
     }
@@ -244,7 +252,7 @@ function EnginesSettings() {
   function handleRateChange(newRate) {
     const rateVal = parseFloat(newRate);
     setSpeechRate(rateVal);
-    localStorage.setItem('kaiwa.speech.rate', rateVal.toString());
+    getLocalStorage()?.setItem?.('kaiwa.speech.rate', rateVal.toString());
   }
 
   function testSpeech() {
@@ -351,16 +359,17 @@ function PrivacySettings() {
   const [persona, setPersona] = useState('');
 
   useEffect(() => {
-    setPersona(localStorage.getItem('kaiwa.user.persona') || '');
+    const storage = getLocalStorage();
+    setPersona(storage?.getItem?.('kaiwa.user.persona') || '');
   }, []);
 
   function savePersona() {
-    localStorage.setItem('kaiwa.user.persona', persona);
+    getLocalStorage()?.setItem?.('kaiwa.user.persona', persona);
   }
 
   function purgeData() {
     if (window.confirm("Are you sure? This will delete all keys, settings, and progress.")) {
-      localStorage.clear();
+      getLocalStorage()?.clear?.();
       window.location.reload();
     }
   }
@@ -553,6 +562,12 @@ function CreditsSettings() {
       category: 'Audio Inference Engine',
       url: 'https://developer.mozilla.org/en-US/docs/Web/API/Web_Speech_API',
       description: 'Native SpeechSynthesis and SpeechRecognition browser engines for Japanese pronunciation playback.'
+    },
+    {
+      name: 'kuromoji',
+      category: 'Tokenizer Service & 3rd Party Library',
+      url: 'https://github.com/takuyaa/kuromoji.js',
+      description: 'Client-side Japanese morphological tokenizer used for phrase segmentation and token-based Japanese learning feedback.'
     }
   ];
 

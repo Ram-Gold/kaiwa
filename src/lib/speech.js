@@ -13,7 +13,7 @@ export function speakJapanese(text) {
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = 'ja-JP';
 
-  const storedRate = parseFloat(localStorage.getItem('kaiwa.speech.rate') || '1.0');
+  const storedRate = parseFloat(window.localStorage?.getItem?.('kaiwa.speech.rate') || '1.0');
   utterance.rate = isNaN(storedRate) ? 1.0 : storedRate;
 
   window.speechSynthesis.speak(utterance);
