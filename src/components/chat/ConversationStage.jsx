@@ -162,6 +162,7 @@ export default function ConversationStage({ briefing = FALLBACK_BRIEFING }) {
   const [selectedCardId, setSelectedCardId] = useState(null);
   const [recitationCard, setRecitationCard] = useState(null);
   const [recitationOverlayVisible, setRecitationOverlayVisible] = useState(false);
+  const [returnTransition, setReturnTransition] = useState(null);
   const [recitationStatus, setRecitationStatus] = useState('idle');
   const [spokenTranscript, setSpokenTranscript] = useState('');
   const [recitationOrigin, setRecitationOrigin] = useState(null);
@@ -210,6 +211,7 @@ export default function ConversationStage({ briefing = FALLBACK_BRIEFING }) {
     setAvailableCards((currentCards) => currentCards.filter((currentCard) => currentCard.id !== card.id));
     setRecitationCard(card);
     setRecitationOverlayVisible(true);
+    setReturnTransition(null);
     setSpokenTranscript('');
     setRecitationStatus('starting');
     startRecitation(card);
@@ -269,12 +271,61 @@ export default function ConversationStage({ briefing = FALLBACK_BRIEFING }) {
     }
   }
 
+  function cancelRecitation(card) {
+    if (returnTransition) return;
+
+    recognitionRef.current?.stop?.();
+    recognitionRef.current = null;
+    setRecitationOverlayVisible(false);
+    setAvailableCards((currentCards) => restoreCardInInitialOrder(currentCards, card, initialCards));
+    setReturnTransition({ cardId: card.id, phase: 'measuring', destinationRect: null });
+    setRecitationStatus('idle');
+    setSpokenTranscript('');
+  }
+
+  function updateMeasuredReturn(cardId, patch) {
+    setReturnTransition((current) => {
+      if (!current || current.cardId !== cardId || current.phase !== 'measuring') {
+        return current;
+      }
+
+      const next = { ...current, ...patch };
+      return next.originRect && next.destination ? { ...next, phase: 'returning' } : next;
+    });
+  }
+
+  function handleReturnOriginReady(cardId, originRect) {
+    updateMeasuredReturn(cardId, { originRect });
+  }
+
+  function handleReturnDestinationReady(cardId, destination) {
+    updateMeasuredReturn(cardId, { destination });
+  }
+
+  function completeReturnHandoff() {
+    setReturnTransition((current) => (current ? { ...current, phase: 'handoff' } : current));
+    setRecitationOverlayVisible(false);
+
+    window.setTimeout(() => {
+      setSelectedCardId(null);
+      setRecitationCard(null);
+      setReturnTransition(null);
+      setRecitationOrigin(null);
+    }, 220);
+  }
+
   return (
     <div className="relative min-h-screen overflow-hidden">
       <ScenarioBackdrop scenario={scenario} theme={theme} />
 
       <div className="relative mx-auto min-h-screen max-w-6xl px-4 py-3 sm:px-6 lg:py-4">
-        <section className="relative mx-auto mt-12 w-full max-w-[24.5rem] xl:mt-3 xl:-translate-y-2" aria-label={`${scenario.title} conversation`}>
+        <section
+          className={cn(
+            'relative mx-auto mt-12 w-full max-w-[24.5rem] xl:mt-3 xl:-translate-y-2',
+            returnTransition?.cardId ? 'z-50' : 'z-0',
+          )}
+          aria-label={`${scenario.title} conversation`}
+        >
           {activeDictionaryEntry && (
             <div className="absolute right-full mr-6 top-8 z-50 hidden md:block">
               <DictionaryPopover entry={activeDictionaryEntry} onClose={() => setActiveDictionaryEntry(null)} />
@@ -293,18 +344,30 @@ export default function ConversationStage({ briefing = FALLBACK_BRIEFING }) {
             <PhoneFrame scenario={scenario} theme={theme} showMessages={showMessages} showPhoneChrome={showPhoneChrome} notchStyle={notchStyle} readingMode={readingMode} message={message} setMessage={setMessage} isTipOpen={isTipOpen} setIsTipOpen={setIsTipOpen} />
             {expToast ? <ExpToast text={expToast} /> : null}
           </div>
-          {showCards ? <CardHand cards={availableCards} onUseCard={useCard} selectedCardId={selectedCardId} theme={theme} /> : null}
+          {showCards ? (
+            <CardHand
+              cards={availableCards}
+              onUseCard={useCard}
+              selectedCardId={selectedCardId}
+              returnTransition={returnTransition}
+              onReturnDestinationReady={handleReturnDestinationReady}
+              onReturnFlightComplete={completeReturnHandoff}
+              theme={theme}
+            />
+          ) : null}
         </section>
       </div>
 
       {recitationCard ? (
-        <div
+        <button
+          type="button"
           data-testid="recitation-backdrop"
+          aria-label="Cancel recitation and return card"
+          onClick={() => cancelRecitation(recitationCard)}
           className={cn(
             'fixed inset-0 z-30 bg-black/70 backdrop-blur-[2px] transition-opacity duration-200 ease-out',
-            recitationOverlayVisible ? 'opacity-100' : 'opacity-0'
+            recitationOverlayVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
           )}
-          aria-hidden="true"
         />
       ) : null}
       {recitationCard ? (
@@ -316,6 +379,8 @@ export default function ConversationStage({ briefing = FALLBACK_BRIEFING }) {
           status={recitationStatus}
           theme={theme}
           isVisible={recitationOverlayVisible}
+          returnTransition={returnTransition}
+          onReturnOriginReady={handleReturnOriginReady}
         />
       ) : null}
 
@@ -602,7 +667,7 @@ function HiddenMessages() {
   );
 }
 
-function RecitationCardOverlay({ card, flightOrigin, onSkip, spokenTranscript, status, theme, isVisible = true }) {
+function RecitationCardOverlay({ card, flightOrigin, onSkip, spokenTranscript, status, theme, isVisible = true, returnTransition, onReturnOriginReady }) {
   const [showRomaji, setShowRomaji] = useState(false);
   const statusCopy = {
     starting: 'Opening microphone…',
@@ -617,6 +682,8 @@ function RecitationCardOverlay({ card, flightOrigin, onSkip, spokenTranscript, s
   const romajiText = getRomajiText(tokens);
   const cardRef = useRef(null);
   const [flightStyle, setFlightStyle] = useState(null);
+  const isReturnMeasuring = returnTransition?.cardId === card.id && returnTransition.phase === 'measuring';
+  const isReturningToHand = returnTransition?.cardId === card.id && returnTransition.phase === 'returning';
 
   useLayoutEffect(() => {
     if (!flightOrigin || !cardRef.current) {
@@ -632,29 +699,39 @@ function RecitationCardOverlay({ card, flightOrigin, onSkip, spokenTranscript, s
     });
   }, [flightOrigin]);
 
+  useLayoutEffect(() => {
+    if (!isReturnMeasuring || !cardRef.current) return;
+    onReturnOriginReady?.(card.id, cardRef.current.getBoundingClientRect());
+  }, [card.id, isReturnMeasuring, onReturnOriginReady]);
+
   return (
     <div
       className={cn(
         'pointer-events-none fixed inset-x-0 top-24 z-40 flex flex-col items-center px-4 transition-opacity duration-200 ease-out',
-        isVisible ? 'opacity-100' : 'opacity-0'
+        isVisible && !isReturningToHand ? 'opacity-100' : 'opacity-0',
       )}
       aria-live="polite"
+      aria-hidden={!isVisible}
     >
       <button
         type="button"
         aria-label={`Skip recitation for ${card.phrase}`}
         data-state="reciting"
+        data-returning="false"
         onClick={onSkip}
         ref={cardRef}
-        style={flightStyle ?? undefined}
+        style={isReturningToHand ? undefined : flightStyle ?? undefined}
         className={cn(
-          'pointer-events-auto relative h-72 w-56 origin-center transform-gpu brutal-border p-5 text-left shadow-shadow transition-[transform,box-shadow,opacity] duration-200 ease-out will-change-transform hover:-translate-y-2 hover:scale-110 active:scale-105',
-          flightStyle
-            ? 'animate-[shared-card-flight_420ms_cubic-bezier(.2,1,.2,1)_both]'
-            : 'animate-[recitation-pop_360ms_cubic-bezier(.2,1.15,.2,1)_both]',
-          isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95',
+          'pointer-events-auto relative h-72 w-56 origin-center transform-gpu brutal-border p-5 text-left shadow-shadow transition-[transform,box-shadow,opacity,filter] duration-200 ease-out will-change-transform hover:-translate-y-2 hover:scale-110 active:scale-105',
+          isReturningToHand
+            ? 'pointer-events-none opacity-0'
+            : flightStyle
+              ? 'animate-[shared-card-flight_420ms_cubic-bezier(.2,1,.2,1)_both]'
+              : 'animate-[recitation-pop_360ms_cubic-bezier(.2,1.15,.2,1)_both]',
+          isVisible && !isReturningToHand ? 'opacity-100 scale-100' : 'opacity-0 scale-95',
           tone,
         )}
+
       >
         <span data-testid="recitation-card-text" className="flex h-full flex-col items-start justify-start text-left font-jp text-3xl font-black leading-9">
           <PronunciationTokens phrase={card.phrase} matchedTokenCount={matchedTokenCount} />
@@ -755,7 +832,9 @@ function Composer({ message, setMessage }) {
   );
 }
 
-function CardHand({ cards, onUseCard, selectedCardId, theme }) {
+function CardHand({ cards, onUseCard, selectedCardId, returnTransition, onReturnDestinationReady, onReturnFlightComplete, theme }) {
+  const isReturningToHand = Boolean(returnTransition?.cardId);
+
   if (cards.length === 0) {
     return (
       <div className="absolute -bottom-20 left-1/2 z-30 w-72 -translate-x-1/2 rotate-[-2deg] brutal-border bg-paper p-4 text-center shadow-shadow">
@@ -766,13 +845,27 @@ function CardHand({ cards, onUseCard, selectedCardId, theme }) {
   }
 
   return (
-    <div className="group/hand pointer-events-none absolute -bottom-52 left-1/2 z-30 h-64 w-[38rem] max-w-[130vw] -translate-x-1/2" aria-label="Suggestion card hand">
+    <div
+      data-returning={isReturningToHand ? 'true' : 'false'}
+      className={cn(
+        'pointer-events-none absolute -bottom-52 left-1/2 h-64 w-[38rem] max-w-[130vw] -translate-x-1/2',
+        isReturningToHand ? 'z-50' : 'z-30',
+        !isReturningToHand && 'group/hand',
+      )}
+      aria-label="Suggestion card hand"
+    >
       {cards.slice(0, 5).map((card, index) => (
         <PhraseCard
           key={card.id}
           card={card}
           index={index}
-          isSelected={selectedCardId === card.id}
+          isSelected={selectedCardId === card.id && returnTransition?.cardId !== card.id}
+          isReturnDestination={returnTransition?.cardId === card.id}
+          returnPhase={returnTransition?.cardId === card.id ? returnTransition.phase : null}
+          isReturningToHand={isReturningToHand}
+          returnTransition={returnTransition}
+          onReturnDestinationReady={onReturnDestinationReady}
+          onReturnFlightComplete={onReturnFlightComplete}
           onUseCard={onUseCard}
           theme={theme}
           total={Math.min(cards.length, 5)}
@@ -782,7 +875,9 @@ function CardHand({ cards, onUseCard, selectedCardId, theme }) {
   );
 }
 
-function PhraseCard({ card, index, isSelected, onUseCard, theme, total }) {
+function PhraseCard({ card, index, isSelected, isReturnDestination, returnPhase, isReturningToHand, returnTransition, onReturnDestinationReady, onReturnFlightComplete, onUseCard, theme, total }) {
+  const slotRef = useRef(null);
+  const cardRef = useRef(null);
   const offset = index - (total - 1) / 2;
   const rotation = offset * 6;
   const translateX = offset * 4.5;
@@ -790,10 +885,52 @@ function PhraseCard({ card, index, isSelected, onUseCard, theme, total }) {
   const spreadX = offset * 6.9;
   const spreadY = -2.2 + Math.abs(offset) * 0.9;
   const tone = getCardTone(card.toneIndex ?? index);
+  const [deckReturnStyle, setDeckReturnStyle] = useState(null);
+
+  useLayoutEffect(() => {
+    if (!isReturnDestination || returnPhase !== 'measuring' || !slotRef.current || !cardRef.current) return;
+    onReturnDestinationReady?.(card.id, {
+      slotRect: slotRef.current.getBoundingClientRect(),
+      cardRect: cardRef.current.getBoundingClientRect(),
+      rotation,
+    });
+  }, [card.id, isReturnDestination, onReturnDestinationReady, returnPhase, rotation]);
+
+  useLayoutEffect(() => {
+    if (!isReturnDestination || returnPhase !== 'returning' || !returnTransition?.originRect || !returnTransition?.destination?.cardRect) {
+      if (returnPhase !== 'handoff') {
+        setDeckReturnStyle(null);
+      }
+      return undefined;
+    }
+
+    const offset = getSharedElementOffset(returnTransition.originRect, returnTransition.destination.cardRect);
+    setDeckReturnStyle({
+      transform: `translate(${offset.x}px, ${offset.y}px) scale(${offset.scale}) rotate(${-rotation}deg)`,
+      filter: 'blur(0)',
+    });
+
+    const frame = window.requestAnimationFrame(() => {
+      setDeckReturnStyle({
+        transform: 'translate(0, 0) scale(1) rotate(0deg)',
+        filter: 'blur(0)',
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [isReturnDestination, returnPhase, returnTransition?.destination, returnTransition?.originRect, rotation]);
+
+  const interactiveCardMotion = !isReturnDestination
+    ? 'hover:z-20 hover:-translate-y-24 hover:rotate-0 hover:scale-[1.15] hover:shadow-shadow focus-visible:z-20 focus-visible:-translate-y-24 focus-visible:rotate-0 focus-visible:scale-[1.15]'
+    : '';
 
   return (
     <div
-      className="absolute left-1/2 top-0 [transform:var(--rest-transform)] transition-transform duration-300 ease-out group-hover/hand:[transform:var(--spread-transform)] group-hover/hand:duration-500"
+      ref={slotRef}
+      className={cn(
+        'absolute left-1/2 top-0 [transform:var(--rest-transform)] transition-transform duration-300 ease-out',
+        !isReturningToHand && 'group-hover/hand:[transform:var(--spread-transform)] group-hover/hand:duration-500',
+      )}
       style={{
         '--rest-transform': `translateX(calc(-50% + ${translateX}rem)) rotate(${rotation}deg)`,
         '--spread-transform': `translateX(calc(-50% + ${spreadX}rem)) translateY(${spreadY}rem) rotate(${spreadRotation}deg)`,
@@ -802,11 +939,26 @@ function PhraseCard({ card, index, isSelected, onUseCard, theme, total }) {
       <button
         type="button"
         aria-label={`Practice phrase ${card.phrase}`}
+        ref={cardRef}
         data-state={isSelected ? 'selected' : 'idle'}
+        data-returning={isReturnDestination && returnPhase === 'returning' ? 'true' : 'false'}
+        data-card-id={card.id}
+        data-testid={isReturnDestination ? 'return-destination-card' : undefined}
         onClick={(event) => onUseCard(card, event.currentTarget)}
+        onTransitionEnd={(event) => {
+          if (isReturnDestination && returnPhase === 'returning' && event.target === event.currentTarget) {
+            onReturnFlightComplete?.();
+          }
+        }}
+        disabled={isReturnDestination && returnPhase === 'measuring'}
+        style={deckReturnStyle ?? undefined}
         className={cn(
-          'pointer-events-auto h-64 w-48 origin-bottom transform-gpu brutal-border p-5 text-left shadow-nav transition-[transform,box-shadow] duration-200 ease-out will-change-transform hover:z-20 hover:-translate-y-24 hover:rotate-0 hover:scale-[1.15] hover:shadow-shadow focus-visible:z-20 focus-visible:-translate-y-24 focus-visible:rotate-0 focus-visible:scale-[1.15]',
+          'pointer-events-auto h-64 w-48 origin-bottom transform-gpu brutal-border p-5 text-left shadow-nav transition-[transform,box-shadow,opacity,filter] duration-200 ease-out will-change-transform',
+          interactiveCardMotion,
           isSelected && 'z-30 -translate-y-36 rotate-0 scale-[1.3] shadow-shadow duration-200',
+          isReturnDestination && returnPhase === 'measuring' && 'opacity-0 pointer-events-none',
+          isReturnDestination && returnPhase === 'returning' && 'opacity-100 pointer-events-none duration-[420ms] [transition-timing-function:cubic-bezier(.77,0,.175,1)] will-change-[transform,opacity,filter]',
+          isReturnDestination && returnPhase === 'handoff' && 'opacity-100 duration-[80ms]',
           tone,
         )}
       >
@@ -817,6 +969,15 @@ function PhraseCard({ card, index, isSelected, onUseCard, theme, total }) {
       </button>
     </div>
   );
+}
+
+function restoreCardInInitialOrder(currentCards, card, initialCards) {
+  if (currentCards.some((currentCard) => currentCard.id === card.id)) {
+    return currentCards;
+  }
+
+  const order = new Map(initialCards.map((initialCard, index) => [initialCard.id, index]));
+  return [...currentCards, card].sort((first, second) => (order.get(first.id) ?? 0) - (order.get(second.id) ?? 0));
 }
 
 function buildCards(briefing) {

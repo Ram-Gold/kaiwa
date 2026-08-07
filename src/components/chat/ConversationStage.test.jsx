@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import React from 'react';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as matchers from '@testing-library/jest-dom/matchers';
@@ -216,6 +216,79 @@ describe('ConversationStage', () => {
     expect(screen.queryByText('ga')).not.toBeInTheDocument();
 
     delete window.SpeechRecognition;
+  });
+
+  it('cancels recitation when clicking outside and returns the card to the hand', async () => {
+    render(<ConversationStage briefing={briefing} />);
+
+    await userEvent.click(screen.getByRole('button', { name: /practice phrase ___ に行きたいです/i }));
+    await userEvent.click(screen.getByTestId('recitation-backdrop'));
+
+    expect(screen.getByLabelText(/message text/i)).toHaveValue('');
+    expect(screen.queryByRole('button', { name: /skip recitation for ___ に行きたいです/i })).not.toBeInTheDocument();
+
+    const returnDestination = screen.getByTestId('return-destination-card');
+    expect(returnDestination).toHaveAttribute('data-card-id', '___ に行きたいです-0');
+    expect(returnDestination).toHaveAttribute('data-returning', 'true');
+    expect(returnDestination).toHaveClass('opacity-100', 'pointer-events-none', 'duration-[420ms]', '[transition-timing-function:cubic-bezier(.77,0,.175,1)]');
+    expect(screen.getByLabelText(/Train Station conversation/i)).toHaveClass('z-50');
+
+    fireEvent.transitionEnd(returnDestination, { propertyName: 'transform' });
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /skip recitation for ___ に行きたいです/i })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /practice phrase ___ に行きたいです/i })).toBeInTheDocument();
+    });
+  });
+
+  it('keeps the recitation backdrop mounted long enough to fade back out smoothly', async () => {
+    render(<ConversationStage briefing={briefing} />);
+
+    await userEvent.click(screen.getByRole('button', { name: /practice phrase ___ に行きたいです/i }));
+    await userEvent.click(screen.getByTestId('recitation-backdrop'));
+
+    const backdrop = screen.getByTestId('recitation-backdrop');
+    expect(backdrop).toHaveClass('opacity-0');
+
+    const returningCard = screen.getByTestId('return-destination-card');
+    await waitFor(() => {
+      expect(returningCard).toHaveAttribute('data-returning', 'true');
+    });
+    fireEvent.transitionEnd(returningCard, { propertyName: 'transform' });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('recitation-backdrop')).toHaveClass('opacity-0');
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(screen.getByTestId('recitation-backdrop')).toBeInTheDocument();
+
+    await new Promise((resolve) => setTimeout(resolve, 160));
+    expect(screen.queryByTestId('recitation-backdrop')).not.toBeInTheDocument();
+  });
+
+  it('returns edge cards to the resting deck slot angle instead of the hover spread angle', async () => {
+    render(<ConversationStage briefing={briefing} />);
+
+    await userEvent.click(screen.getByRole('button', { name: /practice phrase 英語でヒントをください/i }));
+    await userEvent.click(screen.getByTestId('recitation-backdrop'));
+
+    const hand = screen.getByLabelText(/suggestion card hand/i);
+    expect(hand).toHaveAttribute('data-returning', 'true');
+    expect(hand).toHaveClass('z-50');
+
+    const returnDestination = screen.getByTestId('return-destination-card');
+    expect(returnDestination).toHaveAttribute('data-card-id', '英語でヒントをください-4');
+    expect(returnDestination).toHaveClass('opacity-100', 'pointer-events-none');
+    expect(returnDestination).not.toHaveClass('hover:-translate-y-24');
+    expect(returnDestination.parentElement?.getAttribute('style')).toContain('rotate(12deg)');
+    expect(screen.getByLabelText(/Train Station conversation/i)).toHaveClass('z-50');
+
+    await waitFor(() => {
+      expect(returnDestination.getAttribute('style')).toContain('rotate(0deg)');
+      expect(returnDestination.getAttribute('style')).toContain('blur(0)');
+      expect(returnDestination.getAttribute('style')).not.toContain('blur(2px)');
+    });
   });
 
   it('skips recitation when clicking the centered card again and still fills the composer', async () => {
