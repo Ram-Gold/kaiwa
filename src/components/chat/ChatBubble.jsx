@@ -27,7 +27,7 @@ export default function ChatBubble({
   const isError = message.role === 'error';
   const canUseAiTools = message.role === 'assistant';
   const romajiGlosses = canUseAiTools ? getKnownRomajiGlosses(message.content) : [];
-  const romajiText = canUseAiTools ? toRomajiText(message.content) : '';
+  const romajiText = canUseAiTools ? (message.romaji || toRomajiText(message.content)) : '';
 
   async function handleToggleTranslate() {
     if (onTranslate) {
@@ -147,7 +147,7 @@ export default function ChatBubble({
             <button
               type="button"
               aria-label="Toggle Romaji reading"
-              title="Toggle Romaji conversion"
+              title="Toggle Romaji reading"
               onClick={() => setShowRomaji(!showRomaji)}
               className={cn(
                 'brutal-border grid h-9 w-9 place-items-center rounded-full bg-white transition-all hover:bg-mustard active:scale-95',

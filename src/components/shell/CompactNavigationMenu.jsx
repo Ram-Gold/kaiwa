@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { Fragment, useState } from 'react';
 
 import LogoMark from '../ui/LogoMark.jsx';
 import { cn } from '../../lib/utils.js';
@@ -10,7 +10,16 @@ import { NAV_ITEMS, NavItem } from './AppSidebar.jsx';
 
 export default function CompactNavigationMenu() {
   const pathname = usePathname();
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
+
+  const handleLogout = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('kaiwa_user');
+      localStorage.removeItem('kaiwa_token');
+    }
+    router.push('/login');
+  };
 
   return (
     <div className="fixed left-4 top-4 z-40 sm:left-6 sm:top-6">
@@ -47,17 +56,29 @@ export default function CompactNavigationMenu() {
               const isActive = href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`);
 
               return label === 'Settings' ? (
-                <NavItem
-                  key={label}
-                  as="button"
-                  label={label}
-                  Icon={Icon}
-                  className="brutal-border flex items-center gap-3 bg-paper px-4 py-3 text-left font-mono text-sm font-black uppercase tracking-[0.12em] text-ink shadow-nav transition-all hover:translate-x-[3px] hover:translate-y-[3px] hover:bg-mustard hover:shadow-none"
-                  onClick={() => {
-                    setIsOpen(false);
-                    window.dispatchEvent(new Event('kaiwa:open-settings'));
-                  }}
-                />
+                <Fragment key={label}>
+                  <div className="my-2 border-t-2 border-paper/20" />
+                  <NavItem
+                    as="button"
+                    label={label}
+                    Icon={null}
+                    className="flex items-center justify-start bg-transparent px-4 py-1.5 font-mono text-sm font-black uppercase tracking-[0.12em] text-paper transition-colors hover:text-mustard"
+                    onClick={() => {
+                      setIsOpen(false);
+                      window.dispatchEvent(new Event('kaiwa:open-settings'));
+                    }}
+                  />
+                  <NavItem
+                    as="button"
+                    label="Log Out"
+                    Icon={null}
+                    className="flex items-center justify-start bg-transparent px-4 py-1.5 font-mono text-sm font-black uppercase tracking-[0.12em] text-paper transition-colors hover:text-shu"
+                    onClick={() => {
+                      setIsOpen(false);
+                      handleLogout();
+                    }}
+                  />
+                </Fragment>
               ) : (
                 <NavItem
                   key={label}

@@ -17,8 +17,10 @@ export default function AppShell({ children }) {
   const isBriefing = pathname === '/briefing' || pathname.startsWith('/briefing/');
   const isChat = pathname === '/chat' || pathname.startsWith('/chat/');
   const isGrading = pathname === '/grading' || pathname.startsWith('/grading/');
+  const isFriendsRoute = pathname === '/friends' || pathname.startsWith('/friends/');
   const isFocusRoute = isBriefing || isChat || isGrading;
   const isProfileRoute = pathname === '/profile' || pathname.startsWith('/profile/');
+  const hasNoRightRail = isFocusRoute || isFriendsRoute;
 
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
 
@@ -35,14 +37,18 @@ export default function AppShell({ children }) {
       <div
         className={cn(
           'grid min-h-screen bg-paper text-ink',
-          isFocusRoute ? 'grid-cols-1' : 'lg:grid-cols-[17rem_minmax(0,1fr)_18rem]',
+          isFocusRoute
+            ? 'grid-cols-1'
+            : isFriendsRoute
+              ? 'lg:grid-cols-[17rem_minmax(0,1fr)]'
+              : 'lg:grid-cols-[17rem_minmax(0,1fr)_18rem]',
         )}
       >
       {isFocusRoute ? <CompactNavigationMenu /> : <AppSidebar />}
       <main className={cn('min-w-0 px-4 py-6 sm:px-6 lg:px-8 lg:py-10', isBriefing && 'lg:px-10', (isChat || isGrading) && 'p-0 sm:p-0 lg:p-0')}>
         {children}
       </main>
-      {isFocusRoute ? null : isProfileRoute ? <ProfileRail profile={defaultProfile} /> : <ProgressRail />}
+      {hasNoRightRail ? null : isProfileRoute ? <ProfileRail profile={defaultProfile} /> : <ProgressRail />}
       {isSettingsOpen && <GlobalSettingsModal onClose={() => setIsSettingsOpen(false)} />}
       </div>
     </ApiGuard>

@@ -1,5 +1,9 @@
+import { useState } from 'react';
+import Link from 'next/link';
+import { IoSearchSharp, IoChevronForwardSharp, IoPersonAddSharp } from 'react-icons/io5';
 import Badge from '../ui/Badge.jsx';
 import Card from '../ui/Card.jsx';
+import InviteFriendsModal from './InviteFriendsModal.jsx';
 import { cn } from '../../lib/utils.js';
 
 export default function ProfileRail({ profile }) {
@@ -10,11 +14,50 @@ export default function ProfileRail({ profile }) {
     >
       <div className="grid gap-5">
         <StreakSummary streak={profile.streak} />
+        <FriendsSection />
         <ConnectionsCard community={profile.community} />
       </div>
     </aside>
   );
 }
+
+function FriendsSection() {
+  const [showInviteModal, setShowInviteModal] = useState(false);
+
+  return (
+    <div className="space-y-2">
+      <p className="label-mono text-correction px-1">Friends</p>
+      
+      <div className="space-y-2">
+        {/* Find friends link button (Navigates to /friends/find) */}
+        <Link
+          href="/friends/find"
+          className="w-full brutal-border bg-paper p-3 font-mono text-xs font-black uppercase tracking-[0.11em] text-ink shadow-nav hover:bg-mustard transition-all flex items-center justify-between group active:scale-95"
+        >
+          <div className="flex items-center gap-2">
+            <IoSearchSharp className="text-sm text-ink/70 group-hover:text-ink" />
+            <span>Find friends</span>
+          </div>
+          <IoChevronForwardSharp className="text-sm text-ink/60 group-hover:translate-x-0.5 transition-transform" />
+        </Link>
+
+        {/* Invite Friends button */}
+        <button
+          type="button"
+          onClick={() => setShowInviteModal(true)}
+          className="w-full brutal-border bg-mustard p-3 font-mono text-xs font-black uppercase tracking-[0.11em] text-ink shadow-nav hover:bg-shu hover:text-paper transition-all flex items-center justify-center gap-2 active:scale-95"
+        >
+          <IoPersonAddSharp className="text-sm" />
+          <span>Invite Friends</span>
+        </button>
+      </div>
+
+      {showInviteModal && <InviteFriendsModal onClose={() => setShowInviteModal(false)} />}
+    </div>
+  );
+}
+
+
 
 function StreakSummary({ streak }) {
   return (

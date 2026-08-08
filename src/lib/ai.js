@@ -1,4 +1,5 @@
 import { getPersonaById } from '../prompts/personas.js';
+import { splitConversationHistory } from './contextManagement.js';
 
 export class AIProviderError extends Error {
   constructor(code, userMessage, cause) {
@@ -81,6 +82,94 @@ function normalizeHistory(conversationHistory = []) {
     .filter((message) => message.content);
 }
 
+async function summarizeOldMessages(provider, apiKey, messagesToSummarize) {
+  if (!messagesToSummarize || messagesToSummarize.length === 0) return '';
+  
+  const formattedMessages = messagesToSummarize.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n');
+  const systemPrompt = 'Summarize these earlier chat messages to retain important facts, user preferences, and overall conversation flow for a language learning context. Return ONLY the summary, no meta-commentary.';
+  const userMessage = `Messages to summarize:\n${formattedMessages}`;
+  
+  try {
+    let response;
+    if (provider === 'ollama') {
+      response = await fetch('http://localhost:11434/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'llama3',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage }
+          ],
+          stream: false,
+        }),
+      });
+    } else if (provider === 'openai') {
+      response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage }
+          ],
+          temperature: 0.2,
+        }),
+      });
+    } else if (provider === 'gemini') {
+      response = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'gemini-1.5-flash',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage }
+          ],
+          temperature: 0.2,
+        }),
+      });
+    } else if (provider === 'claude') {
+      response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'dangerouslyAllowBrowser': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-3-5-haiku-20241022',
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userMessage }],
+          max_tokens: 1024,
+          temperature: 0.2,
+        }),
+      });
+    }
+    
+    if (!response || !response.ok) return '';
+    
+    const data = await response.json();
+    let summary = '';
+    if (provider === 'ollama') summary = data?.message?.content;
+    else if (provider === 'openai' || provider === 'gemini') summary = data?.choices?.[0]?.message?.content;
+    else if (provider === 'claude') summary = data?.content?.[0]?.text;
+    
+    return summary ? summary.trim() : '';
+  } catch (err) {
+    console.warn('Failed to summarize older messages:', err);
+    return '';
+  }
+}
+
 /**
  * Sends a message to the chosen AI provider.
  *
@@ -120,10 +209,26 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
 
   let response;
   try {
+    const normalizedHistory = normalizeHistory(conversationHistory);
+    
+    // Allocate token budget (Ollama has smaller context window by default)
+    const tokenBudget = provider === 'ollama' ? 4000 : 6000;
+    const { recent, olderToSummarize } = splitConversationHistory(normalizedHistory, tokenBudget);
+    
+    let activeSystemPrompt = persona.systemPrompt;
+    
+    // Summarize older history if necessary to prevent context window bloat
+    if (olderToSummarize.length > 0) {
+      const summaryText = await summarizeOldMessages(provider, cleanKey, olderToSummarize);
+      if (summaryText) {
+        activeSystemPrompt += `\n\n[Earlier conversation summary]:\n${summaryText}`;
+      }
+    }
+
     if (provider === 'ollama') {
       const messages = [
-        { role: 'system', content: persona.systemPrompt },
-        ...normalizeHistory(conversationHistory),
+        { role: 'system', content: activeSystemPrompt },
+        ...recent,
         { role: 'user', content: cleanMessage },
       ];
       // Make local HTTP request to user's Ollama instance.
@@ -140,8 +245,8 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
       });
     } else if (provider === 'openai') {
       const messages = [
-        { role: 'system', content: persona.systemPrompt },
-        ...normalizeHistory(conversationHistory),
+        { role: 'system', content: activeSystemPrompt },
+        ...recent,
         { role: 'user', content: cleanMessage },
       ];
       response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -158,8 +263,8 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
       });
     } else if (provider === 'gemini') {
       const messages = [
-        { role: 'system', content: persona.systemPrompt },
-        ...normalizeHistory(conversationHistory),
+        { role: 'system', content: activeSystemPrompt },
+        ...recent,
         { role: 'user', content: cleanMessage },
       ];
       // Google Gemini OpenAI compatibility endpoint
@@ -176,7 +281,7 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
         }),
       });
     } else if (provider === 'claude') {
-      const messages = normalizeHistory(conversationHistory);
+      const messages = [...recent];
       messages.push({ role: 'user', content: cleanMessage });
 
       // Claude Messages API puts system prompt at the top-level
@@ -190,7 +295,7 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
         },
         body: JSON.stringify({
           model: 'claude-3-5-haiku-20241022',
-          system: persona.systemPrompt,
+          system: activeSystemPrompt,
           messages,
           max_tokens: 1024,
           temperature: 0.8,

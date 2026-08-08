@@ -16,6 +16,7 @@ let mockPathname = '/';
 
 vi.mock('next/navigation', () => ({
   usePathname: () => mockPathname,
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
 }));
 
 vi.mock('next/link', () => ({
@@ -59,11 +60,12 @@ describe('AppShell', () => {
     await userEvent.click(screen.getByRole('button', { name: /open navigation menu/i }));
 
     expect(screen.queryByRole('button', { name: /open conversation options/i })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /open settings/i }));
+    await userEvent.click(screen.getByRole('button', { name: /^settings$/i }));
 
     expect(screen.getByRole('dialog', { name: /settings overlay/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^roleplay$/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /phone chrome/i })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /^display$/i }));
+    expect(screen.getByRole('button', { name: /dynamic island/i })).toBeInTheDocument();
     expect(screen.getByText(/Conversation content/i)).toBeInTheDocument();
   });
 });

@@ -2,7 +2,7 @@
 import { motion, useAnimation } from "motion/react";
 import { forwardRef, useCallback, useImperativeHandle, useRef } from "react";
 
-import { cn } from "@/lib/utils";
+import { cn } from "../../lib/utils.js";
 
 const DEFAULT_TRANSITION = {
   duration: 0.6,

@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useCallback, useRef } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { Fragment, useCallback, useRef } from 'react';
 import { Drama } from 'lucide-react';
 import { HistoryIcon } from '../ui/history.jsx';
 import { HomeIcon } from '../ui/home.jsx';
@@ -22,6 +22,15 @@ export const NAV_ITEMS = [
 
 export default function AppSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleLogout = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('kaiwa_user');
+      localStorage.removeItem('kaiwa_token');
+    }
+    router.push('/login');
+  };
 
   return (
     <aside className="border-b-2 border-border bg-aizome p-5 text-paper lg:sticky lg:top-0 lg:min-h-screen lg:border-b-0 lg:border-r-2">
@@ -39,15 +48,23 @@ export default function AppSidebar() {
 
           if (label === 'Settings') {
             return (
-              <NavItem
-                key={label}
-                as="button"
-                label={label}
-                Icon={Icon}
-                className="brutal-border flex whitespace-nowrap bg-paper px-4 py-3 text-left font-mono text-sm font-black uppercase tracking-[0.12em] text-ink shadow-nav transition-all hover:translate-x-[3px] hover:translate-y-[3px] hover:bg-mustard hover:shadow-none lg:w-full lg:items-center lg:gap-3"
-                iconClassName="hidden shrink-0 lg:block"
-                onClick={() => window.dispatchEvent(new Event('kaiwa:open-settings'))}
-              />
+              <Fragment key={label}>
+                <div className="my-3 border-t-2 border-paper/20 hidden lg:block" />
+                <NavItem
+                  as="button"
+                  label={label}
+                  Icon={null}
+                  className="flex whitespace-nowrap bg-transparent px-4 py-1.5 text-left font-mono text-sm font-black uppercase tracking-[0.12em] text-paper transition-colors hover:text-mustard lg:w-full lg:items-center justify-center lg:justify-start"
+                  onClick={() => window.dispatchEvent(new Event('kaiwa:open-settings'))}
+                />
+                <NavItem
+                  as="button"
+                  label="Log Out"
+                  Icon={null}
+                  className="flex whitespace-nowrap bg-transparent px-4 py-1.5 text-left font-mono text-sm font-black uppercase tracking-[0.12em] text-paper transition-colors hover:text-shu lg:w-full lg:items-center justify-center lg:justify-start"
+                  onClick={handleLogout}
+                />
+              </Fragment>
             );
           }
 
@@ -112,7 +129,7 @@ export function NavItem({
     onPointerUp: stop,
   };
 
-  const icon = <Icon ref={iconRef} aria-hidden="true" className={cn('shrink-0', iconClassName)} size={20} />;
+  const icon = Icon ? <Icon ref={iconRef} aria-hidden="true" className={cn('shrink-0', iconClassName)} size={20} /> : null;
   const content = (
     <>
       {icon}

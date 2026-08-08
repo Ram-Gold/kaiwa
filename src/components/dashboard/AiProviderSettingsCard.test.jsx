@@ -1,6 +1,9 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+/** @vitest-environment jsdom */
+import React from 'react';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import '@testing-library/jest-dom/vitest';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AiProviderSettingsCard, {
   PROVIDER_STORAGE_KEY,
   API_KEYS_STORAGE_PREFIX,
@@ -15,8 +18,24 @@ describe('AiProviderSettingsCard', () => {
   };
 
   beforeEach(() => {
-    window.localStorage.clear();
+    cleanup();
+    let store = {};
+    const localStorageMock = {
+      getItem: (key) => store[key] || null,
+      setItem: (key, value) => { store[key] = String(value); },
+      removeItem: (key) => { delete store[key]; },
+      clear: () => { store = {}; }
+    };
+    Object.defineProperty(window, 'localStorage', {
+      value: localStorageMock,
+      writable: true,
+      configurable: true
+    });
     mockOnSettingsSaved = vi.fn();
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   it('renders correctly with default values (Ollama)', () => {

@@ -5,6 +5,9 @@ import { IoCheckmarkSharp, IoCloseSharp, IoTrashSharp, IoSearchSharp } from 'rea
 import { cn } from '../../lib/utils.js';
 import Button from '../ui/Button.jsx';
 import { PROVIDER_STORAGE_KEY, API_KEYS_STORAGE_PREFIX } from '../dashboard/AiProviderSettingsCard.jsx';
+import CreditsSettingsView from '../settings/CreditsSettings.jsx';
+import ProfileSettings from '../settings/ProfileSettings.jsx';
+import SubscriptionSettings from '../settings/SubscriptionSettings.jsx';
 
 const CHAT_NOTCH_STYLES = [
   { id: 'dynamic-island', label: 'Dynamic Island' },
@@ -38,7 +41,7 @@ const API_PROVIDERS = [
 ];
 
 export default function GlobalSettingsModal({ onClose }) {
-  const [category, setCategory] = useState('API Providers');
+  const [category, setCategory] = useState('Profile Settings');
   
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Settings overlay">
@@ -62,7 +65,7 @@ export default function GlobalSettingsModal({ onClose }) {
 
         <div className="mt-5 grid gap-4 md:grid-cols-[12rem_minmax(0,1fr)] overflow-y-auto flex-1 pb-4">
           <nav className="grid content-start gap-2 overflow-y-auto pr-2 pb-4" aria-label="Settings categories">
-            {['API Providers', 'Engines (TTS/STT)', 'About me & Privacy', 'Roleplay', 'Display', 'Credits'].map((item) => (
+            {['Profile Settings', 'Subscription', 'API Providers', 'Engines (TTS/STT)', 'About me & Privacy', 'Roleplay', 'Display', 'Credits'].map((item) => (
               <button
                 key={item}
                 type="button"
@@ -79,6 +82,8 @@ export default function GlobalSettingsModal({ onClose }) {
           </nav>
 
           <section className="brutal-border bg-paper p-4 shadow-nav overflow-visible" aria-label={`${category} settings`}>
+            {category === 'Profile Settings' && <ProfileSettings />}
+            {category === 'Subscription' && <SubscriptionSettings />}
             {category === 'API Providers' && <ApiProvidersSettings />}
             {category === 'Engines (TTS/STT)' && <EnginesSettings />}
             {category === 'About me & Privacy' && <PrivacySettings />}
@@ -532,86 +537,5 @@ function RoleplaySettingToggle({ active, label, description, onClick }) {
 }
 
 function CreditsSettings() {
-  const creditsList = [
-    {
-      name: 'Sound Effect Lab (効果音ラボ)',
-      category: 'Sound Effects & Audio FX',
-      url: 'https://soundeffect-lab.info/',
-      description: 'High-quality royalty-free sound effects used for grading evaluation audio and interactive UI feedback.'
-    },
-    {
-      name: 'Irasutoya (いらすとや)',
-      category: 'Illustrations & Stamps',
-      url: 'https://www.irasutoya.com/',
-      description: 'Iconic Japanese vector illustrations and traditional Hanko stamp assets.'
-    },
-    {
-      name: 'Google Fonts',
-      category: 'Typography',
-      url: 'https://fonts.google.com/',
-      description: 'Space Mono, Noto Sans JP, Inter, and Outfit typography.'
-    },
-    {
-      name: 'Lucide',
-      category: 'Iconography',
-      url: 'https://lucide.dev/',
-      description: 'Open-source static icons used for interface actions, including the Roleplay navigation icon.'
-    },
-    {
-      name: 'Lucide Animated',
-      category: 'Animated Iconography',
-      url: 'https://lucide-animated.com/',
-      description: 'Motion-powered animated Lucide icons used for streak and XP indicators.'
-    },
-    {
-      name: 'React Icons & Material Symbols',
-      category: 'Iconography',
-      url: 'https://react-icons.github.io/react-icons/',
-      description: 'Ionicons 5 and Google Material Symbols icons used elsewhere in the interface.'
-    },
-    {
-      name: 'Web Speech API',
-      category: 'Audio Inference Engine',
-      url: 'https://developer.mozilla.org/en-US/docs/Web/API/Web_Speech_API',
-      description: 'Native SpeechSynthesis and SpeechRecognition browser engines for Japanese pronunciation playback.'
-    },
-    {
-      name: 'kuromoji',
-      category: 'Tokenizer Service & 3rd Party Library',
-      url: 'https://github.com/takuyaa/kuromoji.js',
-      description: 'Client-side Japanese morphological tokenizer used for phrase segmentation and token-based Japanese learning feedback.'
-    }
-  ];
-
-  return (
-    <div>
-      <div className="mb-4">
-        <p className="label-mono text-correction">Attribution & Licenses</p>
-        <h3 className="mt-2 font-display text-4xl leading-none">Credits</h3>
-      </div>
-      <p className="mt-4 rounded-base border-l-[6px] border-shu bg-white/60 p-3 text-sm font-bold leading-6">
-        Special thanks to the amazing open-source projects, Japanese asset creators, and audio providers powering KAIwa.
-      </p>
-
-      <div className="mt-5 space-y-4">
-        {creditsList.map((item) => (
-          <div key={item.name} className="brutal-border bg-white p-4 shadow-nav">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <h4 className="font-display text-xl">{item.name}</h4>
-              <span className="label-mono bg-mustard px-2 py-0.5 text-[10px] text-ink">{item.category}</span>
-            </div>
-            <p className="mt-2 text-xs font-bold leading-5 opacity-75">{item.description}</p>
-            <a
-              href={item.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-3 inline-block font-mono text-xs font-black uppercase text-shu hover:underline"
-            >
-              {item.url} ↗
-            </a>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  return <CreditsSettingsView />;
 }

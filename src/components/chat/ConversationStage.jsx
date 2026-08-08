@@ -679,7 +679,7 @@ function RecitationCardOverlay({ card, flightOrigin, onSkip, spokenTranscript, s
   const tone = getCardTone(card.toneIndex ?? 0);
   const tokens = getCardTokens(card);
   const matchedTokenCount = getMatchedTokenCount(tokens, spokenTranscript);
-  const romajiText = getRomajiText(tokens);
+  const romajiText = card.romaji || getRomajiText(tokens);
   const cardRef = useRef(null);
   const [flightStyle, setFlightStyle] = useState(null);
   const isReturnMeasuring = returnTransition?.cardId === card.id && returnTransition.phase === 'measuring';
@@ -743,24 +743,24 @@ function RecitationCardOverlay({ card, flightOrigin, onSkip, spokenTranscript, s
         </span>
         <span className={cn('absolute bottom-3 right-3 h-6 w-6 brutal-border shadow-nav', theme.glow)} aria-hidden="true" />
       </button>
-      <div className="pointer-events-auto absolute left-[calc(50%+7.5rem)] top-9 z-50 flex max-w-56 flex-col gap-2">
+      <div className="pointer-events-auto absolute left-[calc(50%+7.5rem)] top-9 z-50 flex flex-col gap-2">
         <button
           type="button"
           aria-label={`Speak phrase ${card.phrase}`}
+          title="Speak audio"
           onClick={() => speakJapanese(card.phrase)}
-          className="flex items-center gap-2 brutal-border bg-paper px-3 py-2 text-left text-ink shadow-shadow transition-transform hover:-translate-y-0.5 active:scale-95"
+          className="brutal-border grid h-10 w-10 place-items-center rounded-base bg-paper text-ink shadow-shadow transition-transform hover:-translate-y-0.5 active:scale-95"
         >
-          <IoVolumeHighSharp className="shrink-0 text-xl text-shu" aria-hidden="true" />
-          <span className="line-clamp-2 font-jp text-sm font-black leading-5">{card.phrase}</span>
+          <IoVolumeHighSharp className="text-xl text-shu" aria-hidden="true" />
         </button>
         <button
           type="button"
           aria-label={`${showRomaji ? 'Hide' : 'Show'} romaji for ${card.phrase}`}
+          title="Toggle Romaji"
           onClick={() => setShowRomaji((current) => !current)}
-          className="flex items-center gap-2 brutal-border bg-mustard px-3 py-2 text-left font-mono text-xs font-black uppercase tracking-[0.08em] text-ink shadow-shadow transition-transform hover:-translate-y-0.5 active:scale-95"
+          className="brutal-border grid h-10 w-10 place-items-center rounded-base bg-mustard text-ink shadow-shadow transition-transform hover:-translate-y-0.5 active:scale-95"
         >
-          <IoLanguageSharp className="shrink-0 text-lg" aria-hidden="true" />
-          Romaji
+          <IoLanguageSharp className="text-lg" aria-hidden="true" />
         </button>
       </div>
       <p className="mt-5 w-72 max-w-[80vw] brutal-border bg-paper px-3 py-2 text-center font-mono text-[10px] font-black uppercase tracking-[0.1em] text-ink shadow-nav">

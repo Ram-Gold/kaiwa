@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Button from '../ui/Button.jsx';
 import Card from '../ui/Card.jsx';
 
@@ -75,10 +75,11 @@ export default function AiProviderSettingsCard({
 
     const cleanKey = draftKey.trim();
 
-    // Persist to localStorage
-    localStorage.setItem(PROVIDER_STORAGE_KEY, draftProvider);
-    if (draftProvider !== 'ollama') {
-      localStorage.setItem(`${API_KEYS_STORAGE_PREFIX}${draftProvider}`, cleanKey);
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(PROVIDER_STORAGE_KEY, draftProvider);
+      if (draftProvider !== 'ollama') {
+        window.localStorage.setItem(`${API_KEYS_STORAGE_PREFIX}${draftProvider}`, cleanKey);
+      }
     }
 
     // Prepare updated API keys object for parent callback
@@ -97,7 +98,9 @@ export default function AiProviderSettingsCard({
   function handleClearKey() {
     if (draftProvider === 'ollama') return;
 
-    localStorage.removeItem(`${API_KEYS_STORAGE_PREFIX}${draftProvider}`);
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.removeItem(`${API_KEYS_STORAGE_PREFIX}${draftProvider}`);
+    }
     setDraftKey('');
     setSuccess('');
 

@@ -2,7 +2,7 @@
 import { motion, useAnimation } from "motion/react";
 import { forwardRef, useCallback, useImperativeHandle, useRef } from "react";
 
-import { cn } from "@/lib/utils";
+import { cn } from "../../lib/utils.js";
 
 const PATH_VARIANT = {
   normal: { pathLength: 1, opacity: 1, pathOffset: 0 },

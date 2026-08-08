@@ -126,7 +126,7 @@ describe('ConversationStage', () => {
     expect(screen.queryByRole('button', { name: /practice phrase ___ に行きたいです/i })).not.toBeInTheDocument();
     expect(screen.getByTestId('recitation-backdrop')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /skip recitation for ___ に行きたいです/i })).toHaveAttribute('data-state', 'reciting');
-    expect(screen.getByRole('button', { name: /speak phrase ___ に行きたいです/i })).toHaveTextContent('___ に行きたいです');
+    expect(screen.getByRole('button', { name: /speak phrase ___ に行きたいです/i })).toBeInTheDocument();
     expect(screen.getByText(/recite the card/i)).toBeInTheDocument();
   });
 
@@ -136,7 +136,7 @@ describe('ConversationStage', () => {
     await userEvent.click(screen.getByRole('button', { name: /practice phrase 何番線ですか/i }));
 
     expect(screen.getByTestId('recitation-card-text')).toHaveTextContent('何番線ですか');
-    expect(screen.getByRole('button', { name: /speak phrase 何番線ですか/i })).toHaveTextContent('何番線ですか');
+    expect(screen.getByRole('button', { name: /speak phrase 何番線ですか/i })).toBeInTheDocument();
   });
 
   it('speaks the written card phrase when the speaker prompt is clicked', async () => {
