@@ -1,18 +1,28 @@
+import Badge from '../ui/Badge.jsx';
 import { cn } from '../../lib/utils.js';
 
 export default function ProfileHeader({ profile }) {
+  const isAdmin = profile.userType === 'DEVELOPER' || profile.userType === 'ADMIN' || profile.tier === 'DEVELOPER' || profile.displayName?.toLowerCase().includes('ram');
+
   return (
     <section aria-labelledby="profile-name" className="grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center lg:grid-cols-[auto_minmax(0,1fr)_auto]">
       <div className="brutal-border grid h-28 w-28 shrink-0 place-items-center rounded-full border-[7px] border-white bg-mustard font-display text-3xl shadow-shadow sm:h-36 sm:w-36 sm:text-4xl">
-        {profile.avatarInitials}
+        {profile.avatarInitials || 'RAM'}
       </div>
 
       <div className="min-w-0">
-        <h1 id="profile-name" className="break-words font-display text-4xl leading-none sm:text-5xl">
-          {profile.displayName}
-        </h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 id="profile-name" className="break-words font-display text-4xl leading-none sm:text-5xl">
+            {profile.displayName || 'Ram'}
+          </h1>
+          {isAdmin && (
+            <Badge tone="correction" tilt="right">
+              ADMIN / DEVELOPER
+            </Badge>
+          )}
+        </div>
         <p className="mt-2 text-sm font-bold text-ink/70 sm:text-base">Joined: {formatJoinedDate(profile.joinedAt)}</p>
-        <p className="mt-3 font-mono text-xs font-black uppercase tracking-[0.13em] text-aizome">@{profile.username}</p>
+        <p className="mt-3 font-mono text-xs font-black uppercase tracking-[0.13em] text-aizome">@{profile.username || 'ram'}</p>
       </div>
 
       <SocialLinks links={profile.socialLinks} />

@@ -1,11 +1,13 @@
 export const defaultProfile = {
-  displayName: 'John Doe',
-  username: 'john-doe',
+  displayName: 'Ram',
+  username: 'ram',
+  userType: 'DEVELOPER',
+  tier: 'DEVELOPER',
   joinedAt: 'August 7, 202X',
 
   bio:
-    'Japanese learner focused on daily conversation, JLPT N5 review, and roleplay practice. I use KAIwa to build consistent study habits with local-first progress tracking.',
-  avatarInitials: 'JD',
+    'Lead Developer & Admin of KAIwa. Building local-first cross-platform Japanese learning tools with AI.',
+  avatarInitials: 'RAM',
 
   socialLinks: [
     { label: 'GitHub', href: '#', shortLabel: 'GH' },

@@ -38,7 +38,13 @@ service cloud.firestore {
 
     // Master Lessons Catalog
     match /lessons/{lessonId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // Master Roleplays Catalog
+    match /roleplays/{roleplayId} {
+      allow read: if true;
       allow write: if isAuthenticated();
     }
   }

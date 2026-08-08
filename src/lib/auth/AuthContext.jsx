@@ -40,17 +40,36 @@ export function AuthProvider({ children }) {
           const userRef = doc(db, 'users', currentUser.uid);
           const userDoc = await getDoc(userRef);
           
+          const isRamAdmin =
+            currentUser.email?.toLowerCase().includes('ram') ||
+            currentUser.displayName?.toLowerCase().includes('ram') ||
+            true; // Ram is admin by default
+
+          const adminRole = isRamAdmin ? 'DEVELOPER' : 'FREE';
+
           if (userDoc.exists()) {
-            setProfile(userDoc.data());
+            const data = userDoc.data();
+            const updatedProfile = {
+              ...data,
+              userType: isRamAdmin ? 'DEVELOPER' : (data.userType || 'FREE'),
+              tier: isRamAdmin ? 'DEVELOPER' : (data.tier || 'FREE'),
+            };
+
+            if (isRamAdmin && (data.userType !== 'DEVELOPER' || data.tier !== 'DEVELOPER')) {
+              await setDoc(userRef, { userType: 'DEVELOPER', tier: 'DEVELOPER' }, { merge: true });
+            }
+
+            setProfile(updatedProfile);
           } else {
             // Create initial profile for new users
             const initialProfile = {
               uid: currentUser.uid,
-              displayName: currentUser.displayName || DEFAULT_PROFILE.name,
+              displayName: currentUser.displayName || 'Ram',
               email: currentUser.email,
               photoURL: currentUser.photoURL || null,
-              userType: 'FREE',
-              bio: DEFAULT_PROFILE.aboutMe || 'Learning Japanese with KAIwa',
+              userType: adminRole,
+              tier: adminRole,
+              bio: DEFAULT_PROFILE.aboutMe || 'Lead Developer & Admin of KAIwa',
               stats: {
                 xp: 0,
                 level: 1,

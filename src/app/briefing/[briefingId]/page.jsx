@@ -5,7 +5,7 @@ import Badge from '../../../components/ui/Badge.jsx';
 import Button from '../../../components/ui/Button.jsx';
 import Card from '../../../components/ui/Card.jsx';
 import { getBriefing, getBriefingIds } from '../../../lib/briefings.js';
-import { getLessonById } from '../../../lib/firebase/firestore.js';
+import { getLessonById, getRoleplayById } from '../../../lib/firebase/firestore.js';
 import { cn } from '../../../lib/utils.js';
 
 const accentClasses = {
@@ -31,6 +31,9 @@ export async function generateMetadata({ params }) {
 export default async function BriefingPage({ params }) {
   const { briefingId } = await params;
   let briefing = await getLessonById(briefingId);
+  if (!briefing) {
+    briefing = await getRoleplayById(briefingId);
+  }
   if (!briefing) {
     briefing = getBriefing(briefingId);
   }
@@ -93,9 +96,9 @@ export default async function BriefingPage({ params }) {
           <Card padding="md" className="bg-white">
             <h3 className="font-display text-2xl leading-none">Tips</h3>
             <ul className="mt-4 space-y-3">
-              {briefing.headsUp.map((tip) => (
+              {(briefing.headsUp || []).map((tip) => (
                 <li key={tip} className="grid grid-cols-[1.6rem_1fr] gap-3 text-sm font-bold leading-6">
-                  <span className={cn('brutal-border grid h-6 w-6 place-items-center text-xs font-black shadow-nav', accentClasses[briefing.accent])} aria-hidden="true">
+                  <span className={cn('brutal-border grid h-6 w-6 place-items-center text-xs font-black shadow-nav', accentClasses[briefing.accent || 'moss'])} aria-hidden="true">
                     !
                   </span>
                   <span>{tip}</span>
@@ -107,7 +110,7 @@ export default async function BriefingPage({ params }) {
           <Card padding="md" className="bg-white">
             <h3 className="font-display text-2xl leading-none">Useful phrases</h3>
             <div className="mt-4 flex flex-wrap gap-2">
-              {briefing.prep.map((phrase) => (
+              {(briefing.prep || []).map((phrase) => (
                 <span key={phrase} className="brutal-border bg-paper px-3 py-2 font-jp text-sm font-black shadow-nav">
                   {phrase}
                 </span>

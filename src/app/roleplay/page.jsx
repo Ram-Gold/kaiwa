@@ -1,84 +1,51 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 
 import Badge from '../../components/ui/Badge.jsx';
 import Button from '../../components/ui/Button.jsx';
 import Card from '../../components/ui/Card.jsx';
 import { cn } from '../../lib/utils.js';
+import { getRoleplays } from '../../lib/firebase/firestore.js';
 
 const filters = ['ALL', 'Beginner', 'Fun', 'Expert', 'Intermediate'];
 
-const scenarios = [
-  {
-    title: 'Train Station',
-    subtitle: '駅で迷った時',
-    category: 'Beginner',
-    difficulty: 'N5',
-    minutes: 8,
-    bg: '/assets/backgrounds/bg_eki_homedoor_train_open.jpg',
-    href: '/briefing/train-station',
-    tone: 'mustard',
-  },
-  {
-    title: 'Idol Cheki',
-    subtitle: 'ライブ後の一言',
-    category: 'Fun',
-    difficulty: 'N4',
-    minutes: 6,
-    bg: '/assets/backgrounds/bg_music_live_stage.jpg',
-    href: '/briefing/idol-cheki',
-    tone: 'correction',
-  },
-  {
-    title: 'Colleague Hiroen',
-    subtitle: '同僚と雑談',
-    category: 'Intermediate',
-    difficulty: 'N3',
-    minutes: 12,
-    bg: '/assets/backgrounds/bg_ryokan_hiroen.jpg',
-    href: '/briefing/colleague-hiroen',
-    tone: 'aizome',
-  },
-  {
-    title: 'Convenience Store',
-    subtitle: 'コンビニ会話',
-    category: 'Beginner',
-    difficulty: 'N5',
-    minutes: 7,
-    bg: null,
-    href: '/briefing/convenience-store',
-    tone: 'moss',
-  },
-  {
-    title: 'Job Interview',
-    subtitle: '面接の練習',
-    category: 'Expert',
-    difficulty: 'N2',
-    minutes: 15,
-    bg: null,
-    href: '/briefing/job-interview',
-    tone: 'correction',
-  },
-  {
-    title: 'Teacher Teaching',
-    subtitle: '先生に質問する',
-    category: 'Beginner',
-    difficulty: 'N5',
-    minutes: 10,
-    bg: '/assets/backgrounds/bg_school_room_back.jpg',
-    href: '/briefing/teacher-teaching',
-    tone: 'mustard',
-  },
-];
-
 export default function RoleplayPage() {
   const [activeFilter, setActiveFilter] = useState('ALL');
+  const [scenarios, setScenarios] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadData() {
+      try {
+        const firestoreRoleplays = await getRoleplays();
+        if (isMounted) {
+          const mappedScenarios = firestoreRoleplays.map(r => ({
+            ...r,
+            subtitle: r.jpTitle,
+            difficulty: r.level,
+            bg: r.image,
+            tone: r.accent,
+          }));
+          setScenarios(mappedScenarios);
+        }
+      } catch (err) {
+        console.error('Failed to fetch roleplays from Firestore:', err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+
+    loadData();
+    return () => { isMounted = false; };
+  }, []);
+
   const visibleScenarios = useMemo(() => {
     if (activeFilter === 'ALL') return scenarios;
     return scenarios.filter((scenario) => scenario.category === activeFilter);
-  }, [activeFilter]);
+  }, [activeFilter, scenarios]);
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -109,9 +76,22 @@ export default function RoleplayPage() {
       </div>
 
       <section className="mt-8 grid gap-5 md:grid-cols-2" aria-label="Roleplay scenario cards">
-        {visibleScenarios.map((scenario) => (
-          <ScenarioCard key={scenario.title} scenario={scenario} />
-        ))}
+        {isLoading ? (
+          <div className="md:col-span-2 py-12 text-center font-mono text-sm font-bold text-ink/50">
+            Loading roleplays from Firestore...
+          </div>
+        ) : visibleScenarios.length > 0 ? (
+          visibleScenarios.map((scenario) => (
+            <ScenarioCard key={scenario.id || scenario.title} scenario={scenario} />
+          ))
+        ) : (
+          <div className="md:col-span-2 brutal-border bg-white p-8 text-center shadow-nav">
+            <h3 className="font-display text-2xl">No roleplays found</h3>
+            <p className="mt-2 font-mono text-xs font-bold text-ink/60">
+              The Firestore `/roleplays` collection is currently empty. Add documents to Firestore to display roleplays here!
+            </p>
+          </div>
+        )}
       </section>
 
       <section className="mt-8 brutal-border bg-aizome p-5 text-paper shadow-shadow sm:flex sm:items-center sm:justify-between sm:gap-6" aria-label="Completed roleplay review">

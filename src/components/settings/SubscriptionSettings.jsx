@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { IoSparklesSharp, IoCheckmarkSharp, IoCloseSharp } from 'react-icons/io5';
 import { cn } from '../../lib/utils.js';
+import { useAuth } from '../../lib/auth/AuthContext.jsx';
 
 const TIER_DATA = [
   {
@@ -58,8 +59,9 @@ function RenderCellVal(val) {
 }
 
 export default function SubscriptionSettings() {
-  // Mock active user tier (can be 'free', 'registered', or 'pro')
-  const [userTier, setUserTier] = useState('registered');
+  const { profile } = useAuth();
+  const rawTier = profile?.userType || profile?.tier || 'DEVELOPER';
+  const userTier = rawTier.toLowerCase();
   const [showNotice, setShowNotice] = useState(false);
 
   const handleUpgrade = () => {
@@ -79,7 +81,7 @@ export default function SubscriptionSettings() {
         {/* Upgrade Button & Tag */}
         <div className="flex items-center gap-2">
           <div className="brutal-border bg-mustard px-3 py-1 font-mono text-xs font-black uppercase">
-            Plan: {userTier}
+            Plan: {rawTier === 'DEVELOPER' || rawTier === 'ADMIN' ? 'DEVELOPER (ADMIN)' : userTier}
           </div>
           {userTier !== 'pro' && (
             <button

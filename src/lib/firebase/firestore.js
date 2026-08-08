@@ -508,42 +508,232 @@ export async function seedLessonsToFirestore() {
 
 /**
  * Fetch all lessons directly from Firestore.
- * If empty, seeds the default lessons to Firestore and returns them.
+ * If empty or blocked by permissions, seeds or falls back to default lessons.
  */
 export async function getLessons() {
-  const lessonsRef = collection(db, 'lessons');
-  let snap = await getDocs(lessonsRef);
-  
-  if (snap.empty) {
-    await seedLessonsToFirestore();
-    snap = await getDocs(lessonsRef);
-  }
-  
-  const lessonsList = [];
-  snap.forEach((docSnap) => {
-    lessonsList.push({
-      id: docSnap.id,
-      ...docSnap.data(),
-      href: `/briefing/${docSnap.id}`
+  try {
+    const lessonsRef = collection(db, 'lessons');
+    let snap = await getDocs(lessonsRef);
+    
+    if (snap.empty) {
+      try {
+        await seedLessonsToFirestore();
+        snap = await getDocs(lessonsRef);
+      } catch (seedErr) {
+        console.warn('Could not seed lessons to Firestore (check auth / security rules):', seedErr);
+        return DEFAULT_LESSONS_SEED.map(l => ({ ...l, href: `/briefing/${l.id}` }));
+      }
+    }
+    
+    const lessonsList = [];
+    snap.forEach((docSnap) => {
+      lessonsList.push({
+        id: docSnap.id,
+        ...docSnap.data(),
+        href: `/briefing/${docSnap.id}`
+      });
     });
-  });
-  
-  return lessonsList;
+    
+    return lessonsList.length > 0 ? lessonsList : DEFAULT_LESSONS_SEED.map(l => ({ ...l, href: `/briefing/${l.id}` }));
+  } catch (err) {
+    console.warn('Firestore getLessons error, falling back to default catalog:', err);
+    return DEFAULT_LESSONS_SEED.map(l => ({ ...l, href: `/briefing/${l.id}` }));
+  }
 }
 
 /**
  * Fetch a single lesson from Firestore by ID.
+ * Falls back to null safely if permissions or network fail during SSR.
  */
 export async function getLessonById(lessonId) {
   if (!lessonId) return null;
-  const lessonRef = doc(db, 'lessons', lessonId);
-  const snap = await getDoc(lessonRef);
-  if (!snap.exists()) return null;
-  return {
-    id: snap.id,
-    ...snap.data(),
-    startHref: `/chat/sensei?briefing=${snap.id}&type=lesson`
-  };
+  try {
+    const lessonRef = doc(db, 'lessons', lessonId);
+    const snap = await getDoc(lessonRef);
+    if (!snap.exists()) return null;
+    return {
+      id: snap.id,
+      ...snap.data(),
+      startHref: `/chat/sensei?briefing=${snap.id}&type=lesson`
+    };
+  } catch (err) {
+    console.warn(`Firestore getLessonById error for ${lessonId}, falling back to static briefing:`, err);
+    return null;
+  }
 }
 
+/* ==========================================================================
+   6. ROLEPLAYS CATALOG
+   ========================================================================== */
+
+const DEFAULT_ROLEPLAYS_SEED = [
+  {
+    id: 'train-station',
+    title: 'Train Station',
+    jpTitle: '駅で迷った時',
+    category: 'Beginner',
+    kind: 'roleplay',
+    level: 'N5',
+    minutes: 8,
+    accent: 'mustard',
+    image: '/assets/bg_eki_homedoor_train_open.jpg',
+    summary: 'You are at a station and need help finding the right platform.',
+    headsUp: [
+      'Say where you want to go first.',
+      'Listen for platform numbers and direction words.',
+      'すみません is your safest opener.'
+    ],
+    prep: ['___ に行きたいです', '何番線ですか', 'ありがとうございます'],
+    startHref: '/chat/sensei?briefing=train-station&type=roleplay'
+  },
+  {
+    id: 'idol-cheki',
+    title: 'Idol Cheki',
+    jpTitle: 'ライブ後の一言',
+    category: 'Fun',
+    kind: 'roleplay',
+    level: 'N4',
+    minutes: 6,
+    accent: 'correction',
+    image: '/assets/bg_music_live_stage.jpg',
+    summary: 'You get a quick post-live cheki moment and want to say something warm.',
+    headsUp: [
+      'Keep it short; the scene is fast.',
+      'Compliments should be simple and sincere.',
+      'KAIwa will help you avoid overly direct translations.'
+    ],
+    prep: ['ライブ最高でした', '応援しています', 'また来ます'],
+    startHref: '/chat/idol?briefing=idol-cheki&type=roleplay'
+  },
+  {
+    id: 'colleague-hiroen',
+    title: 'Colleague Hiroen',
+    jpTitle: '同僚と雑談',
+    category: 'Intermediate',
+    kind: 'roleplay',
+    level: 'N3',
+    minutes: 12,
+    accent: 'aizome',
+    image: '/assets/bg_ryokan_hiroen.jpg',
+    summary: 'Practice a relaxed work-adjacent chat with a colleague after hours.',
+    headsUp: [
+      'Use polite casual balance: friendly, not too stiff.',
+      'Ask one follow-up before changing topics.',
+      'KAIwa will model softer phrasing when needed.'
+    ],
+    prep: ['お疲れさまです', '週末は何をしましたか', 'いいですね'],
+    startHref: '/chat/sensei?briefing=colleague-hiroen&type=roleplay'
+  },
+  {
+    id: 'convenience-store',
+    title: 'Convenience Store',
+    jpTitle: 'コンビニ会話',
+    category: 'Beginner',
+    kind: 'roleplay',
+    level: 'N5',
+    minutes: 7,
+    accent: 'moss',
+    summary: 'Handle checkout, bags, payment, and quick store questions.',
+    headsUp: [
+      'Most questions are yes/no at checkout.',
+      '聞き取れない is okay — ask for repetition.',
+      'Practice declining politely: 大丈夫です.'
+    ],
+    prep: ['袋はいりますか', 'カードでお願いします', '大丈夫です'],
+    startHref: '/chat/sensei?briefing=convenience-store&type=roleplay'
+  },
+  {
+    id: 'job-interview',
+    title: 'Job Interview',
+    jpTitle: '面接の練習',
+    category: 'Expert',
+    kind: 'roleplay',
+    level: 'N2',
+    minutes: 15,
+    accent: 'correction',
+    summary: 'Prepare concise, respectful interview answers with structured follow-ups.',
+    headsUp: [
+      'Answer in short blocks: point, example, result.',
+      'Use polite endings consistently.',
+      'If you need time, say 少し考えてもいいですか.'
+    ],
+    prep: ['自己紹介をお願いします', '志望理由は何ですか', '少し考えてもいいですか'],
+    startHref: '/chat/sensei?briefing=job-interview&type=roleplay'
+  },
+  {
+    id: 'teacher-teaching',
+    title: 'Teacher Teaching',
+    jpTitle: '先生に質問する',
+    category: 'Beginner',
+    kind: 'roleplay',
+    level: 'N5',
+    minutes: 10,
+    accent: 'mustard',
+    image: '/assets/bg_school_room_back.jpg',
+    summary: 'Ask a teacher for clarification and practice saying what you do not understand.',
+    headsUp: [
+      'Be direct but polite about confusion.',
+      'Ask for examples when grammar feels abstract.',
+      'KAIwa will break explanations into smaller steps.'
+    ],
+    prep: ['わかりません', '例をください', 'もう一度お願いします'],
+    startHref: '/chat/sensei?briefing=teacher-teaching&type=roleplay'
+  }
+];
+
+export async function seedRoleplaysToFirestore() {
+  for (const roleplay of DEFAULT_ROLEPLAYS_SEED) {
+    const roleplayRef = doc(db, 'roleplays', roleplay.id);
+    const { id, ...data } = roleplay;
+    await setDoc(roleplayRef, data, { merge: true });
+  }
+}
+
+export async function getRoleplays() {
+  try {
+    const roleplaysRef = collection(db, 'roleplays');
+    let snap = await getDocs(roleplaysRef);
+    
+    if (snap.empty) {
+      try {
+        await seedRoleplaysToFirestore();
+        snap = await getDocs(roleplaysRef);
+      } catch (seedErr) {
+        console.warn('Could not seed roleplays to Firestore (check auth / security rules):', seedErr);
+        return DEFAULT_ROLEPLAYS_SEED.map(r => ({ ...r, href: `/briefing/${r.id}` }));
+      }
+    }
+    
+    const roleplaysList = [];
+    snap.forEach((docSnap) => {
+      roleplaysList.push({
+        id: docSnap.id,
+        ...docSnap.data(),
+        href: `/briefing/${docSnap.id}`
+      });
+    });
+    
+    return roleplaysList.length > 0 ? roleplaysList : DEFAULT_ROLEPLAYS_SEED.map(r => ({ ...r, href: `/briefing/${r.id}` }));
+  } catch (err) {
+    console.warn('Firestore getRoleplays error, falling back to default catalog:', err);
+    return DEFAULT_ROLEPLAYS_SEED.map(r => ({ ...r, href: `/briefing/${r.id}` }));
+  }
+}
+
+export async function getRoleplayById(roleplayId) {
+  if (!roleplayId) return null;
+  try {
+    const roleplayRef = doc(db, 'roleplays', roleplayId);
+    const snap = await getDoc(roleplayRef);
+    if (!snap.exists()) return null;
+    return {
+      id: snap.id,
+      ...snap.data(),
+      startHref: snap.data().startHref || `/chat/sensei?briefing=${snap.id}&type=roleplay`
+    };
+  } catch (err) {
+    console.warn(`Firestore getRoleplayById error for ${roleplayId}, falling back to static briefing:`, err);
+    return null;
+  }
+}
 

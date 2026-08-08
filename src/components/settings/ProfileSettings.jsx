@@ -13,12 +13,13 @@ import {
 const STORAGE_KEY = 'kaiwa.user.profile';
 
 export const DEFAULT_PROFILE = {
-  name: 'Alex Rivera',
-  aboutMe: 'Passionate Japanese learner preparing for N5 certification. Building cross-platform local-first apps & practicing conversational Japanese with AI.',
+  name: 'Ram',
+  userType: 'DEVELOPER',
+  tier: 'DEVELOPER',
+  aboutMe: 'Lead Developer & Admin of KAIwa. Building local-first cross-platform Japanese learning tools with AI.',
   links: [
-    { id: '1', title: 'GitHub', url: 'https://github.com/alexrivera' },
-    { id: '2', title: 'Portfolio', url: 'https://alexrivera.dev' },
-    { id: '3', title: 'X / Twitter', url: 'https://x.com/alexrivera' }
+    { id: '1', title: 'GitHub', url: 'https://github.com' },
+    { id: '2', title: 'Portfolio', url: 'https://kaiwa.local' },
   ]
 };
 
