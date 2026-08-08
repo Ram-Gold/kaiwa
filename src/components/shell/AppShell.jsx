@@ -23,6 +23,7 @@ export default function AppShell({ children }) {
   const hasNoRightRail = isFocusRoute || isFriendsRoute;
 
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
+  const isAuthRoute = pathname === '/login' || pathname === '/signup';
 
   React.useEffect(() => {
     function handleOpenSettings() {
@@ -31,6 +32,10 @@ export default function AppShell({ children }) {
     window.addEventListener('kaiwa:open-settings', handleOpenSettings);
     return () => window.removeEventListener('kaiwa:open-settings', handleOpenSettings);
   }, []);
+
+  if (isAuthRoute) {
+    return <>{children}</>;
+  }
 
   return (
     <ApiGuard>

@@ -2,18 +2,46 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { IoEyeSharp, IoEyeOffSharp } from 'react-icons/io5';
+import { useAuth } from '../../lib/auth/AuthContext';
 
 export default function LoginPage() {
   const [showPw, setShowPw] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  
+  const router = useRouter();
+  const { signInWithGoogle, loginWithEmail } = useAuth();
 
-  const handleGoogleSignIn = () => {
-    // TODO: wire up Google OAuth
+  const handleGoogleSignIn = async () => {
+    try {
+      setError('');
+      setLoading(true);
+      await signInWithGoogle();
+      router.push('/dashboard');
+    } catch (err) {
+      setError('Failed to log in with Google.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    // TODO: wire up email/password auth
+    const email = e.target.email.value;
+    const password = e.target.password.value;
+
+    try {
+      setError('');
+      setLoading(true);
+      await loginWithEmail(email, password);
+      router.push('/dashboard');
+    } catch (err) {
+      setError(err.message || 'Failed to log in.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -44,12 +72,19 @@ export default function LoginPage() {
         {/* Ink: dashed divider */}
         <div className="border-t-2 border-dashed border-ink/20" />
 
+        {error && (
+          <div className="brutal-border bg-blush p-3 font-mono text-xs font-black text-ink shadow-shadow text-center">
+            {error}
+          </div>
+        )}
+
         {/* Google button — primary CTA */}
         <button
           type="button"
           id="google-signin"
           onClick={handleGoogleSignIn}
-          className="brutal-border w-full bg-white flex items-center justify-center gap-3 px-4 py-3 font-mono text-sm font-black uppercase tracking-wider text-ink shadow-shadow hover:bg-mustard transition-colors active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
+          disabled={loading}
+          className="brutal-border w-full bg-white flex items-center justify-center gap-3 px-4 py-3 font-mono text-sm font-black uppercase tracking-wider text-ink shadow-shadow hover:bg-mustard transition-colors active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <GoogleIcon />
           Continue with Google
@@ -104,7 +139,8 @@ export default function LoginPage() {
           <button
             type="submit"
             id="email-login"
-            className="brutal-border w-full bg-aizome text-paper px-4 py-3 font-mono text-sm font-black uppercase tracking-wider shadow-shadow hover:bg-shu transition-colors active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-aizome"
+            disabled={loading}
+            className="brutal-border w-full bg-aizome text-paper px-4 py-3 font-mono text-sm font-black uppercase tracking-wider shadow-shadow hover:bg-shu transition-colors active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-aizome disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Log In
           </button>

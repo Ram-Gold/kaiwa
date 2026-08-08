@@ -8,6 +8,8 @@ import { PROVIDER_STORAGE_KEY, API_KEYS_STORAGE_PREFIX } from '../dashboard/AiPr
 import CreditsSettingsView from '../settings/CreditsSettings.jsx';
 import ProfileSettings from '../settings/ProfileSettings.jsx';
 import SubscriptionSettings from '../settings/SubscriptionSettings.jsx';
+import { useAuth } from '../../lib/auth/AuthContext.jsx';
+import { saveUserSettings } from '../../lib/firebase/firestore.js';
 
 const CHAT_NOTCH_STYLES = [
   { id: 'dynamic-island', label: 'Dynamic Island' },
@@ -245,6 +247,7 @@ function EnginesSettings() {
   const [tts, setTts] = useState('web');
   const [stt, setStt] = useState('web');
   const [speechRate, setSpeechRate] = useState(1.0);
+  const { user } = useAuth();
 
   useEffect(() => {
     const storage = getLocalStorage();
@@ -258,6 +261,9 @@ function EnginesSettings() {
     const rateVal = parseFloat(newRate);
     setSpeechRate(rateVal);
     getLocalStorage()?.setItem?.('kaiwa.speech.rate', rateVal.toString());
+    if (user) {
+      saveUserSettings(user.uid, { speechRate: rateVal }).catch(console.error);
+    }
   }
 
   function testSpeech() {
@@ -362,6 +368,7 @@ function EnginesSettings() {
 
 function PrivacySettings() {
   const [persona, setPersona] = useState('');
+  const { user } = useAuth();
 
   useEffect(() => {
     const storage = getLocalStorage();
@@ -370,6 +377,9 @@ function PrivacySettings() {
 
   function savePersona() {
     getLocalStorage()?.setItem?.('kaiwa.user.persona', persona);
+    if (user) {
+      saveUserSettings(user.uid, { persona }).catch(console.error);
+    }
   }
 
   function purgeData() {
@@ -416,9 +426,13 @@ function RoleplaySettings() {
   const [showCards, setShowCards] = useState(true);
   const [showMessages, setShowMessages] = useState(true);
   const [showPhoneChrome, setShowPhoneChrome] = useState(true);
+  const { user } = useAuth();
 
   function updateOption(option, value) {
     window.dispatchEvent(new CustomEvent('kaiwa:conversation-option-change', { detail: { option, value } }));
+    if (user) {
+      saveUserSettings(user.uid, { display: { [option]: value } }).catch(console.error);
+    }
   }
 
   function toggleCards() {
@@ -460,9 +474,13 @@ function RoleplaySettings() {
 function DisplaySettings() {
   const [readingMode, setReadingMode] = useState('Furigana');
   const [notchStyle, setNotchStyle] = useState('dynamic-island');
+  const { user } = useAuth();
 
   function updateOption(option, value) {
     window.dispatchEvent(new CustomEvent('kaiwa:conversation-option-change', { detail: { option, value } }));
+    if (user) {
+      saveUserSettings(user.uid, { display: { [option]: value } }).catch(console.error);
+    }
   }
 
   function chooseReadingMode(mode) {

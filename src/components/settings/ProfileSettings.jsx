@@ -1,6 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
 import { IoPersonSharp, IoAddSharp, IoTrashSharp, IoLinkSharp, IoCheckmarkSharp, IoSparklesSharp } from 'react-icons/io5';
 import { cn } from '../../lib/utils.js';
+import { useAuth } from '../../lib/auth/AuthContext';
+import { 
+  updateProfile, 
+  getUserLinks, 
+  addProfileLink, 
+  updateProfileLink, 
+  removeProfileLink 
+} from '../../lib/firebase/firestore';
 
 const STORAGE_KEY = 'kaiwa.user.profile';
 
@@ -30,18 +38,39 @@ function getLocalStorageProfile() {
  * Easily connects to backend API endpoints (e.g. fetchProfile, saveProfile).
  */
 export function useProfileState(onSaveCallback) {
+  const { user, profile } = useAuth();
   const [savedProfile, setSavedProfile] = useState(DEFAULT_PROFILE);
   const [draft, setDraft] = useState(DEFAULT_PROFILE);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
 
   useEffect(() => {
-    const loaded = getLocalStorageProfile();
-    setSavedProfile(loaded);
-    setDraft(loaded);
-  }, []);
+    let isMounted = true;
+    async function loadProfile() {
+      if (user && profile) {
+        // Fetch links from subcollection
+        const userLinks = await getUserLinks(user.uid);
+        if (isMounted) {
+          const fullProfile = { ...profile, links: userLinks };
+          setSavedProfile(fullProfile);
+          setDraft(fullProfile);
+        }
+      } else {
+        if (isMounted) {
+          const loaded = getLocalStorageProfile();
+          setSavedProfile(loaded);
+          setDraft(loaded);
+        }
+      }
+    }
+    loadProfile();
+    return () => { isMounted = false; };
+  }, [user, profile]);
 
   const isDirty = useMemo(() => {
-    return JSON.stringify(savedProfile) !== JSON.stringify(draft);
+    // Only compare relevant editable fields
+    return draft.name !== savedProfile.name || 
+           draft.aboutMe !== savedProfile.aboutMe || 
+           JSON.stringify(draft.links) !== JSON.stringify(savedProfile.links);
   }, [savedProfile, draft]);
 
   function setName(name) {
@@ -55,7 +84,7 @@ export function useProfileState(onSaveCallback) {
   }
 
   function addLink(title = 'New Link', url = 'https://') {
-    const newLink = { id: String(Date.now()), title, url };
+    const newLink = { id: `temp_${Date.now()}`, title, url };
     setDraft((prev) => ({ ...prev, links: [...prev.links, newLink] }));
     setSaveSuccessMsg('');
   }
@@ -81,11 +110,54 @@ export function useProfileState(onSaveCallback) {
     setSaveSuccessMsg('');
   }
 
-  function saveChanges() {
+  async function saveChanges() {
     setSavedProfile(draft);
+    
+    if (user) {
+      // Update core profile fields
+      await updateProfile(user.uid, {
+        displayName: draft.name,
+        bio: draft.aboutMe,
+      });
+
+      // Diff links to sync with subcollection
+      const savedLinks = savedProfile.links || [];
+      const draftLinks = draft.links || [];
+
+      // 1. Remove deleted links
+      const draftIds = new Set(draftLinks.map(l => l.id));
+      const removedLinks = savedLinks.filter(l => !draftIds.has(l.id));
+      for (const link of removedLinks) {
+        if (link.id && !link.id.startsWith('temp_')) {
+          await removeProfileLink(user.uid, link.id);
+        }
+      }
+
+      // 2. Add or Update links
+      for (const link of draftLinks) {
+        if (link.id && link.id.startsWith('temp_')) {
+          // New link
+          await addProfileLink(user.uid, { title: link.title, url: link.url, order: 0 });
+        } else {
+          // Existing link, check if changed
+          const orig = savedLinks.find(l => l.id === link.id);
+          if (orig && (orig.title !== link.title || orig.url !== link.url)) {
+            await updateProfileLink(user.uid, link.id, { title: link.title, url: link.url });
+          }
+        }
+      }
+      
+      // Refresh the draft with freshly fetched links to replace temp IDs
+      const freshLinks = await getUserLinks(user.uid);
+      setDraft((prev) => ({ ...prev, links: freshLinks }));
+      setSavedProfile((prev) => ({ ...prev, links: freshLinks }));
+    }
+
+    // Always keep local storage updated as fallback
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
     }
+    
     if (onSaveCallback) {
       onSaveCallback(draft);
     }

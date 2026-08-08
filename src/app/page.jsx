@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 
 import Badge from '../components/ui/Badge.jsx';
 import Button from '../components/ui/Button.jsx';
@@ -10,23 +10,45 @@ import { cn } from '../lib/utils.js';
 
 const filters = ['ALL', 'Beginner', 'Food', 'Memes', 'Life'];
 
-const lessons = [
-  { title: 'Introduction', jp: 'はじめまして', category: 'Beginner', minutes: 8, progress: 100, tone: 'moss', href: '/briefing/introduction' },
-  { title: 'Common Phrases', jp: 'よく使う表現', category: 'Beginner', minutes: 12, progress: 68, tone: 'mustard', href: '/briefing/common-phrases' },
-  { title: 'Likes & Dislikes', jp: '好き・嫌い', category: 'Life', minutes: 10, progress: 42, tone: 'correction', href: '/briefing/likes-dislikes' },
-  { title: 'Basic Verbs', jp: '基本動詞', category: 'Beginner', minutes: 15, progress: 25, tone: 'aizome', href: '/briefing/basic-verbs' },
-  { title: 'Simple Sentences', jp: '簡単な文', category: 'Life', minutes: 14, progress: 0, tone: 'mustard', href: '/briefing/simple-sentences' },
-  { title: 'Personal Info', jp: '自己紹介', category: 'Life', minutes: 9, progress: 0, tone: 'moss', href: '/briefing/personal-info' },
-  { title: 'Ordering Food', jp: '注文する', category: 'Food', minutes: 11, progress: 18, tone: 'correction', href: '/briefing/ordering-food' },
-  { title: 'Meme Replies', jp: 'ネット表現', category: 'Memes', minutes: 7, progress: 0, tone: 'aizome', href: '/briefing/meme-replies' },
+import { useAuth } from '../lib/auth/AuthContext.jsx';
+import { getUserModuleProgress } from '../lib/firebase/firestore.js';
+
+const staticLessons = [
+  { id: 'introduction', title: 'Introduction', jp: 'はじめまして', category: 'Beginner', minutes: 8, tone: 'moss', href: '/briefing/introduction' },
+  { id: 'common-phrases', title: 'Common Phrases', jp: 'よく使う表現', category: 'Beginner', minutes: 12, tone: 'mustard', href: '/briefing/common-phrases' },
+  { id: 'likes-dislikes', title: 'Likes & Dislikes', jp: '好き・嫌い', category: 'Life', minutes: 10, tone: 'correction', href: '/briefing/likes-dislikes' },
+  { id: 'basic-verbs', title: 'Basic Verbs', jp: '基本動詞', category: 'Beginner', minutes: 15, tone: 'aizome', href: '/briefing/basic-verbs' },
+  { id: 'simple-sentences', title: 'Simple Sentences', jp: '簡単な文', category: 'Life', minutes: 14, tone: 'mustard', href: '/briefing/simple-sentences' },
+  { id: 'personal-info', title: 'Personal Info', jp: '自己紹介', category: 'Life', minutes: 9, tone: 'moss', href: '/briefing/personal-info' },
+  { id: 'ordering-food', title: 'Ordering Food', jp: '注文する', category: 'Food', minutes: 11, tone: 'correction', href: '/briefing/ordering-food' },
+  { id: 'meme-replies', title: 'Meme Replies', jp: 'ネット表現', category: 'Memes', minutes: 7, tone: 'aizome', href: '/briefing/meme-replies' },
 ];
 
 export default function Home() {
+  const { user } = useAuth();
   const [activeFilter, setActiveFilter] = useState('ALL');
+  const [lessons, setLessons] = useState(() => staticLessons.map(l => ({ ...l, progress: 0 })));
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadProgress() {
+      if (!user?.uid) return;
+      const progressMap = await getUserModuleProgress(user.uid);
+      if (isMounted) {
+        setLessons(staticLessons.map(lesson => ({
+          ...lesson,
+          progress: progressMap[lesson.id]?.progress || 0
+        })));
+      }
+    }
+    loadProgress();
+    return () => { isMounted = false; };
+  }, [user?.uid]);
+
   const visibleLessons = useMemo(() => {
     if (activeFilter === 'ALL') return lessons;
     return lessons.filter((lesson) => lesson.category === activeFilter);
-  }, [activeFilter]);
+  }, [activeFilter, lessons]);
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -35,7 +57,6 @@ export default function Home() {
           <p className="label-mono text-correction">Lesson module</p>
           <h1 className="mt-2 font-display text-4xl leading-none sm:text-5xl">Today’s study board</h1>
         </div>
-        <Badge tone="moss">Local progress</Badge>
       </header>
 
       <CustomLessonCard />

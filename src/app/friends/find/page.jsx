@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   IoSearchSharp,
@@ -13,20 +13,54 @@ import {
 import InviteFriendsModal from '../../../components/profile/InviteFriendsModal.jsx';
 import { cn } from '../../../lib/utils.js';
 
-const MOCK_RESULTS = [
-  { id: 1, name: 'rielle', handle: '@rielle', initials: 'R', bg: 'bg-sky-400', isFollowing: false },
-  { id: 2, name: 'Rielle', handle: '@X_rielley', initials: 'R', bg: 'bg-pink-400', isFollowing: true },
-  { id: 3, name: 'Rielle', handle: '@Rielle669238', initials: 'R', bg: 'bg-amber-400', isFollowing: false },
-  { id: 4, name: 'Rielle', handle: '@rielleization', initials: 'R', bg: 'bg-emerald-400', isFollowing: false },
-  { id: 5, name: 'Rielle', handle: '@Rielle714900', initials: 'R', bg: 'bg-rose-400', isFollowing: false },
-  { id: 6, name: 'Rielle', handle: '@myangelmariel', initials: 'R', bg: 'bg-indigo-400', isFollowing: false },
-];
+import { useAuth } from '../../../lib/auth/AuthContext.jsx';
+import { getAllUsers, getFriends, toggleFollowUser } from '../../../lib/firebase/firestore.js';
+
+const BG_COLORS = ['bg-sky-400', 'bg-pink-400', 'bg-amber-400', 'bg-emerald-400', 'bg-rose-400', 'bg-indigo-400'];
+
+function getRandomBg(index) {
+  return BG_COLORS[index % BG_COLORS.length];
+}
 
 export default function FindFriendsPage() {
-  const [searchQuery, setSearchQuery] = useState('Rielle');
-  const [resultsList, setResultsList] = useState(MOCK_RESULTS);
+  const { user } = useAuth();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [resultsList, setResultsList] = useState([]);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadData() {
+      if (!user?.uid) return;
+      try {
+        const [users, friends] = await Promise.all([
+          getAllUsers(user.uid),
+          getFriends(user.uid)
+        ]);
+        
+        if (isMounted) {
+          const friendIds = new Set(friends.map(f => f.friendUserId));
+          const mappedUsers = users.map((u, i) => ({
+            id: u.uid,
+            name: u.displayName || 'Learner',
+            handle: `@${u.displayName?.toLowerCase().replace(/\s+/g, '_') || u.uid.substring(0, 8)}`,
+            initials: (u.displayName || 'L').charAt(0).toUpperCase(),
+            bg: getRandomBg(i),
+            isFollowing: friendIds.has(u.uid)
+          }));
+          setResultsList(mappedUsers);
+          setIsLoading(false);
+        }
+      } catch (err) {
+        console.error("Failed to load users", err);
+        if (isMounted) setIsLoading(false);
+      }
+    }
+    loadData();
+    return () => { isMounted = false; };
+  }, [user?.uid]);
 
   const filteredResults = resultsList.filter(
     (u) =>
@@ -34,10 +68,26 @@ export default function FindFriendsPage() {
       u.handle.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleToggleFollow = (id) => {
+  const handleToggleFollow = async (targetUser) => {
+    if (!user?.uid) return;
+    
+    // Optimistic UI update
     setResultsList((prev) =>
-      prev.map((u) => (u.id === id ? { ...u, isFollowing: !u.isFollowing } : u))
+      prev.map((u) => (u.id === targetUser.id ? { ...u, isFollowing: !u.isFollowing } : u))
     );
+
+    try {
+      await toggleFollowUser(user.uid, targetUser.id, targetUser.isFollowing, {
+        displayName: targetUser.name,
+        handle: targetUser.handle
+      });
+    } catch (err) {
+      console.error("Failed to toggle follow", err);
+      // Revert on failure
+      setResultsList((prev) =>
+        prev.map((u) => (u.id === targetUser.id ? { ...u, isFollowing: targetUser.isFollowing } : u))
+      );
+    }
   };
 
   const handleInvite = () => {
@@ -106,26 +156,28 @@ export default function FindFriendsPage() {
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => handleToggleFollow(user.id)}
-                    className={cn(
-                      "brutal-border px-3.5 py-1.5 font-mono text-xs font-black uppercase tracking-wider shadow-nav transition-all active:scale-95 flex items-center gap-1.5 shrink-0",
-                      user.isFollowing
-                        ? "bg-paper text-ink/60 border-ink/40 shadow-none"
-                        : "bg-sky-400 text-ink hover:bg-mustard"
-                    )}
-                  >
-                    {user.isFollowing ? (
-                      <>
-                        <IoCheckmarkSharp className="text-sm text-emerald-600" /> FOLLOWING
-                      </>
-                    ) : (
-                      <>
-                        <IoPersonAddSharp className="text-xs" /> + FOLLOW
-                      </>
-                    )}
-                  </button>
+                  <div className="flex items-center gap-3 md:gap-4 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleFollow(user)}
+                      className={cn(
+                        "brutal-border px-3.5 py-1.5 font-mono text-xs font-black uppercase tracking-wider shadow-nav transition-all active:scale-95 flex items-center gap-1.5 shrink-0",
+                        user.isFollowing
+                          ? "bg-paper text-ink/60 border-ink/40 shadow-none"
+                          : "bg-sky-400 text-ink hover:bg-mustard"
+                      )}
+                    >
+                      {user.isFollowing ? (
+                        <>
+                          <IoCheckmarkSharp className="text-sm text-emerald-600" /> FOLLOWING
+                        </>
+                      ) : (
+                        <>
+                          <IoPersonAddSharp className="text-xs" /> + FOLLOW
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               ))
             ) : (

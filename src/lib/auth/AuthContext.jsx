@@ -1,0 +1,151 @@
+'use client';
+
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import {
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+} from 'firebase/auth';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, googleProvider, db } from '../firebase/client';
+import { DEFAULT_PROFILE } from '../../components/settings/ProfileSettings';
+
+const AuthContext = createContext({
+  user: null,
+  profile: null,
+  loading: true,
+  signInWithGoogle: async () => {},
+  registerWithEmail: async () => {},
+  loginWithEmail: async () => {},
+  logout: async () => {},
+});
+
+export function useAuth() {
+  return useContext(AuthContext);
+}
+
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        try {
+          // Fetch or create user profile in Firestore
+          const userRef = doc(db, 'users', currentUser.uid);
+          const userDoc = await getDoc(userRef);
+          
+          if (userDoc.exists()) {
+            setProfile(userDoc.data());
+          } else {
+            // Create initial profile for new users
+            const initialProfile = {
+              uid: currentUser.uid,
+              displayName: currentUser.displayName || DEFAULT_PROFILE.name,
+              email: currentUser.email,
+              photoURL: currentUser.photoURL || null,
+              userType: 'FREE',
+              bio: DEFAULT_PROFILE.aboutMe || 'Learning Japanese with KAIwa',
+              stats: {
+                xp: 0,
+                level: 1,
+                currentStreak: 0,
+                longestStreak: 0,
+                totalPractices: 0,
+              },
+              settings: {
+                theme: 'light',
+                language: 'en',
+                compactMode: false,
+                notifications: {
+                  emailDigest: true,
+                  streakReminder: true,
+                  friendActivity: true,
+                },
+                privacy: {
+                  profileVisibility: 'public',
+                  showHistoryOnProfile: true,
+                },
+                appPreferences: {
+                  audioVolume: 100,
+                  autoSave: true,
+                },
+              },
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            };
+            await setDoc(userRef, initialProfile);
+            setProfile(initialProfile);
+          }
+        } catch (error) {
+          console.error('Error fetching or creating user profile:', error);
+          // Fallback if offline so the app still loads
+          setProfile(null);
+        }
+      } else {
+        setProfile(null);
+      }
+      setLoading(false);
+    });
+
+    return unsubscribe;
+  }, []);
+
+  const signInWithGoogle = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      console.error("Google sign-in error:", error);
+      throw error;
+    }
+  };
+
+  const registerWithEmail = async (email, password, displayName) => {
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      // We don't need to manually create the Firestore doc here because 
+      // the onAuthStateChanged listener will catch the login and create it.
+      // But we might want to update the displayName.
+      const userRef = doc(db, 'users', userCredential.user.uid);
+      await setDoc(userRef, { displayName }, { merge: true });
+      return userCredential;
+    } catch (error) {
+      console.error("Email registration error:", error);
+      throw error;
+    }
+  };
+
+  const loginWithEmail = async (email, password) => {
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      console.error("Email login error:", error);
+      throw error;
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Sign-out error:", error);
+    }
+  };
+
+  const value = {
+    user,
+    profile,
+    loading,
+    signInWithGoogle,
+    registerWithEmail,
+    loginWithEmail,
+    logout,
+  };
+
+  return <AuthContext.Provider value={value}>{!loading && children}</AuthContext.Provider>;
+}

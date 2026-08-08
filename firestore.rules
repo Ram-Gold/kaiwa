@@ -1,0 +1,39 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId);
+      // Prevent user from manually modifying their own userType field
+      allow update: if isOwner(userId) 
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['userType']);
+      
+      // All subcollections under /users/{userId}
+      match /{allSubcollections=**} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // Friend Requests
+    match /friend_requests/{requestId} {
+      allow read: if isAuthenticated() && 
+        (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
+      allow create: if isAuthenticated() && request.resource.data.senderId == request.auth.uid;
+      allow update: if isAuthenticated() && resource.data.receiverId == request.auth.uid;
+    }
+
+    // Master Badges Catalog
+    match /badges/{badgeId} {
+      allow read: if isAuthenticated();
+    }
+  }
+}

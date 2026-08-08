@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import Button from '../ui/Button.jsx';
 import Card from '../ui/Card.jsx';
+import { useAuth } from '../../lib/auth/AuthContext';
+import { saveAiProviderSettings } from '../../lib/firebase/firestore';
 
 export const PROVIDER_STORAGE_KEY = 'kaiwa.ai.provider';
 export const API_KEYS_STORAGE_PREFIX = 'kaiwa.ai.apiKey.';
@@ -22,6 +24,7 @@ export default function AiProviderSettingsCard({
   apiKeys,
   onSettingsSaved,
 }) {
+  const { user } = useAuth();
   const [draftProvider, setDraftProvider] = useState(provider);
   const [draftKey, setDraftKey] = useState('');
   const [error, setError] = useState('');
@@ -69,7 +72,7 @@ export default function AiProviderSettingsCard({
   const validationError = getValidationError(draftProvider, draftKey);
   const isSaveDisabled = Boolean(validationError);
 
-  function handleSave(event) {
+  async function handleSave(event) {
     event.preventDefault();
     if (isSaveDisabled) return;
 
@@ -80,6 +83,10 @@ export default function AiProviderSettingsCard({
       if (draftProvider !== 'ollama') {
         window.localStorage.setItem(`${API_KEYS_STORAGE_PREFIX}${draftProvider}`, cleanKey);
       }
+    }
+
+    if (user) {
+      await saveAiProviderSettings(user.uid, draftProvider, cleanKey);
     }
 
     // Prepare updated API keys object for parent callback

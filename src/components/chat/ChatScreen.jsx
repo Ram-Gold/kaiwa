@@ -5,6 +5,8 @@ import Button from '../ui/Button.jsx';
 import ChatBubble from './ChatBubble.jsx';
 import SuggestionChips from './SuggestionChips.jsx';
 import { DictionaryPopover } from './JapaneseText.jsx';
+import { useAuth } from '../../lib/auth/AuthContext';
+import { saveChatSession } from '../../lib/firebase/firestore';
 
 let messageCounter = 0;
 
@@ -24,6 +26,9 @@ export default function ChatScreen({ provider, apiKey, personaId, onBackToDashbo
   const [translations, setTranslations] = useState({});
   const [translatingIds, setTranslatingIds] = useState({});
   const [activeDictionaryEntry, setActiveDictionaryEntry] = useState(null);
+  
+  const { user } = useAuth();
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     function handleShowDictionary(event) {
@@ -90,6 +95,33 @@ export default function ChatScreen({ provider, apiKey, personaId, onBackToDashbo
     ]);
   }
 
+  async function handleSaveSession() {
+    if (!user || messages.length <= 1) return;
+    try {
+      setIsSaving(true);
+      await saveChatSession(user.uid, {
+        title: persona?.name || 'Free Chat',
+        type: persona?.id === 'sensei' ? 'Lesson' : 'Roleplay',
+        learnerRole: 'Learner',
+        aiRole: persona?.name || 'AI',
+        score: 0,
+        grade: 'Unrated',
+        duration: '00:00',
+        summary: 'Saved conversation',
+        corrections: [],
+        tags: [],
+        metrics: [],
+        transcript: messages.map(m => ({ speaker: m.role === 'assistant' ? 'KAIwa' : 'You', text: m.content })),
+      });
+      alert('Session saved to History!');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to save session.');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   async function translateAiMessage(message) {
     if (!message?.id || translatingIds[message.id]) {
       return;
@@ -149,6 +181,11 @@ export default function ChatScreen({ provider, apiKey, personaId, onBackToDashbo
           </h1>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row">
+          {user && messages.length > 1 && (
+            <Button variant="ghost" onClick={handleSaveSession} disabled={isSaving}>
+              {isSaving ? 'Saving...' : 'Save Session'}
+            </Button>
+          )}
           <Button variant="ghost" onClick={resetConversation}>
             Reset conversation
           </Button>

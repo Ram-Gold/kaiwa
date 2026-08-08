@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { IoSearchSharp, IoChevronForwardSharp, IoPersonAddSharp } from 'react-icons/io5';
 import Badge from '../ui/Badge.jsx';
@@ -6,16 +6,55 @@ import Card from '../ui/Card.jsx';
 import InviteFriendsModal from './InviteFriendsModal.jsx';
 import { cn } from '../../lib/utils.js';
 
-export default function ProfileRail({ profile }) {
+import { useAuth } from '../../lib/auth/AuthContext.jsx';
+import { getFriends } from '../../lib/firebase/firestore.js';
+
+export default function ProfileRail({ profile: fallbackProfile }) {
+  const { user, profile: authProfile } = useAuth();
+  const [friends, setFriends] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadFriends() {
+      if (!user?.uid) return;
+      const fetchedFriends = await getFriends(user.uid);
+      if (isMounted) setFriends(fetchedFriends);
+    }
+    loadFriends();
+    return () => { isMounted = false; };
+  }, [user?.uid]);
+
+  const mergedStreak = {
+    current: authProfile?.stats?.currentStreak ?? fallbackProfile.streak?.current ?? 0,
+    best: authProfile?.stats?.longestStreak ?? fallbackProfile.streak?.best ?? 0,
+    days: authProfile?.stats?.days ?? fallbackProfile.streak?.days ?? []
+  };
+
+  const mergedCommunity = friends 
+    ? { 
+        ...fallbackProfile.community, 
+        followingList: friends.map(f => ({
+          id: f.friendUserId,
+          name: f.displayName || 'Learner',
+          xp: 0,
+          initials: (f.displayName || 'L').charAt(0).toUpperCase(),
+          tone: 'mustard'
+        })), 
+        following: friends.length, 
+        followers: 0, 
+        followerList: [] 
+      } 
+    : fallbackProfile.community;
+
   return (
     <aside
       aria-label="Profile progress and community"
       className="border-t-2 border-border bg-paper px-4 py-6 sm:px-6 lg:sticky lg:top-0 lg:min-h-screen lg:border-l-2 lg:border-t-0 lg:px-5 lg:py-10"
     >
       <div className="grid gap-5">
-        <StreakSummary streak={profile.streak} />
+        <StreakSummary streak={mergedStreak} />
         <FriendsSection />
-        <ConnectionsCard community={profile.community} />
+        <ConnectionsCard community={mergedCommunity} />
       </div>
     </aside>
   );
@@ -92,42 +131,72 @@ function StreakSummary({ streak }) {
 
 
 function ConnectionsCard({ community }) {
+  const [activeTab, setActiveTab] = useState('following');
   const followingList = community.followingList ?? [];
   const followerList = community.followerList ?? [];
 
   return (
     <Card padding="none" className="overflow-hidden bg-white">
       <div className="grid grid-cols-2 border-b-2 border-border text-center font-mono text-xs font-black uppercase tracking-[0.14em]">
-        <div className="border-r-2 border-border bg-mustard px-3 py-4">
+        <button
+          type="button"
+          onClick={() => setActiveTab('following')}
+          className={cn(
+            "border-r-2 border-border px-3 py-4 transition-colors",
+            activeTab === 'following' ? "bg-mustard" : "bg-paper hover:bg-mustard/50"
+          )}
+        >
           <p>Following</p>
           <p className="mt-1 text-[10px] text-ink/60">{community.following}</p>
-        </div>
-        <div className="bg-paper px-3 py-4">
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('followers')}
+          className={cn(
+            "px-3 py-4 transition-colors",
+            activeTab === 'followers' ? "bg-mustard" : "bg-paper hover:bg-mustard/50"
+          )}
+        >
           <p>Followers</p>
           <p className="mt-1 text-[10px] text-ink/60">{community.followers}</p>
-        </div>
+        </button>
       </div>
 
-      <div className="grid gap-3 p-4" aria-label="Following preview">
-        {followingList.slice(0, 3).map((person) => (
-          <ConnectionRow key={person.id} person={person} />
-        ))}
-      </div>
-
-      <div className="border-t-2 border-border bg-paper p-4">
-        <p className="font-mono text-xs font-black uppercase tracking-[0.13em] text-ink/70">
-          View {Math.max(0, community.following - followingList.length)} more following
-        </p>
-      </div>
-
-      <div className="border-t-2 border-border p-4">
-        <p className="label-mono text-aizome">Followers</p>
-        <div className="mt-3 grid gap-3">
-          {followerList.slice(0, 2).map((person) => (
-            <ConnectionRow key={person.id} person={person} compact />
-          ))}
-        </div>
-      </div>
+      {activeTab === 'following' ? (
+        <>
+          <div className="grid gap-3 p-4" aria-label="Following preview">
+            {followingList.length > 0 ? (
+              followingList.slice(0, 3).map((person) => (
+                <ConnectionRow key={person.id} person={person} />
+              ))
+            ) : (
+              <p className="text-center font-mono text-xs font-bold text-ink/50 py-4">No following yet.</p>
+            )}
+          </div>
+          <div className="border-t-2 border-border bg-paper p-4">
+            <p className="font-mono text-xs font-black uppercase tracking-[0.13em] text-ink/70">
+              View {Math.max(0, community.following - followingList.length)} more following
+            </p>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="grid gap-3 p-4" aria-label="Followers preview">
+            {followerList.length > 0 ? (
+              followerList.slice(0, 3).map((person) => (
+                <ConnectionRow key={person.id} person={person} />
+              ))
+            ) : (
+              <p className="text-center font-mono text-xs font-bold text-ink/50 py-4">No followers yet.</p>
+            )}
+          </div>
+          <div className="border-t-2 border-border bg-paper p-4">
+            <p className="font-mono text-xs font-black uppercase tracking-[0.13em] text-ink/70">
+              View {Math.max(0, community.followers - followerList.length)} more followers
+            </p>
+          </div>
+        </>
+      )}
     </Card>
   );
 }

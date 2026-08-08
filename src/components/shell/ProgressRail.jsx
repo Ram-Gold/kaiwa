@@ -4,15 +4,7 @@ import Badge from '../ui/Badge.jsx';
 import Card from '../ui/Card.jsx';
 import { cn } from '../../lib/utils.js';
 
-const STREAK_DAYS = [
-  ['Mon', true],
-  ['Tue', true],
-  ['Wed', true],
-  ['Thu', true],
-  ['Fri', true],
-  ['Sat', false],
-  ['Sun', false],
-];
+import { useAuth } from '../../lib/auth/AuthContext.jsx';
 
 
 const TASKS = [
@@ -24,6 +16,20 @@ const TASKS = [
 
 
 export default function ProgressRail({ compact = false }) {
+  const { profile } = useAuth();
+  const currentStreak = profile?.stats?.currentStreak ?? 0;
+  const longestStreak = profile?.stats?.longestStreak ?? 0;
+  const xp = profile?.stats?.xp ?? 0;
+  const days = profile?.stats?.days ?? [
+    { label: 'Mon', active: false },
+    { label: 'Tue', active: false },
+    { label: 'Wed', active: false },
+    { label: 'Thu', active: false },
+    { label: 'Fri', active: false },
+    { label: 'Sat', active: false },
+    { label: 'Sun', active: false }
+  ];
+
   return (
     <aside
       aria-label={compact ? 'Daily progress menu' : 'Daily progress rail'}
@@ -33,19 +39,19 @@ export default function ProgressRail({ compact = false }) {
       )}
     >
       <div className="grid gap-5">
-        <MiniStatsBar />
-        <StreakCard />
+        <MiniStatsBar currentStreak={currentStreak} xp={xp} />
+        <StreakCard currentStreak={currentStreak} longestStreak={longestStreak} days={days} />
         <TaskCard />
       </div>
     </aside>
   );
 }
 
-function MiniStatsBar() {
+function MiniStatsBar({ currentStreak, xp }) {
   return (
     <div className="grid grid-cols-2 gap-3">
-      <MiniStat icon={FlameIcon} value="12" label="streak" tone="correction" />
-      <MiniStat icon={ZapIcon} value="286" label="xp" tone="aizome" />
+      <MiniStat icon={FlameIcon} value={currentStreak} label="streak" tone="correction" />
+      <MiniStat icon={ZapIcon} value={xp} label="xp" tone="aizome" />
     </div>
   );
 }
@@ -64,26 +70,26 @@ function MiniStat({ icon: Icon, label, tone, value }) {
   );
 }
 
-function StreakCard() {
+function StreakCard({ currentStreak, longestStreak, days }) {
   return (
     <Card padding="md" className="bg-white">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="label-mono text-correction">Streak</p>
-          <p className="mt-2 font-display text-4xl leading-none">12 days</p>
+          <p className="mt-2 font-display text-4xl leading-none">{currentStreak} days</p>
         </div>
         <span className="brutal-border bg-mustard px-3 py-2 font-mono text-xs font-black uppercase tracking-[0.14em] shadow-nav">
-          Best 18
+          Best {longestStreak}
         </span>
       </div>
 
       <div className="mt-5 grid grid-cols-7 gap-2.5" aria-label="Last seven days streak calendar">
-        {STREAK_DAYS.map(([day, active]) => (
-          <div key={day} className="text-center">
-            <div className={cn('brutal-border mx-auto grid h-8 w-8 place-items-center font-mono text-[10px] font-black shadow-nav', active ? 'bg-moss text-paper' : 'bg-paper text-ink')}>
-              {active ? '✓' : '·'}
+        {days.map((day) => (
+          <div key={day.label} className="text-center">
+            <div className={cn('brutal-border mx-auto grid h-8 w-8 place-items-center font-mono text-[10px] font-black shadow-nav', day.active ? 'bg-moss text-paper' : 'bg-paper text-ink')}>
+              {day.active ? '✓' : '·'}
             </div>
-            <p className="mt-1 font-mono text-[9px] font-black uppercase">{day}</p>
+            <p className="mt-1 font-mono text-[9px] font-black uppercase">{day.label}</p>
           </div>
         ))}
       </div>

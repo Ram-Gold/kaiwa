@@ -2,7 +2,9 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { IoEyeSharp, IoEyeOffSharp } from 'react-icons/io5';
+import { useAuth } from '../../lib/auth/AuthContext';
 
 function GoogleIcon() {
   return (
@@ -18,14 +20,46 @@ function GoogleIcon() {
 export default function SignupPage() {
   const [showPw, setShowPw] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  
+  const router = useRouter();
+  const { signInWithGoogle, registerWithEmail } = useAuth();
 
-  const handleGoogleSignUp = () => {
-    // TODO: wire up Google OAuth
+  const handleGoogleSignUp = async () => {
+    try {
+      setError('');
+      setLoading(true);
+      await signInWithGoogle();
+      router.push('/dashboard');
+    } catch (err) {
+      setError('Failed to sign up with Google.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // TODO: wire up email/password account creation
+    const name = e.target.name.value;
+    const email = e.target.email.value;
+    const password = e.target.password.value;
+    const confirm = e.target['confirm-password'].value;
+
+    if (password !== confirm) {
+      return setError('Passwords do not match.');
+    }
+
+    try {
+      setError('');
+      setLoading(true);
+      await registerWithEmail(email, password, name);
+      router.push('/dashboard');
+    } catch (err) {
+      setError(err.message || 'Failed to create an account.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -45,12 +79,19 @@ export default function SignupPage() {
 
         <div className="border-t-2 border-dashed border-ink/20" />
 
+        {error && (
+          <div className="brutal-border bg-blush p-3 font-mono text-xs font-black text-ink shadow-shadow text-center">
+            {error}
+          </div>
+        )}
+
         {/* Google */}
         <button
           type="button"
           id="google-signup"
           onClick={handleGoogleSignUp}
-          className="brutal-border w-full bg-white flex items-center justify-center gap-3 px-4 py-3 font-mono text-sm font-black uppercase tracking-wider text-ink shadow-shadow hover:bg-mustard transition-colors active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
+          disabled={loading}
+          className="brutal-border w-full bg-white flex items-center justify-center gap-3 px-4 py-3 font-mono text-sm font-black uppercase tracking-wider text-ink shadow-shadow hover:bg-mustard transition-colors active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <GoogleIcon /> Sign up with Google
         </button>
@@ -120,7 +161,8 @@ export default function SignupPage() {
           <button
             type="submit"
             id="create-account"
-            className="brutal-border w-full bg-aizome text-paper px-4 py-3 font-mono text-sm font-black uppercase tracking-wider shadow-shadow hover:bg-shu transition-colors active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-aizome"
+            disabled={loading}
+            className="brutal-border w-full bg-aizome text-paper px-4 py-3 font-mono text-sm font-black uppercase tracking-wider shadow-shadow hover:bg-shu transition-colors active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-aizome disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Create Account
           </button>

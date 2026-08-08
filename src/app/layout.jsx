@@ -1,5 +1,6 @@
 import '../index.css';
 import AppShell from '../components/shell/AppShell.jsx';
+import { AuthProvider } from '../lib/auth/AuthContext.jsx';
 
 export const metadata = {
   title: 'KAIwa - Japanese Tutor',
@@ -15,7 +16,9 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body className="min-h-screen bg-paper text-ink antialiased">
-        <AppShell>{children}</AppShell>
+        <AuthProvider>
+          <AppShell>{children}</AppShell>
+        </AuthProvider>
       </body>
     </html>
   );

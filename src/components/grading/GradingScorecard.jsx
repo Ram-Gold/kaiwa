@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   IoBatteryFullSharp,
@@ -20,6 +20,8 @@ import {
 
 import Badge from '../ui/Badge.jsx';
 import Button from '../ui/Button.jsx';
+import { useAuth } from '../../lib/auth/AuthContext.jsx';
+import { saveSrsWord, logPracticeSession } from '../../lib/firebase/firestore.js';
 
 const SCORE_TIERS = [
   {
@@ -110,12 +112,25 @@ export default function GradingScorecard() {
   const tier = getTier(REVIEW.overall);
   const [queueStatus, setQueueStatus] = useState('idle');
   const [activeModal, setActiveModal] = useState(null);
+  const { user } = useAuth();
+  const hasLogged = useRef(false);
+
+  useEffect(() => {
+    if (user && !hasLogged.current) {
+      hasLogged.current = true;
+      logPracticeSession(user.uid, {
+        score: REVIEW.overall,
+        xpGained: 50, // Hardcoded for demo
+        duration: 120 // Hardcoded for demo
+      }).catch(err => console.error('Failed to log practice:', err));
+    }
+  }, [user]);
 
   async function handleQueueWeakVocabulary() {
     setQueueStatus('saving');
 
     try {
-      await saveWeakVocabularyToSrs(REVIEW.weakVocabulary);
+      await saveWeakVocabularyToSrs(REVIEW.weakVocabulary, user?.uid);
       setQueueStatus('saved');
     } catch {
       setQueueStatus('error');
@@ -353,7 +368,7 @@ function SuggestionsOverlay({ type, onClose, mistakes, words, queueStatus, onQue
   );
 }
 
-function saveWeakVocabularyToSrs(words) {
+function saveWeakVocabularyToSrs(words, userId) {
   return new Promise((resolve, reject) => {
     if (typeof window === 'undefined' || !window.indexedDB) {
       reject(new Error('IndexedDB unavailable'));
@@ -378,7 +393,11 @@ function saveWeakVocabularyToSrs(words) {
       const reviewedAt = new Date().toISOString();
 
       words.forEach((word) => {
-        store.put({ ...word, reviewedAt, dueAt: reviewedAt, source: word.source ?? REVIEW.scenario });
+        const wordData = { ...word, reviewedAt, dueAt: reviewedAt, source: word.source ?? REVIEW.scenario };
+        store.put(wordData);
+        if (userId) {
+          saveSrsWord(userId, wordData).catch(console.error);
+        }
       });
 
       transaction.oncomplete = () => {
