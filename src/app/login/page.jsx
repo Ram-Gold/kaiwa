@@ -12,29 +12,31 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   
   const router = useRouter();
-  const { user, loading: authLoading, redirectError, signInWithGoogle, loginWithEmail } = useAuth();
+  const { user, loading: authLoading, signInWithGoogle, loginWithEmail } = useAuth();
 
-  // After Google redirects back, Firebase sets the user once auth state resolves.
-  // Guard with !authLoading so this never fires during Firebase's init phase
-  // (which caused the "bounce back to /" race condition after logout).
+  // If the user is already signed in (e.g. revisiting /login), send them home.
   useEffect(() => {
     if (!authLoading && user) router.push('/');
   }, [user, authLoading, router]);
-
-  // Show any errors that came back from the Google redirect (e.g. unauthorized domain).
-  useEffect(() => {
-    if (redirectError) setError(redirectError);
-  }, [redirectError]);
 
   const handleGoogleSignIn = async () => {
     try {
       setError('');
       setLoading(true);
-      // signInWithGoogle calls signInWithRedirect, which navigates the browser
-      // to Google. The useEffect above handles the redirect back.
       await signInWithGoogle();
+      // Popup resolved — user is now signed in. Navigate home.
+      router.push('/');
     } catch (err) {
-      setError(err.message || 'Failed to log in with Google.');
+      if (err.code === 'auth/popup-blocked') {
+        setError('Popup was blocked by your browser. Please allow popups for this site and try again.');
+      } else if (err.code === 'auth/popup-closed-by-user') {
+        setError('Sign-in cancelled. Please try again.');
+      } else if (err.code === 'auth/unauthorized-domain') {
+        setError('This domain is not authorised in Firebase. Contact the site admin.');
+      } else {
+        setError(err.message || 'Failed to log in with Google. Please try again.');
+      }
+    } finally {
       setLoading(false);
     }
   };
