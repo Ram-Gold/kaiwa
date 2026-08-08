@@ -11,6 +11,7 @@ import { UserIcon } from '../ui/user.jsx';
 
 import LogoMark from '../ui/LogoMark.jsx';
 import { cn } from '../../lib/utils.js';
+import { useAuth } from '../../lib/auth/AuthContext.jsx';
 
 export const NAV_ITEMS = [
   ['Home', '/', HomeIcon],
@@ -23,12 +24,10 @@ export const NAV_ITEMS = [
 export default function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const { logout } = useAuth();
 
-  const handleLogout = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('kaiwa_user');
-      localStorage.removeItem('kaiwa_token');
-    }
+  const handleLogout = async () => {
+    await logout(); // Signs out of Firebase — clears the auth session
     router.push('/login');
   };
 

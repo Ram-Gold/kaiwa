@@ -7,17 +7,16 @@ import { Fragment, useState } from 'react';
 import LogoMark from '../ui/LogoMark.jsx';
 import { cn } from '../../lib/utils.js';
 import { NAV_ITEMS, NavItem } from './AppSidebar.jsx';
+import { useAuth } from '../../lib/auth/AuthContext.jsx';
 
 export default function CompactNavigationMenu() {
   const pathname = usePathname();
   const router = useRouter();
+  const { logout } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
 
-  const handleLogout = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('kaiwa_user');
-      localStorage.removeItem('kaiwa_token');
-    }
+  const handleLogout = async () => {
+    await logout(); // Signs out of Firebase — clears the auth session
     router.push('/login');
   };
 

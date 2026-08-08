@@ -12,13 +12,14 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   
   const router = useRouter();
-  const { user, redirectError, signInWithGoogle, loginWithEmail } = useAuth();
+  const { user, loading: authLoading, redirectError, signInWithGoogle, loginWithEmail } = useAuth();
 
-  // After Google redirects back to this page, Firebase sets the user and
-  // onAuthStateChanged fires. Watch for it and navigate to home.
+  // After Google redirects back, Firebase sets the user once auth state resolves.
+  // Guard with !authLoading so this never fires during Firebase's init phase
+  // (which caused the "bounce back to /" race condition after logout).
   useEffect(() => {
-    if (user) router.push('/');
-  }, [user, router]);
+    if (!authLoading && user) router.push('/');
+  }, [user, authLoading, router]);
 
   // Show any errors that came back from the Google redirect (e.g. unauthorized domain).
   useEffect(() => {
