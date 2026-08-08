@@ -24,18 +24,28 @@ export async function generateMetadata({ params }) {
   const briefing = getBriefing(briefingId);
 
   return {
-    title: briefing ? `${briefing.title} Briefing - KAIwa` : 'Briefing - KAIwa',
+    // .trim() guards against any stray newlines in the title string, which
+    // Next.js rejects with "contains illegal characters" during static generation.
+    title: briefing ? `${briefing.title.trim()} Briefing - KAIwa` : 'Briefing - KAIwa',
   };
 }
 
 export default async function BriefingPage({ params }) {
   const { briefingId } = await params;
-  let briefing = await getLessonById(briefingId);
+
+  // Always resolve from the static catalog first — it is synchronous and
+  // network-free, making it safe during Next.js static generation at build time.
+  // The Vercel build sandbox cannot reach Firestore (no auth, sandboxed network),
+  // so calling getLessonById / getRoleplayById first caused 60-second timeouts.
+  // All IDs from generateStaticParams() are covered by the static BRIEFINGS map,
+  // so these Firestore calls are only reached at runtime for dynamically-added
+  // lessons or roleplays that are not yet in the static catalog.
+  let briefing = getBriefing(briefingId);
   if (!briefing) {
-    briefing = await getRoleplayById(briefingId);
+    briefing = await getLessonById(briefingId);
   }
   if (!briefing) {
-    briefing = getBriefing(briefingId);
+    briefing = await getRoleplayById(briefingId);
   }
 
   if (!briefing) {

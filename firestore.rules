@@ -8,6 +8,10 @@ service cloud.firestore {
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
+    function isAdmin() {
+      return isAuthenticated()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType == 'admin';
+    }
 
     // Users collection
     match /users/{userId} {
@@ -36,16 +40,21 @@ service cloud.firestore {
       allow read: if isAuthenticated();
     }
 
-    // Master Lessons Catalog
+    // Master Lessons Catalog — public read, admin-only write
     match /lessons/{lessonId} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow write: if isAdmin();
     }
 
-    // Master Roleplays Catalog
+    // Master Roleplays Catalog — public read, admin-only write
     match /roleplays/{roleplayId} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Deny everything else by default
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
