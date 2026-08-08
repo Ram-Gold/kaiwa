@@ -35,5 +35,11 @@ service cloud.firestore {
     match /badges/{badgeId} {
       allow read: if isAuthenticated();
     }
+
+    // Master Lessons Catalog
+    match /lessons/{lessonId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
   }
 }

@@ -11,7 +11,7 @@ import { cn } from '../lib/utils.js';
 const filters = ['ALL', 'Beginner', 'Food', 'Memes', 'Life'];
 
 import { useAuth } from '../lib/auth/AuthContext.jsx';
-import { getUserModuleProgress } from '../lib/firebase/firestore.js';
+import { getUserModuleProgress, getLessons } from '../lib/firebase/firestore.js';
 
 const staticLessons = [
   { id: 'introduction', title: 'Introduction', jp: 'はじめまして', category: 'Beginner', minutes: 8, tone: 'moss', href: '/briefing/introduction' },
@@ -27,21 +27,33 @@ const staticLessons = [
 export default function Home() {
   const { user } = useAuth();
   const [activeFilter, setActiveFilter] = useState('ALL');
-  const [lessons, setLessons] = useState(() => staticLessons.map(l => ({ ...l, progress: 0 })));
+  const [lessons, setLessons] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
-    async function loadProgress() {
-      if (!user?.uid) return;
-      const progressMap = await getUserModuleProgress(user.uid);
-      if (isMounted) {
-        setLessons(staticLessons.map(lesson => ({
-          ...lesson,
-          progress: progressMap[lesson.id]?.progress || 0
-        })));
+    async function loadData() {
+      try {
+        const [firestoreLessons, progressMap] = await Promise.all([
+          getLessons(),
+          user?.uid ? getUserModuleProgress(user.uid) : Promise.resolve({})
+        ]);
+
+        if (isMounted) {
+          const merged = firestoreLessons.map(lesson => ({
+            ...lesson,
+            progress: progressMap[lesson.id]?.progress || 0
+          }));
+          setLessons(merged);
+        }
+      } catch (err) {
+        console.error('Failed to fetch lessons from Firestore:', err);
+      } finally {
+        if (isMounted) setIsLoading(false);
       }
     }
-    loadProgress();
+
+    loadData();
     return () => { isMounted = false; };
   }, [user?.uid]);
 
@@ -78,9 +90,22 @@ export default function Home() {
       </div>
 
       <section className="mt-8 grid gap-5 md:grid-cols-2" aria-label="Lesson cards">
-        {visibleLessons.map((lesson) => (
-          <LessonCard key={lesson.title} lesson={lesson} />
-        ))}
+        {isLoading ? (
+          <div className="md:col-span-2 py-12 text-center font-mono text-sm font-bold text-ink/50">
+            Loading lessons from Firestore...
+          </div>
+        ) : visibleLessons.length > 0 ? (
+          visibleLessons.map((lesson) => (
+            <LessonCard key={lesson.id || lesson.title} lesson={lesson} />
+          ))
+        ) : (
+          <div className="md:col-span-2 brutal-border bg-white p-8 text-center shadow-nav">
+            <h3 className="font-display text-2xl">No lessons found</h3>
+            <p className="mt-2 font-mono text-xs font-bold text-ink/60">
+              The Firestore `/lessons` collection is currently empty. Add documents to Firestore to display lessons here for everyone!
+            </p>
+          </div>
+        )}
       </section>
     </div>
   );

@@ -5,6 +5,7 @@ import Badge from '../../../components/ui/Badge.jsx';
 import Button from '../../../components/ui/Button.jsx';
 import Card from '../../../components/ui/Card.jsx';
 import { getBriefing, getBriefingIds } from '../../../lib/briefings.js';
+import { getLessonById } from '../../../lib/firebase/firestore.js';
 import { cn } from '../../../lib/utils.js';
 
 const accentClasses = {
@@ -29,7 +30,10 @@ export async function generateMetadata({ params }) {
 
 export default async function BriefingPage({ params }) {
   const { briefingId } = await params;
-  const briefing = getBriefing(briefingId);
+  let briefing = await getLessonById(briefingId);
+  if (!briefing) {
+    briefing = getBriefing(briefingId);
+  }
 
   if (!briefing) {
     notFound();

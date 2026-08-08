@@ -354,3 +354,196 @@ export async function updateModuleProgress(uid, moduleId, progressAmount) {
     lastStudiedAt: serverTimestamp(),
   }, { merge: true });
 }
+
+/* ==========================================================================
+   5. LESSONS CATALOG
+   ========================================================================== */
+
+const DEFAULT_LESSONS_SEED = [
+  {
+    id: 'introduction',
+    title: 'Introduction',
+    jpTitle: 'はじめまして',
+    category: 'Beginner',
+    kind: 'lesson',
+    level: 'N5',
+    minutes: 8,
+    accent: 'moss',
+    summary: 'Practice your first self-introduction with simple, confident sentences.',
+    headsUp: [
+      'Keep answers short: name, origin, and one like.',
+      'Use はじめまして at the start, then よろしくお願いします at the end.',
+      'KAIwa will nudge you if particles feel off.'
+    ],
+    prep: ['私は ___ です', '___ が好きです', 'よろしくお願いします']
+  },
+  {
+    id: 'common-phrases',
+    title: 'Common Phrases',
+    jpTitle: 'よく使う表現',
+    category: 'Beginner',
+    kind: 'lesson',
+    level: 'N5',
+    minutes: 12,
+    accent: 'mustard',
+    summary: 'Warm up everyday phrases for greetings, thanks, apologies, and quick replies.',
+    headsUp: [
+      'Listen for formality: です and ます keep it polite.',
+      'Short natural replies are better than long translated sentences.',
+      'Repeat a phrase once if you want KAIwa to drill it.'
+    ],
+    prep: ['ありがとうございます', 'すみません', '大丈夫です']
+  },
+  {
+    id: 'likes-dislikes',
+    title: 'Likes & Dislikes',
+    jpTitle: '好き・嫌い',
+    category: 'Life',
+    kind: 'lesson',
+    level: 'N5',
+    minutes: 10,
+    accent: 'correction',
+    summary: 'Talk about what you like, dislike, and want to try next.',
+    headsUp: [
+      'Use が with 好き: コーヒーが好きです.',
+      'Add とても or ちょっと to soften your answer.',
+      'Expect follow-up questions asking why.'
+    ],
+    prep: ['___ が好きです', '___ はちょっと苦手です', 'どうしてですか']
+  },
+  {
+    id: 'basic-verbs',
+    title: 'Basic Verbs',
+    jpTitle: '基本動詞',
+    category: 'Beginner',
+    kind: 'lesson',
+    level: 'N5',
+    minutes: 15,
+    accent: 'aizome',
+    summary: 'Use daily action verbs in short present and past-tense sentences.',
+    headsUp: [
+      'Focus on one verb per sentence.',
+      'KAIwa may ask what you did today or what you do every morning.',
+      'If stuck, answer with the verb stem and KAIwa will scaffold it.'
+    ],
+    prep: ['食べます', '行きます', '見ました']
+  },
+  {
+    id: 'simple-sentences',
+    title: 'Simple Sentences',
+    jpTitle: '簡単な文',
+    category: 'Life',
+    kind: 'lesson',
+    level: 'N5',
+    minutes: 14,
+    accent: 'mustard',
+    summary: 'Build clean subject-topic sentences without overthinking grammar.',
+    headsUp: [
+      'Start with topic は, then say one clear thing.',
+      'It is okay to answer slowly and revise.',
+      'KAIwa will keep corrections small and actionable.'
+    ],
+    prep: ['今日は ___ です', '私は ___ に行きます', 'これは ___ です']
+  },
+  {
+    id: 'personal-info',
+    title: 'Personal Info',
+    jpTitle: '自己紹介',
+    category: 'Life',
+    kind: 'lesson',
+    level: 'N5',
+    minutes: 9,
+    accent: 'moss',
+    summary: 'Answer common questions about yourself with safe local-first profile memory.',
+    headsUp: [
+      'Only share details you want saved locally on this device.',
+      'Practice name, country, work or school, and hobbies.',
+      'KAIwa can remember your preferred name for later sessions.'
+    ],
+    prep: ['お名前は？', 'どこから来ましたか', '趣味は何ですか']
+  },
+  {
+    id: 'ordering-food',
+    title: 'Ordering Food',
+    jpTitle: '注文する',
+    category: 'Food',
+    kind: 'lesson',
+    level: 'N5',
+    minutes: 11,
+    accent: 'correction',
+    summary: 'Order politely, ask for recommendations, and confirm what you want.',
+    headsUp: [
+      'Use ___ をください for simple orders.',
+      'Pointing language is useful: これ, それ, あれ.',
+      'Expect a confirmation question before checkout.'
+    ],
+    prep: ['これをください', 'おすすめは何ですか', '水をお願いします']
+  },
+  {
+    id: 'meme-replies',
+    title: 'Meme Replies',
+    jpTitle: 'ネット表現',
+    category: 'Memes',
+    kind: 'lesson',
+    level: 'N4',
+    minutes: 7,
+    accent: 'aizome',
+    summary: 'Practice light internet replies while keeping tone natural and friendly.',
+    headsUp: [
+      'Casual Japanese can sound too blunt if translated directly.',
+      'KAIwa will flag phrases that are funny but risky.',
+      'Short reactions are the goal here.'
+    ],
+    prep: ['かわいい', 'おもしろい', 'ほんとう？']
+  }
+];
+
+export async function seedLessonsToFirestore() {
+  for (const lesson of DEFAULT_LESSONS_SEED) {
+    const lessonRef = doc(db, 'lessons', lesson.id);
+    const { id, ...data } = lesson;
+    await setDoc(lessonRef, data, { merge: true });
+  }
+}
+
+/**
+ * Fetch all lessons directly from Firestore.
+ * If empty, seeds the default lessons to Firestore and returns them.
+ */
+export async function getLessons() {
+  const lessonsRef = collection(db, 'lessons');
+  let snap = await getDocs(lessonsRef);
+  
+  if (snap.empty) {
+    await seedLessonsToFirestore();
+    snap = await getDocs(lessonsRef);
+  }
+  
+  const lessonsList = [];
+  snap.forEach((docSnap) => {
+    lessonsList.push({
+      id: docSnap.id,
+      ...docSnap.data(),
+      href: `/briefing/${docSnap.id}`
+    });
+  });
+  
+  return lessonsList;
+}
+
+/**
+ * Fetch a single lesson from Firestore by ID.
+ */
+export async function getLessonById(lessonId) {
+  if (!lessonId) return null;
+  const lessonRef = doc(db, 'lessons', lessonId);
+  const snap = await getDoc(lessonRef);
+  if (!snap.exists()) return null;
+  return {
+    id: snap.id,
+    ...snap.data(),
+    startHref: `/chat/sensei?briefing=${snap.id}&type=lesson`
+  };
+}
+
+
