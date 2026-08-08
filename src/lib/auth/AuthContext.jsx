@@ -3,7 +3,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
   onAuthStateChanged,
-  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -16,6 +17,7 @@ const AuthContext = createContext({
   user: null,
   profile: null,
   loading: true,
+  redirectError: null,
   signInWithGoogle: async () => {},
   registerWithEmail: async () => {},
   loginWithEmail: async () => {},
@@ -30,8 +32,23 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [redirectError, setRedirectError] = useState(null);
 
   useEffect(() => {
+    // Handle the credential that Google sends back after signInWithRedirect.
+    // This resolves to null if no redirect is pending (normal page loads).
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result?.user) {
+          // onAuthStateChanged will fire and set the user; nothing extra needed.
+          setRedirectError(null);
+        }
+      })
+      .catch((error) => {
+        console.error('Google redirect sign-in error:', error);
+        setRedirectError(error.message || 'Google sign-in failed. Please try again.');
+      });
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
@@ -116,12 +133,11 @@ export function AuthProvider({ children }) {
   }, []);
 
   const signInWithGoogle = async () => {
-    try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (error) {
-      console.error("Google sign-in error:", error);
-      throw error;
-    }
+    // signInWithRedirect navigates the browser to Google's OAuth page.
+    // When Google redirects back, getRedirectResult (called on mount above)
+    // captures the result and onAuthStateChanged fires with the signed-in user.
+    setRedirectError(null);
+    await signInWithRedirect(auth, googleProvider);
   };
 
   const registerWithEmail = async (email, password, displayName) => {
@@ -160,6 +176,7 @@ export function AuthProvider({ children }) {
     user,
     profile,
     loading,
+    redirectError,
     signInWithGoogle,
     registerWithEmail,
     loginWithEmail,

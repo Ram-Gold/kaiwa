@@ -12,17 +12,28 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   
   const router = useRouter();
-  const { signInWithGoogle, loginWithEmail } = useAuth();
+  const { user, redirectError, signInWithGoogle, loginWithEmail } = useAuth();
+
+  // After Google redirects back to this page, Firebase sets the user and
+  // onAuthStateChanged fires. Watch for it and navigate to home.
+  useEffect(() => {
+    if (user) router.push('/');
+  }, [user, router]);
+
+  // Show any errors that came back from the Google redirect (e.g. unauthorized domain).
+  useEffect(() => {
+    if (redirectError) setError(redirectError);
+  }, [redirectError]);
 
   const handleGoogleSignIn = async () => {
     try {
       setError('');
       setLoading(true);
+      // signInWithGoogle calls signInWithRedirect, which navigates the browser
+      // to Google. The useEffect above handles the redirect back.
       await signInWithGoogle();
-      router.push('/');
     } catch (err) {
-      setError('Failed to log in with Google.');
-    } finally {
+      setError(err.message || 'Failed to log in with Google.');
       setLoading(false);
     }
   };
