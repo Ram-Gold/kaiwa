@@ -85,10 +85,12 @@ export function extractSuggestions(content) {
 
 function stripSuggestions(content) {
   return String(content || '')
-    .replace(/\n?\s*SUGGESTIONS:\s*\[[\s\S]*?\][\s\S]*$/gi, '')
-    .replace(/\n?\s*```(?:json)?\s*[\s\S]*?```[\s\S]*$/gi, '')
-    .replace(/\n?\s*\{[\s\S]*?"SUGGESTIONS"[\s\S]*?\}[\s\S]*$/gi, '')
-    .replace(/\n?\s*\[\s*\{[\s\S]*?"text"[\s\S]*?\}\s*\][\s\S]*$/gi, '');
+    .replace(/SUGGESTIONS:[\s\S]*$/gi, '')
+    .replace(/```(?:json)?[\s\S]*$/gi, '')
+    .replace(/\{\s*"SUGGESTIONS"[\s\S]*$/gi, '')
+    .replace(/\[\s*\{\s*"text"[\s\S]*$/gi, '')
+    .replace(/```(?:json)?/gi, '')
+    .trim();
 }
 
 function parseSuggestions(rawValue) {
@@ -108,7 +110,12 @@ function parseSuggestions(rawValue) {
     return suggestions
       .filter((suggestion) => typeof suggestion === 'object' && suggestion !== null)
       .map((suggestion) => {
-        const text = String(suggestion.text || suggestion.phrase || suggestion.japanese || suggestion.option || '').trim();
+        let text = String(suggestion.text || suggestion.phrase || suggestion.japanese || suggestion.option || '').trim();
+        // Truncate if model erroneously output a long paragraph into a response card
+        if (text.length > 35) {
+          const firstSentence = text.split(/(?<=[。！？!?])\s*/)[0];
+          text = firstSentence.length <= 35 ? firstSentence : firstSentence.slice(0, 32) + '…';
+        }
         const isCorrect = suggestion.isCorrect !== undefined ? Boolean(suggestion.isCorrect) : (suggestion.correct !== undefined ? Boolean(suggestion.correct) : true);
         const explanation = String(suggestion.explanation || suggestion.reason || '').trim();
         return { text, isCorrect, explanation };
@@ -261,8 +268,9 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
     let activeSystemPrompt = persona.systemPrompt + `\n\n[GLOBAL CONSTRAINTS & CONCISE OUTPUT RULES]:
 1. LENGTH & TOKEN MINIMIZATION: Keep your main Japanese reply strictly at or below 2 short sentences maximum. Be concise, direct, and token-efficient.
 2. CONTENT SAFETY & APPROPRIATENESS: All conversation topics must remain strictly wholesome, respectful, educational, and appropriate for language learners.
-3. MANDATORY RESPONSE FORMAT: At the very end of EVERY single message, you MUST append 5 response choices formatted as valid JSON:
-SUGGESTIONS: [{"text": "natural Japanese reply", "isCorrect": true, "explanation": "natural phrase"}, {"text": "unnatural reply 1", "isCorrect": false, "explanation": "wrong particle"}, {"text": "unnatural reply 2", "isCorrect": false, "explanation": "wrong verb tense"}, {"text": "unnatural reply 3", "isCorrect": false, "explanation": "too formal"}, {"text": "unnatural reply 4", "isCorrect": false, "explanation": "wrong nuance"}]`;
+3. CARD SUGGESTIONS RULE: The 5 SUGGESTIONS are response choices for the USER to reply with. Each suggestion "text" MUST be a VERY SHORT phrase (3 to 10 words / max 20 characters). NEVER copy the assistant's own message into the card text!
+4. MANDATORY RESPONSE FORMAT: Write your 1-2 sentence chat reply first. Do NOT use markdown code fences in the chat text. At the very end of EVERY single message, append 5 response choices formatted as valid JSON:
+SUGGESTIONS: [{"text": "short user reply", "isCorrect": true, "explanation": "natural phrase"}, {"text": "unnatural reply 1", "isCorrect": false, "explanation": "wrong particle"}, {"text": "unnatural reply 2", "isCorrect": false, "explanation": "wrong verb tense"}, {"text": "unnatural reply 3", "isCorrect": false, "explanation": "too formal"}, {"text": "unnatural reply 4", "isCorrect": false, "explanation": "wrong nuance"}]`;
     
     // Inject user's About Me & Persona Context from settings
     if (typeof window !== 'undefined') {
