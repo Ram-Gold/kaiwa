@@ -4,7 +4,7 @@ import { getKnownRomajiGlosses, toRomajiText } from '../../lib/japaneseText.js';
 import { speakJapanese } from '../../lib/speech.js';
 import { translateJapaneseToEnglish } from '../../lib/translation.js';
 import JapaneseText from './JapaneseText.jsx';
-import SuggestionChips from './SuggestionChips.jsx';
+import RoleplayCards from './RoleplayCards.jsx';
 import { cn } from '../../lib/utils.js';
 
 export default function ChatBubble({
@@ -175,14 +175,13 @@ export default function ChatBubble({
         </article>
 
         {suggestions.length > 0 && (
-          <aside className="animate-panel-in flex flex-col items-end gap-2 sm:max-w-[34rem]">
-            <p className="label-mono text-ai">Try replying</p>
-            <SuggestionChips
+          <div className="mt-3">
+            <RoleplayCards
               disabled={suggestionsDisabled}
               suggestions={suggestions}
               onPickSuggestion={onPickSuggestion}
             />
-          </aside>
+          </div>
         )}
       </div>
     </div>

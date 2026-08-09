@@ -22,43 +22,59 @@ export default function HistoryLedger({ sessions }) {
       </header>
 
       <section>
-        <Card padding="none" className="overflow-hidden bg-white">
-          <div className="grid grid-cols-[7rem_7.5rem_minmax(0,1fr)_5rem] gap-3 border-b-2 border-border bg-paper px-4 py-3 font-mono text-[10px] font-black uppercase tracking-[0.14em] text-ink/55 sm:grid-cols-[8rem_10rem_minmax(0,1fr)_6rem] sm:gap-4">
-            <span>Date</span>
-            <span>Type</span>
-            <span>Session</span>
-            <span className="text-right">Score</span>
-          </div>
-          <div className="divide-y-2 divide-border">
-            {sessions.map((session) => (
-              <button
-                key={session.id}
-                type="button"
-                onClick={() => setSessionId(session.id)}
-                className="w-full text-left transition-colors hover:bg-mustard/10 focus-visible:relative focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ink"
-                aria-label={`Open saved ${session.type.toLowerCase()} record for ${session.title}`}
-              >
-                <div className="grid grid-cols-[7rem_7.5rem_minmax(0,1fr)_5rem] items-center gap-3 px-4 py-4 sm:grid-cols-[8rem_10rem_minmax(0,1fr)_6rem] sm:gap-4">
-                  <div>
-                    <p className="font-mono text-[10px] font-black uppercase tracking-[0.12em] text-ink/55">{session.date}</p>
-                    <p className="mt-1 text-sm font-bold text-ink/70">{session.duration}</p>
+        {sessions.length === 0 ? (
+          <Card padding="none" className="overflow-hidden bg-white">
+            <div className="flex flex-col items-center justify-center p-12 text-center">
+              <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-paper shadow-shadow brutal-border">
+                <span className="text-4xl text-ai">📝</span>
+              </div>
+              <h2 className="font-display text-2xl mb-2">No Practice History Yet</h2>
+              <p className="max-w-md text-ink/70">
+                You haven't completed any lessons or roleplays yet. Start a session to see your progress, scores, and conversation history here.
+              </p>
+            </div>
+          </Card>
+        ) : (
+          <Card padding="none" className="overflow-hidden bg-white">
+            <div className="grid grid-cols-[7rem_7.5rem_minmax(0,1fr)_5rem] gap-3 border-b-2 border-border bg-paper px-4 py-3 font-mono text-[10px] font-black uppercase tracking-[0.14em] text-ink/55 sm:grid-cols-[8rem_10rem_minmax(0,1fr)_6rem] sm:gap-4">
+              <span>Date</span>
+              <span>Type</span>
+              <span>Session</span>
+              <span className="text-right">Score</span>
+            </div>
+            <div className="divide-y-2 divide-border">
+              {sessions.map((session) => (
+                <button
+                  key={session.id}
+                  type="button"
+                  onClick={() => setSessionId(session.id)}
+                  className="w-full text-left transition-colors hover:bg-mustard/10 focus-visible:relative focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ink"
+                  aria-label={`Open saved ${session.type?.toLowerCase() || 'practice'} record for ${session.title}`}
+                >
+                  <div className="grid grid-cols-[7rem_7.5rem_minmax(0,1fr)_5rem] items-center gap-3 px-4 py-4 sm:grid-cols-[8rem_10rem_minmax(0,1fr)_6rem] sm:gap-4">
+                    <div>
+                      <p className="font-mono text-[10px] font-black uppercase tracking-[0.12em] text-ink/55">
+                        {session.date?.toDate ? session.date.toDate().toLocaleDateString() : session.date || 'Unknown'}
+                      </p>
+                      <p className="mt-1 text-sm font-bold text-ink/70">{session.duration || '00:00'}</p>
+                    </div>
+                    <div>
+                      <Badge tone={session.type === 'Roleplay' ? 'aizome' : 'moss'}>{session.type || 'Practice'}</Badge>
+                    </div>
+                    <div>
+                      <h2 className="font-display text-xl leading-none sm:text-2xl">{session.title || 'Untitled Session'}</h2>
+                      <p className="mt-2 hidden text-sm font-semibold leading-6 text-ink/70 sm:block">{session.summary || 'No summary available.'}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-display text-3xl leading-none sm:text-4xl">{session.score || 0}%</p>
+                      <p className={cn('mt-2 font-mono text-[10px] font-black uppercase tracking-[0.14em]', scoreTone(session.score || 0))}>{session.grade || 'Unrated'}</p>
+                    </div>
                   </div>
-                  <div>
-                    <Badge tone={session.type === 'Roleplay' ? 'aizome' : 'moss'}>{session.type}</Badge>
-                  </div>
-                  <div>
-                    <h2 className="font-display text-xl leading-none sm:text-2xl">{session.title}</h2>
-                    <p className="mt-2 hidden text-sm font-semibold leading-6 text-ink/70 sm:block">{session.summary}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-display text-3xl leading-none sm:text-4xl">{session.score}%</p>
-                    <p className={cn('mt-2 font-mono text-[10px] font-black uppercase tracking-[0.14em]', scoreTone(session.score))}>{session.grade}</p>
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </Card>
+                </button>
+              ))}
+            </div>
+          </Card>
+        )}
       </section>
     </div>
   );

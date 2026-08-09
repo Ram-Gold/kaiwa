@@ -18,7 +18,7 @@ export const NAV_ITEMS = [
   ['Roleplay', '/roleplay', Drama],
   ['Past Practice', '/history', HistoryIcon],
   ['Profile', '/profile', UserIcon],
-  ['Settings', '/dashboard', SettingsIcon],
+  ['Settings', '/settings', SettingsIcon],
 ];
 
 export default function AppSidebar() {

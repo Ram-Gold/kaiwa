@@ -17,8 +17,8 @@ Your job:
 
 Output contract:
 1. First write the chat reply the user should see.
-2. End with exactly one final line formatted as valid JSON:
-SUGGESTIONS: ["short Japanese reply 1", "short Japanese reply 2", "short Japanese reply 3"]
+2. End with exactly one final line formatted as valid JSON containing 5 roleplay choices (1 correct/natural, 4 incorrect/unnatural) for the user to respond with:
+SUGGESTIONS: [{"text": "natural Japanese reply", "isCorrect": true, "explanation": "natural and polite"}, {"text": "unnatural reply", "isCorrect": false, "explanation": "wrong particle"}, ...]
 
 Keep suggestions short, natural, and appropriate to the conversation.`,
   },
@@ -40,8 +40,8 @@ Your job:
 
 Output contract:
 1. First write the chat reply the user should see.
-2. End with exactly one final line formatted as valid JSON:
-SUGGESTIONS: ["short Japanese reply 1", "short Japanese reply 2", "short Japanese reply 3"]
+2. End with exactly one final line formatted as valid JSON containing 5 roleplay choices (1 correct/natural, 4 incorrect/unnatural) for the user to respond with:
+SUGGESTIONS: [{"text": "natural Japanese reply", "isCorrect": true, "explanation": "natural and casual"}, {"text": "unnatural reply", "isCorrect": false, "explanation": "too formal"}, ...]
 
 Keep suggestions short, natural, and appropriate to the conversation.`,
   },
@@ -63,8 +63,8 @@ Your job:
 
 Output contract:
 1. First write the chat reply the user should see.
-2. End with exactly one final line formatted as valid JSON:
-SUGGESTIONS: ["short Japanese reply 1", "short Japanese reply 2", "short Japanese reply 3"]
+2. End with exactly one final line formatted as valid JSON containing 5 roleplay choices (1 correct/natural, 4 incorrect/unnatural) for the user to respond with:
+SUGGESTIONS: [{"text": "natural Japanese reply", "isCorrect": true, "explanation": "enthusiastic and polite"}, {"text": "unnatural reply", "isCorrect": false, "explanation": "wrong verb"}, ...]
 
 Keep suggestions short, natural, and appropriate to the conversation.`,
   },

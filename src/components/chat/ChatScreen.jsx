@@ -1,9 +1,9 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { sendMessage, translateMessage } from '../../lib/ai.js';
 import { getPersonaById } from '../../prompts/personas.js';
 import Button from '../ui/Button.jsx';
 import ChatBubble from './ChatBubble.jsx';
-import SuggestionChips from './SuggestionChips.jsx';
+import RoleplayCards from './RoleplayCards.jsx';
 import { DictionaryPopover } from './JapaneseText.jsx';
 import { useAuth } from '../../lib/auth/AuthContext';
 import { saveChatSession } from '../../lib/firebase/firestore';
@@ -18,17 +18,22 @@ export default function ChatScreen({ provider, apiKey, personaId, onBackToDashbo
   const [input, setInput] = useState('');
   const [isOptionsOpen, setIsOptionsOpen] = useState(true);
   const [suggestions, setSuggestions] = useState([
-    'こんにちは！',
-    '今日は日本語を練習したいです。',
-    'ゆっくり話してください。',
+    { text: 'こんにちは！', isCorrect: true },
+    { text: '今日は日本語を練習したいです。', isCorrect: true },
+    { text: 'ゆっくり話してください。', isCorrect: true },
   ]);
   const [isLoading, setIsLoading] = useState(false);
   const [translations, setTranslations] = useState({});
   const [translatingIds, setTranslatingIds] = useState({});
   const [activeDictionaryEntry, setActiveDictionaryEntry] = useState(null);
   
+  // Grading & Game State
+  const [mistakesCount, setMistakesCount] = useState(0);
+  const [totalTurns, setTotalTurns] = useState(0);
+
   const { user } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
+  const messagesEndRef = useRef(null);
 
   useEffect(() => {
     function handleShowDictionary(event) {
@@ -39,11 +44,20 @@ export default function ChatScreen({ provider, apiKey, personaId, onBackToDashbo
     return () => window.removeEventListener('kaiwa:show-dictionary', handleShowDictionary);
   }, []);
 
+  useEffect(() => {
+    // Scroll to bottom when messages change
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, suggestions]);
+
   async function submitMessage(messageText) {
     const cleanMessage = messageText.trim();
     if (!cleanMessage || isLoading) {
       return;
     }
+
+    setTotalTurns((prev) => prev + 1);
 
     const historyForApi = messages.filter((message) =>
       ['user', 'assistant'].includes(message.role),
@@ -78,6 +92,10 @@ export default function ChatScreen({ provider, apiKey, personaId, onBackToDashbo
     }
   }
 
+  function handleMistake() {
+    setMistakesCount((prev) => prev + 1);
+  }
+
   function handleSubmit(event) {
     event.preventDefault();
     submitMessage(input);
@@ -88,10 +106,12 @@ export default function ChatScreen({ provider, apiKey, personaId, onBackToDashbo
     setInput('');
     setTranslations({});
     setTranslatingIds({});
+    setMistakesCount(0);
+    setTotalTurns(0);
     setSuggestions([
-      'こんにちは！',
-      '今日は日本語を練習したいです。',
-      'ゆっくり話してください。',
+      { text: 'こんにちは！', isCorrect: true },
+      { text: '今日は日本語を練習したいです。', isCorrect: true },
+      { text: 'ゆっくり話してください。', isCorrect: true },
     ]);
   }
 
@@ -99,21 +119,28 @@ export default function ChatScreen({ provider, apiKey, personaId, onBackToDashbo
     if (!user || messages.length <= 1) return;
     try {
       setIsSaving(true);
+      
+      const accuracy = totalTurns === 0 ? 100 : Math.max(0, Math.round(((totalTurns - mistakesCount) / totalTurns) * 100));
+      let grade = 'C';
+      if (accuracy >= 90) grade = 'S';
+      else if (accuracy >= 80) grade = 'A';
+      else if (accuracy >= 60) grade = 'B';
+
       await saveChatSession(user.uid, {
         title: persona?.name || 'Free Chat',
         type: persona?.id === 'sensei' ? 'Lesson' : 'Roleplay',
         learnerRole: 'Learner',
         aiRole: persona?.name || 'AI',
-        score: 0,
-        grade: 'Unrated',
+        score: accuracy,
+        grade,
         duration: '00:00',
-        summary: 'Saved conversation',
+        summary: `Saved conversation (${totalTurns} turns, ${mistakesCount} mistakes)`,
         corrections: [],
         tags: [],
         metrics: [],
         transcript: messages.map(m => ({ speaker: m.role === 'assistant' ? 'KAIwa' : 'You', text: m.content })),
       });
-      alert('Session saved to History!');
+      alert(`Session saved! Grade: ${grade} (${accuracy}%)`);
     } catch (err) {
       console.error(err);
       alert('Failed to save session.');
@@ -175,7 +202,14 @@ export default function ChatScreen({ provider, apiKey, personaId, onBackToDashbo
 
       <header className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="label-mono text-shu">Roleplay chat</p>
+          <div className="flex items-center gap-3">
+            <p className="label-mono text-shu">Roleplay chat</p>
+            {totalTurns > 0 && (
+              <span className="brutal-border bg-ink px-2 py-0.5 font-mono text-[10px] font-bold text-mustard uppercase tracking-widest">
+                Mistakes: {mistakesCount}
+              </span>
+            )}
+          </div>
           <h1 className="font-display text-4xl sm:text-6xl">
             {persona.icon} {persona.name} <span className="text-shu">{persona.jp}</span>
           </h1>
@@ -183,7 +217,7 @@ export default function ChatScreen({ provider, apiKey, personaId, onBackToDashbo
         <div className="flex flex-col gap-3 sm:flex-row">
           {user && messages.length > 1 && (
             <Button variant="ghost" onClick={handleSaveSession} disabled={isSaving}>
-              {isSaving ? 'Saving...' : 'Save Session'}
+              {isSaving ? 'Saving...' : 'Finish & Save'}
             </Button>
           )}
           <Button variant="ghost" onClick={resetConversation}>
@@ -195,7 +229,7 @@ export default function ChatScreen({ provider, apiKey, personaId, onBackToDashbo
         </div>
       </header>
 
-      <section className="brutal-border flex min-h-[58vh] flex-1 flex-col bg-white/60 p-3 shadow-shadow sm:p-5">
+      <section className="brutal-border flex min-h-[58vh] flex-1 flex-col bg-white/60 p-3 shadow-shadow sm:p-5 pb-32 sm:pb-5">
         <div className="flex-1 space-y-4 overflow-y-auto pr-1">
           {messages.map((message, index) => (
             <ChatBubble
@@ -223,17 +257,19 @@ export default function ChatScreen({ provider, apiKey, personaId, onBackToDashbo
               </div>
             </div>
           )}
+          <div ref={messagesEndRef} className="h-4" />
         </div>
 
         <form className="mt-5 space-y-3" onSubmit={handleSubmit}>
           {isOptionsOpen && suggestions.length > 0 && (
             <div className="flex justify-end">
-              <div className="animate-panel-in flex max-w-[90vw] flex-col items-end gap-2 sm:max-w-md">
-                <p className="label-mono text-ai">Reply options</p>
-                <SuggestionChips
+              <div className="animate-panel-in flex w-full max-w-[90vw] flex-col items-end gap-2 sm:max-w-md">
+                <p className="label-mono text-ai">Reply Options</p>
+                <RoleplayCards
                   disabled={isLoading}
                   suggestions={suggestions}
                   onPickSuggestion={submitMessage}
+                  onMistake={handleMistake}
                 />
               </div>
             </div>

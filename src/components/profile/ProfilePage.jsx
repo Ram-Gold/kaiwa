@@ -45,8 +45,9 @@ export default function ProfilePage({ profile: fallbackProfile }) {
       .join('')
       .slice(0, 2)
       .toUpperCase(),
-    socialLinks: subData.links || fallbackProfile?.socialLinks,
-    badges: subData.badges || fallbackProfile?.badges,
+    socialLinks: user ? (subData.links || []) : fallbackProfile?.socialLinks,
+    badges: user ? (subData.badges || []) : fallbackProfile?.badges,
+    stats: user ? (authProfile?.stats || { currentStreak: 0, xp: 0 }) : fallbackProfile?.stats,
     community: subData.friends ? { ...fallbackProfile?.community, followingList: subData.friends } : fallbackProfile?.community,
   };
 

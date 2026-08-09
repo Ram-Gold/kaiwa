@@ -62,11 +62,14 @@ function parseSuggestions(rawValue) {
     }
 
     return suggestions
-      .filter((suggestion) => typeof suggestion === 'string')
-      .map((suggestion) => suggestion.trim())
-      .filter(Boolean)
-      .map((suggestion) => suggestion.replace(/^["'`]+|["'`]+$/g, ''))
-      .slice(0, 3);
+      .filter((suggestion) => typeof suggestion === 'object' && suggestion !== null && typeof suggestion.text === 'string')
+      .map((suggestion) => ({
+        text: suggestion.text.trim(),
+        isCorrect: Boolean(suggestion.isCorrect),
+        explanation: typeof suggestion.explanation === 'string' ? suggestion.explanation.trim() : ''
+      }))
+      .filter((suggestion) => suggestion.text.length > 0)
+      .slice(0, 5);
   } catch {
     return [];
   }
@@ -90,70 +93,53 @@ async function summarizeOldMessages(provider, apiKey, messagesToSummarize) {
   const userMessage = `Messages to summarize:\n${formattedMessages}`;
   
   try {
-    let response;
+    let payload;
     if (provider === 'ollama') {
-      response = await fetch('http://localhost:11434/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'llama3',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userMessage }
-          ],
-          stream: false,
-        }),
-      });
+      payload = {
+        model: 'llama3',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage }
+        ],
+        stream: false,
+      };
     } else if (provider === 'openai') {
-      response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userMessage }
-          ],
-          temperature: 0.2,
-        }),
-      });
+      payload = {
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage }
+        ],
+        temperature: 0.2,
+      };
     } else if (provider === 'gemini') {
-      response = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'gemini-1.5-flash',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userMessage }
-          ],
-          temperature: 0.2,
-        }),
-      });
+      payload = {
+        model: 'gemini-1.5-flash',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage }
+        ],
+        temperature: 0.2,
+      };
     } else if (provider === 'claude') {
-      response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'dangerouslyAllowBrowser': 'true',
-        },
-        body: JSON.stringify({
-          model: 'claude-3-5-haiku-20241022',
-          system: systemPrompt,
-          messages: [{ role: 'user', content: userMessage }],
-          max_tokens: 1024,
-          temperature: 0.2,
-        }),
-      });
+      payload = {
+        model: 'claude-3-5-haiku-20241022',
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userMessage }],
+        max_tokens: 1024,
+        temperature: 0.2,
+      };
     }
+
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider,
+        apiKey,
+        payload,
+      }),
+    });
     
     if (!response || !response.ok) return '';
     
@@ -217,6 +203,27 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
     
     let activeSystemPrompt = persona.systemPrompt;
     
+    // Inject user's About Me & Persona Context from settings
+    if (typeof window !== 'undefined') {
+      try {
+        const userPersona = window.localStorage.getItem('kaiwa.user.persona') || '';
+        const rawProfile = window.localStorage.getItem('kaiwa.user.profile');
+        let aboutMe = '';
+        if (rawProfile) {
+          const parsed = JSON.parse(rawProfile);
+          aboutMe = parsed.aboutMe || '';
+        }
+        const contextParts = [];
+        if (userPersona.trim()) contextParts.push(`Learner Persona Context: ${userPersona.trim()}`);
+        if (aboutMe.trim()) contextParts.push(`Learner Bio & Background: ${aboutMe.trim()}`);
+        if (contextParts.length > 0) {
+          activeSystemPrompt += `\n\n[Learner Profile & Context]:\n${contextParts.join('\n')}`;
+        }
+      } catch (e) {
+        // Ignore parsing errors
+      }
+    }
+    
     // Summarize older history if necessary to prevent context window bloat
     if (olderToSummarize.length > 0) {
       const summaryText = await summarizeOldMessages(provider, cleanKey, olderToSummarize);
@@ -225,85 +232,71 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
       }
     }
 
-    if (provider === 'ollama') {
-      const messages = [
-        { role: 'system', content: activeSystemPrompt },
-        ...recent,
-        { role: 'user', content: cleanMessage },
-      ];
-      // Make local HTTP request to user's Ollama instance.
-      response = await fetch('http://localhost:11434/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'llama3',
-          messages,
-          stream: false,
-        }),
-      });
-    } else if (provider === 'openai') {
-      const messages = [
-        { role: 'system', content: activeSystemPrompt },
-        ...recent,
-        { role: 'user', content: cleanMessage },
-      ];
-      response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${cleanKey}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages,
-          temperature: 0.8,
-        }),
-      });
-    } else if (provider === 'gemini') {
-      const messages = [
-        { role: 'system', content: activeSystemPrompt },
-        ...recent,
-        { role: 'user', content: cleanMessage },
-      ];
-      // Google Gemini OpenAI compatibility endpoint
-      response = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${cleanKey}`,
-        },
-        body: JSON.stringify({
-          model: 'gemini-1.5-flash',
-          messages,
-          temperature: 0.8,
-        }),
-      });
-    } else if (provider === 'claude') {
-      const messages = [...recent];
-      messages.push({ role: 'user', content: cleanMessage });
+    let payload;
 
-      // Claude Messages API puts system prompt at the top-level
-      response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': cleanKey,
-          'anthropic-version': '2023-06-01',
-          'dangerouslyAllowBrowser': 'true',
-        },
-        body: JSON.stringify({
-          model: 'claude-3-5-haiku-20241022',
-          system: activeSystemPrompt,
-          messages,
-          max_tokens: 1024,
-          temperature: 0.8,
-        }),
-      });
+    if (provider === 'ollama') {
+      payload = {
+        model: 'llama3',
+        messages: [
+          { role: 'system', content: activeSystemPrompt },
+          ...recent,
+          { role: 'user', content: cleanMessage },
+        ],
+        stream: false,
+      };
+    } else if (provider === 'openai') {
+      payload = {
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: activeSystemPrompt },
+          ...recent,
+          { role: 'user', content: cleanMessage },
+        ],
+        temperature: 0.8,
+      };
+    } else if (provider === 'openrouter') {
+      payload = {
+        model: 'meta-llama/llama-3.3-70b-instruct:free',
+        messages: [
+          { role: 'system', content: activeSystemPrompt },
+          ...recent,
+          { role: 'user', content: cleanMessage },
+        ],
+        temperature: 0.8,
+      };
+    } else if (provider === 'gemini') {
+      payload = {
+        model: 'gemini-1.5-flash',
+        messages: [
+          { role: 'system', content: activeSystemPrompt },
+          ...recent,
+          { role: 'user', content: cleanMessage },
+        ],
+        temperature: 0.8,
+      };
+    } else if (provider === 'claude') {
+      payload = {
+        model: 'claude-3-5-haiku-20241022',
+        system: activeSystemPrompt,
+        messages: [...recent, { role: 'user', content: cleanMessage }],
+        max_tokens: 1024,
+        temperature: 0.8,
+      };
     } else {
       throw new AIProviderError('unsupported_provider', `Unsupported AI provider: ${provider}`);
     }
+
+    response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        provider,
+        apiKey: cleanKey,
+        payload,
+      }),
+    });
   } catch (err) {
     if (err instanceof AIProviderError) throw err;
     throw new AIProviderError(
@@ -360,76 +353,57 @@ export async function translateMessage(provider, apiKey, japaneseText) {
 
   let response;
   try {
+    let payload;
     if (provider === 'ollama') {
-      const messages = [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: cleanText },
-      ];
-      response = await fetch('http://localhost:11434/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'llama3',
-          messages,
-          stream: false,
-        }),
-      });
+      payload = {
+        model: 'llama3',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: cleanText },
+        ],
+        stream: false,
+      };
     } else if (provider === 'openai') {
-      const messages = [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: cleanText },
-      ];
-      response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${cleanKey}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages,
-          temperature: 0.2,
-        }),
-      });
+      payload = {
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: cleanText },
+        ],
+        temperature: 0.2,
+      };
     } else if (provider === 'gemini') {
-      const messages = [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: cleanText },
-      ];
-      response = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${cleanKey}`,
-        },
-        body: JSON.stringify({
-          model: 'gemini-1.5-flash',
-          messages,
-          temperature: 0.2,
-        }),
-      });
+      payload = {
+        model: 'gemini-1.5-flash',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: cleanText },
+        ],
+        temperature: 0.2,
+      };
     } else if (provider === 'claude') {
-      response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': cleanKey,
-          'anthropic-version': '2023-06-01',
-          'dangerouslyAllowBrowser': 'true',
-        },
-        body: JSON.stringify({
-          model: 'claude-3-5-haiku-20241022',
-          system: systemPrompt,
-          messages: [{ role: 'user', content: cleanText }],
-          max_tokens: 1024,
-          temperature: 0.2,
-        }),
-      });
+      payload = {
+        model: 'claude-3-5-haiku-20241022',
+        system: systemPrompt,
+        messages: [{ role: 'user', content: cleanText }],
+        max_tokens: 1024,
+        temperature: 0.2,
+      };
     } else {
       throw new AIProviderError('unsupported_provider', `Unsupported AI provider: ${provider}`);
     }
+
+    response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        provider,
+        apiKey: cleanKey,
+        payload,
+      }),
+    });
   } catch (err) {
     if (err instanceof AIProviderError) throw err;
     throw new AIProviderError(

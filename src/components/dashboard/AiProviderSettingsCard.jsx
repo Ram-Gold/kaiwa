@@ -16,6 +16,7 @@ export function loadStoredApiKeys() {
     openai: localStorage.getItem(`${API_KEYS_STORAGE_PREFIX}openai`) || '',
     gemini: localStorage.getItem(`${API_KEYS_STORAGE_PREFIX}gemini`) || '',
     claude: localStorage.getItem(`${API_KEYS_STORAGE_PREFIX}claude`) || '',
+    openrouter: localStorage.getItem(`${API_KEYS_STORAGE_PREFIX}openrouter`) || '',
   };
 }
 
@@ -57,6 +58,9 @@ export default function AiProviderSettingsCard({
       return 'API key required';
     }
     if (prov === 'openai' && !cleanKey.startsWith('sk-')) {
+      return 'Invalid key format';
+    }
+    if (prov === 'openrouter' && !cleanKey.startsWith('sk-or-')) {
       return 'Invalid key format';
     }
     if (prov === 'gemini' && !cleanKey.startsWith('AIza') && !cleanKey.startsWith('AQ')) {
@@ -156,6 +160,7 @@ export default function AiProviderSettingsCard({
           >
             <option value="ollama">Ollama (Local)</option>
             <option value="openai">OpenAI</option>
+            <option value="openrouter">OpenRouter</option>
             <option value="gemini">Gemini</option>
             <option value="claude">Claude</option>
           </select>
@@ -177,6 +182,8 @@ export default function AiProviderSettingsCard({
               placeholder={
                 draftProvider === 'openai'
                   ? 'sk-...'
+                  : draftProvider === 'openrouter'
+                  ? 'sk-or-v1-...'
                   : draftProvider === 'gemini'
                   ? 'AIzaSy... / AQ...'
                   : 'sk-ant-...'

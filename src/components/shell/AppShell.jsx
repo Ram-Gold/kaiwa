@@ -54,7 +54,7 @@ export default function AppShell({ children }) {
         {children}
       </main>
       {hasNoRightRail ? null : isProfileRoute ? <ProfileRail profile={defaultProfile} /> : <ProgressRail />}
-      {isSettingsOpen && <GlobalSettingsModal onClose={() => setIsSettingsOpen(false)} />}
+      {isSettingsOpen && pathname !== '/settings' && <GlobalSettingsModal onClose={() => setIsSettingsOpen(false)} />}
       </div>
     </ApiGuard>
   );
