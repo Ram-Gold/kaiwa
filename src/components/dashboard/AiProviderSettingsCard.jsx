@@ -9,10 +9,14 @@ export const API_KEYS_STORAGE_PREFIX = 'kaiwa.ai.apiKey.';
 export const OPENROUTER_MODEL_STORAGE_KEY = 'kaiwa.ai.openRouterModel';
 
 export function loadStoredProvider() {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return 'ollama';
   return localStorage.getItem(PROVIDER_STORAGE_KEY) || 'ollama';
 }
 
 export function loadStoredApiKeys() {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+    return { openai: '', gemini: '', claude: '', openrouter: '' };
+  }
   return {
     openai: localStorage.getItem(`${API_KEYS_STORAGE_PREFIX}openai`) || '',
     gemini: localStorage.getItem(`${API_KEYS_STORAGE_PREFIX}gemini`) || '',
@@ -22,6 +26,9 @@ export function loadStoredApiKeys() {
 }
 
 export function loadStoredOpenRouterModel() {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+    return 'google/gemini-2.0-flash-lite-preview-02-05:free';
+  }
   return localStorage.getItem(OPENROUTER_MODEL_STORAGE_KEY) || 'google/gemini-2.0-flash-lite-preview-02-05:free';
 }
 

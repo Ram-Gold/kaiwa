@@ -9,7 +9,7 @@ import { cn } from '../../lib/utils.js';
 import { NAV_ITEMS, NavItem } from './AppSidebar.jsx';
 import { useAuth } from '../../lib/auth/AuthContext.jsx';
 
-export default function CompactNavigationMenu() {
+export default function CompactNavigationMenu({ onRequestExit }) {
   const pathname = usePathname();
   const router = useRouter();
   const { logout } = useAuth();
@@ -18,6 +18,14 @@ export default function CompactNavigationMenu() {
   const handleLogout = async () => {
     await logout(); // Signs out of Firebase — clears the auth session
     router.push('/login');
+  };
+
+  const handleNavClick = (e, targetHref) => {
+    setIsOpen(false);
+    if (onRequestExit) {
+      e.preventDefault();
+      onRequestExit(() => router.push(targetHref));
+    }
   };
 
   return (
@@ -42,7 +50,11 @@ export default function CompactNavigationMenu() {
 
       {isOpen ? (
         <div className="animate-panel-in mt-3 w-[min(19rem,calc(100vw-2rem))] brutal-border bg-aizome p-4 text-paper shadow-shadow">
-          <Link href="/" className="group flex items-center gap-3" onClick={() => setIsOpen(false)}>
+          <Link
+            href="/"
+            className="group flex items-center gap-3"
+            onClick={(e) => handleNavClick(e, '/')}
+          >
             <LogoMark className="brutal-border h-12 w-12 rotate-[-7deg] shadow-nav transition-transform group-hover:rotate-0" />
             <div>
               <p className="font-display text-3xl leading-none">Kaiwa</p>
@@ -64,7 +76,9 @@ export default function CompactNavigationMenu() {
                     className="flex items-center justify-start bg-transparent px-4 py-1.5 font-mono text-sm font-black uppercase tracking-[0.12em] text-paper transition-colors hover:text-mustard"
                     onClick={() => {
                       setIsOpen(false);
-                      window.dispatchEvent(new Event('kaiwa:open-settings'));
+                      const action = () => window.dispatchEvent(new Event('kaiwa:open-settings'));
+                      if (onRequestExit) onRequestExit(action);
+                      else action();
                     }}
                   />
                   <NavItem
@@ -74,7 +88,9 @@ export default function CompactNavigationMenu() {
                     className="flex items-center justify-start bg-transparent px-4 py-1.5 font-mono text-sm font-black uppercase tracking-[0.12em] text-paper transition-colors hover:text-shu"
                     onClick={() => {
                       setIsOpen(false);
-                      handleLogout();
+                      const action = () => handleLogout();
+                      if (onRequestExit) onRequestExit(action);
+                      else action();
                     }}
                   />
                 </Fragment>
@@ -86,7 +102,7 @@ export default function CompactNavigationMenu() {
                   label={label}
                   Icon={Icon}
                   className="brutal-border flex items-center gap-3 bg-paper px-4 py-3 font-mono text-sm font-black uppercase tracking-[0.12em] text-ink shadow-nav transition-all hover:translate-x-[3px] hover:translate-y-[3px] hover:bg-mustard hover:shadow-none"
-                  onClick={() => setIsOpen(false)}
+                  onClick={(e) => handleNavClick(e, href)}
                 />
               );
             })}

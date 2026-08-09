@@ -62,10 +62,39 @@ describe('AppShell', () => {
     expect(screen.queryByRole('button', { name: /open conversation options/i })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /^settings$/i }));
 
+    // Confirm exit modal when opening settings during exercise
+    expect(screen.getByRole('dialog', { name: /exit exercise\?/i })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /leave & cancel/i }));
+
     expect(screen.getByRole('dialog', { name: /settings overlay/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^roleplay$/i })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /^display$/i }));
     expect(screen.getByRole('button', { name: /dynamic island/i })).toBeInTheDocument();
     expect(screen.getByText(/Conversation content/i)).toBeInTheDocument();
+  });
+
+  it('prompts user confirmation when trying to navigate away during an active exercise', async () => {
+    mockPathname = '/chat/sensei';
+
+    render(
+      <AppShell>
+        <main>Conversation content</main>
+      </AppShell>,
+    );
+
+    // Open compact nav menu
+    await userEvent.click(screen.getByRole('button', { name: /open navigation menu/i }));
+
+    // Click Home item
+    const homeLink = screen.getByRole('link', { name: /^home$/i });
+    await userEvent.click(homeLink);
+
+    // Exit confirmation modal should appear
+    expect(screen.getByRole('dialog', { name: /exit exercise\?/i })).toBeInTheDocument();
+    expect(screen.getByText(/leaving now will cancel your session/i)).toBeInTheDocument();
+
+    // Click Keep Practicing to stay
+    await userEvent.click(screen.getByRole('button', { name: /keep practicing/i }));
+    expect(screen.queryByRole('dialog', { name: /exit exercise\?/i })).not.toBeInTheDocument();
   });
 });

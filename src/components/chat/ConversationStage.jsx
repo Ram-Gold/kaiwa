@@ -163,7 +163,7 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
   const scenario = briefing ?? FALLBACK_BRIEFING;
   const theme = ACCENT_THEME[scenario.accent] ?? ACCENT_THEME.aizome;
   const initialCards = useMemo(() => buildCards(scenario), [scenario]);
-  const [availableCards, setAvailableCards] = useState([]);
+  const [availableCards, setAvailableCards] = useState(initialCards);
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
@@ -705,7 +705,7 @@ function MessageThread({ readingMode, scenario, theme, messages, isLoading }) {
   const scrollRef = useRef(null);
 
   useEffect(() => {
-    scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
+    scrollRef.current?.scrollIntoView?.({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
   return (

@@ -12,6 +12,19 @@ afterEach(() => {
   cleanup();
 });
 
+vi.mock('next/navigation', () => ({
+  usePathname: () => '/chat/sensei',
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
+}));
+
+vi.mock('../../lib/auth/AuthContext', () => ({
+  useAuth: () => ({ user: null, logout: vi.fn() }),
+}));
+
+vi.mock('../../lib/ai.js', () => ({
+  sendMessage: vi.fn().mockResolvedValue({ text: 'こんにちは！', suggestions: [] }),
+}));
+
 import ConversationStage, { buildPronunciationTokens, getMatchedTokenCount, getSharedElementOffset, isCompleteRecitation } from './ConversationStage.jsx';
 
 function fireTransitionEnd(element, propertyName) {

@@ -21,7 +21,7 @@ export const NAV_ITEMS = [
   ['Settings', '/settings', SettingsIcon],
 ];
 
-export default function AppSidebar() {
+export default function AppSidebar({ onRequestExit }) {
   const pathname = usePathname();
   const router = useRouter();
   const { logout } = useAuth();
@@ -31,9 +31,20 @@ export default function AppSidebar() {
     router.push('/login');
   };
 
+  const handleNavClick = (e, targetHref) => {
+    if (onRequestExit) {
+      e.preventDefault();
+      onRequestExit(() => router.push(targetHref));
+    }
+  };
+
   return (
     <aside className="border-b-2 border-border bg-aizome p-5 text-paper lg:sticky lg:top-0 lg:min-h-screen lg:border-b-0 lg:border-r-2">
-      <Link href="/" className="group flex items-center gap-3">
+      <Link
+        href="/"
+        className="group flex items-center gap-3"
+        onClick={(e) => handleNavClick(e, '/')}
+      >
         <LogoMark className="brutal-border h-16 w-16 rotate-[-7deg] shadow-shadow transition-transform group-hover:rotate-0" />
         <div>
           <p className="font-display text-4xl leading-none">Kaiwa</p>
@@ -54,14 +65,22 @@ export default function AppSidebar() {
                   label={label}
                   Icon={null}
                   className="flex whitespace-nowrap bg-transparent px-4 py-1.5 text-left font-mono text-sm font-black uppercase tracking-[0.12em] text-paper transition-colors hover:text-mustard lg:w-full lg:items-center justify-center lg:justify-start"
-                  onClick={() => window.dispatchEvent(new Event('kaiwa:open-settings'))}
+                  onClick={() => {
+                    const action = () => window.dispatchEvent(new Event('kaiwa:open-settings'));
+                    if (onRequestExit) onRequestExit(action);
+                    else action();
+                  }}
                 />
                 <NavItem
                   as="button"
                   label="Log Out"
                   Icon={null}
                   className="flex whitespace-nowrap bg-transparent px-4 py-1.5 text-left font-mono text-sm font-black uppercase tracking-[0.12em] text-paper transition-colors hover:text-shu lg:w-full lg:items-center justify-center lg:justify-start"
-                  onClick={handleLogout}
+                  onClick={() => {
+                    const action = () => handleLogout();
+                    if (onRequestExit) onRequestExit(action);
+                    else action();
+                  }}
                 />
               </Fragment>
             );
@@ -74,6 +93,7 @@ export default function AppSidebar() {
               label={label}
               Icon={Icon}
               active={isActive}
+              onClick={(e) => handleNavClick(e, href)}
               className={cn(
                 'brutal-border flex whitespace-nowrap bg-paper px-4 py-3 font-mono text-sm font-black uppercase tracking-[0.12em] text-ink shadow-nav transition-all hover:translate-x-[3px] hover:translate-y-[3px] hover:bg-mustard hover:shadow-none lg:w-full lg:items-center lg:gap-3',
                 isActive && 'bg-mustard',
@@ -83,8 +103,6 @@ export default function AppSidebar() {
           );
         })}
       </nav>
-
-
     </aside>
   );
 }

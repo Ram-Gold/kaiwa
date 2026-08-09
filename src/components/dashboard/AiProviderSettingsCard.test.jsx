@@ -152,11 +152,15 @@ describe('AiProviderSettingsCard', () => {
     expect(successMsg).toHaveTextContent(/settings saved successfully/i);
 
     // Parent callback should have been triggered
-    expect(mockOnSettingsSaved).toHaveBeenCalledWith('openai', {
-      openai: 'sk-validopenaiapikey',
-      gemini: '',
-      claude: '',
-    });
+    expect(mockOnSettingsSaved).toHaveBeenCalledWith(
+      'openai',
+      {
+        openai: 'sk-validopenaiapikey',
+        gemini: '',
+        claude: '',
+      },
+      expect.anything()
+    );
   });
 
   it('correctly saves Ollama without a key', async () => {
@@ -181,11 +185,15 @@ describe('AiProviderSettingsCard', () => {
     expect(window.localStorage.getItem(PROVIDER_STORAGE_KEY)).toBe('ollama');
 
     // Callback called with ollama and unchanged openai key
-    expect(mockOnSettingsSaved).toHaveBeenCalledWith('ollama', {
-      openai: 'sk-existing',
-      gemini: '',
-      claude: '',
-    });
+    expect(mockOnSettingsSaved).toHaveBeenCalledWith(
+      'ollama',
+      {
+        openai: 'sk-existing',
+        gemini: '',
+        claude: '',
+      },
+      expect.anything()
+    );
   });
 
   it('allows removing an existing key using the Remove button', async () => {
@@ -213,10 +221,14 @@ describe('AiProviderSettingsCard', () => {
     expect(keyInput.value).toBe('');
 
     // Parent callback called with empty key
-    expect(mockOnSettingsSaved).toHaveBeenCalledWith('openai', {
-      openai: '',
-      gemini: '',
-      claude: '',
-    });
+    expect(mockOnSettingsSaved).toHaveBeenCalledWith(
+      'openai',
+      {
+        openai: '',
+        gemini: '',
+        claude: '',
+      },
+      expect.anything()
+    );
   });
 });
