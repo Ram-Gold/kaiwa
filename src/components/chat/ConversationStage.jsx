@@ -174,9 +174,22 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
   const router = useRouter();
   const hasInitiatedRef = useRef(false);
   const turnCardsRef = useRef(initialCards);
-  const [provider, setProvider] = useState('ollama');
-  const [apiKey, setApiKey] = useState('');
-  const [openRouterModel, setOpenRouterModel] = useState('');
+  const [provider, setProvider] = useState(() => {
+    if (typeof window !== 'undefined') return loadStoredProvider();
+    return 'ollama';
+  });
+  const [apiKey, setApiKey] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const p = loadStoredProvider();
+      const keys = loadStoredApiKeys();
+      return keys[p] || '';
+    }
+    return '';
+  });
+  const [openRouterModel, setOpenRouterModel] = useState(() => {
+    if (typeof window !== 'undefined') return loadStoredOpenRouterModel();
+    return '';
+  });
 
   const [message, setMessage] = useState('');
   const [showCards, setShowCards] = useState(true);
@@ -221,17 +234,25 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
   }, []);
 
   useEffect(() => {
+    function refreshProviderSettings() {
+      const loadedProvider = loadStoredProvider();
+      const keys = loadStoredApiKeys();
+      setProvider(loadedProvider);
+      setApiKey(keys[loadedProvider] || '');
+      setOpenRouterModel(loadStoredOpenRouterModel());
+    }
+
+    refreshProviderSettings();
+    window.addEventListener('kaiwa:provider-updated', refreshProviderSettings);
     return () => {
-      recognitionRef.current?.stop?.();
+      window.removeEventListener('kaiwa:provider-updated', refreshProviderSettings);
     };
   }, []);
 
   useEffect(() => {
-    const loadedProvider = loadStoredProvider();
-    const keys = loadStoredApiKeys();
-    setProvider(loadedProvider);
-    setApiKey(keys[loadedProvider] || '');
-    setOpenRouterModel(loadStoredOpenRouterModel());
+    return () => {
+      recognitionRef.current?.stop?.();
+    };
   }, []);
 
   useEffect(() => {
@@ -255,17 +276,20 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
       setMessages([createMessage('assistant', reply.text)]);
       
       if (reply.suggestions && reply.suggestions.length > 0) {
-        const formattedCards = reply.suggestions.map(s => ({
+        const formattedCards = reply.suggestions.map((s, idx) => ({
           id: Math.random().toString(36).slice(2, 9),
+          phrase: s.text,
           kana: s.text,
           romaji: toRomajiText(s.text),
+          tokens: buildPronunciationTokens(s.text),
+          toneIndex: idx,
           isCorrect: s.isCorrect,
           explanation: s.explanation,
         }));
         turnCardsRef.current = formattedCards;
         setAvailableCards(formattedCards);
       } else {
-        setAvailableCards(initialCards); // fallback
+        setAvailableCards(initialCards);
         turnCardsRef.current = initialCards;
       }
     } catch (error) {
@@ -301,7 +325,6 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
       setMistakesCount((prev) => prev + 1);
     }
 
-    const previousCards = [...availableCards].filter(c => c.id !== matchedCard?.id);
     setAvailableCards([]); 
 
     try {
@@ -311,18 +334,22 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
       setMessages((current) => [...current, createMessage('assistant', reply.text)]);
       
       if (reply.suggestions && reply.suggestions.length > 0) {
-        const formattedCards = reply.suggestions.map(s => ({
+        const formattedCards = reply.suggestions.map((s, idx) => ({
           id: Math.random().toString(36).slice(2, 9),
+          phrase: s.text,
           kana: s.text,
           romaji: toRomajiText(s.text),
+          tokens: buildPronunciationTokens(s.text),
+          toneIndex: idx,
           isCorrect: s.isCorrect,
           explanation: s.explanation,
         }));
         turnCardsRef.current = formattedCards;
         setAvailableCards(formattedCards);
       } else {
-        setAvailableCards(previousCards.length > 0 ? previousCards : initialCards);
-        turnCardsRef.current = previousCards.length > 0 ? previousCards : initialCards;
+        const fallbackCards = buildFallbackCards(scenario, messages.length);
+        turnCardsRef.current = fallbackCards;
+        setAvailableCards(fallbackCards);
       }
     } catch (error) {
       setMessages((current) => [
@@ -333,7 +360,9 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
           content: error?.userMessage || 'Something went wrong while contacting the AI.',
         },
       ]);
-      setAvailableCards(previousCards.length > 0 ? previousCards : initialCards);
+      const fallbackCards = buildFallbackCards(scenario, messages.length);
+      turnCardsRef.current = fallbackCards;
+      setAvailableCards(fallbackCards);
     } finally {
       setIsSending(false);
     }
@@ -570,10 +599,10 @@ function PhoneFrame({ scenario, theme, showMessages, showPhoneChrome, notchStyle
       <div className="pointer-events-none absolute bottom-[-1.75rem] left-[12%] right-[12%] h-4 rounded-full bg-ink/25 blur-xl" aria-hidden="true" />
       <PhoneSideButtons />
       <div className="relative rounded-[3rem] border border-[#3d3140] bg-gradient-to-br from-[#050505] via-[#242024] to-[#120f12] p-3 shadow-[inset_0_0_0_2px_#050505,inset_0_0_0_5px_#262226,inset_0_0_0_7px_rgba(255,255,255,0.08),0_0_0_1px_#1C1C1C,0_1.1rem_2.6rem_rgba(28,28,28,0.28)]">
-        <div className="min-h-[42rem] flex flex-col overflow-hidden rounded-[2.25rem] bg-[#fffefa] shadow-[inset_0_0_0_2px_rgba(255,255,255,0.9),inset_0_0_0_4px_rgba(0,0,0,0.08)]">
+        <div className="h-[42rem] max-h-[82vh] flex flex-col overflow-hidden rounded-[2.25rem] bg-[#fffefa] shadow-[inset_0_0_0_2px_rgba(255,255,255,0.9),inset_0_0_0_4px_rgba(0,0,0,0.08)]">
           {showPhoneChrome ? <PhoneStatusBar notchStyle={notchStyle} /> : null}
           {isTipOpen ? <TipNotification setIsTipOpen={setIsTipOpen} /> : null}
-          <div className="relative mx-3 flex-1 overflow-hidden bg-[#fffefa] p-3">
+          <div className="relative mx-2 my-1 flex-1 overflow-y-auto overflow-x-hidden p-2 scroll-smooth">
             {showMessages ? <MessageThread readingMode={readingMode} scenario={scenario} theme={theme} messages={messages} isLoading={isLoading} /> : <HiddenMessages />}
           </div>
 
@@ -662,21 +691,44 @@ function PhoneNotch({ notchStyle }) {
   return <span aria-label="Dynamic Island notch" className="absolute left-1/2 top-3 h-5 w-[4.6rem] -translate-x-1/2 rounded-full bg-[#0a0a0a] shadow-[inset_0_-1px_0_rgba(255,255,255,0.16),0_1px_2px_rgba(0,0,0,0.35)]">{lens}</span>;
 }
 
-function MessageThread({ readingMode, scenario, theme, messages, isLoading }) {
+function SystemNoticeMessage({ text }) {
   return (
-    <div className="flex min-h-[30.5rem] flex-col justify-end gap-4">
+    <div className="my-3 flex justify-center text-center">
+      <div className="inline-block max-w-[90%] rounded-md px-3 py-1.5 font-mono text-[11px] font-normal leading-relaxed text-ink/70 tracking-normal border border-ink/15 bg-paper/70 backdrop-blur-[1px]">
+        {text}
+      </div>
+    </div>
+  );
+}
+
+function MessageThread({ readingMode, scenario, theme, messages, isLoading }) {
+  const scrollRef = useRef(null);
+
+  useEffect(() => {
+    scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isLoading]);
+
+  return (
+    <div className="flex min-h-full flex-col justify-end gap-3 pb-1">
       <span className="sr-only">Reading mode: {readingMode}</span>
       
-      {messages.map((msg) => (
-        <MessageBubble
-          key={msg.id}
-          from={msg.role === 'assistant' ? 'ai' : 'user'}
-          theme={theme}
-          text={msg.content}
-        />
-      ))}
+      {messages.map((msg) => {
+        if (msg.role === 'error' || msg.role === 'system') {
+          return <SystemNoticeMessage key={msg.id} text={msg.content} />;
+        }
+
+        return (
+          <MessageBubble
+            key={msg.id}
+            from={msg.role === 'assistant' ? 'ai' : 'user'}
+            theme={theme}
+            text={msg.content}
+          />
+        );
+      })}
 
       {isLoading && <MessageBubble from="ai" theme={theme} thinking />}
+      <div ref={scrollRef} />
     </div>
   );
 }
@@ -1160,6 +1212,28 @@ function buildCards(briefing) {
     phrase,
     tokens: buildPronunciationTokens(phrase),
     toneIndex: index,
+  }));
+}
+
+function buildFallbackCards(briefing, turnOffset = 0) {
+  const basePrep = briefing.prep ?? ['はい、分かりました', 'もう少し説明してください', '大丈夫です'];
+  const pool = [
+    { text: basePrep[turnOffset % basePrep.length] || 'はい、わかりました。', isCorrect: true, explanation: 'natural polite response' },
+    { text: '英語でヒントをください。', isCorrect: false, explanation: 'asking for English hint' },
+    { text: 'もう一度ゆっくりお願いします。', isCorrect: true, explanation: 'polite request for repetition' },
+    { text: 'ちょっとよくわかりませんでした。', isCorrect: false, explanation: 'expressing confusion' },
+    { text: 'ありがとうございます！', isCorrect: true, explanation: 'expressing thanks' },
+  ];
+
+  return pool.map((s, idx) => ({
+    id: `fallback-${Date.now()}-${idx}`,
+    phrase: s.text,
+    kana: s.text,
+    romaji: toRomajiText(s.text),
+    tokens: buildPronunciationTokens(s.text),
+    toneIndex: idx,
+    isCorrect: s.isCorrect,
+    explanation: s.explanation,
   }));
 }
 

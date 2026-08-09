@@ -242,14 +242,26 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
   try {
     const normalizedHistory = normalizeHistory(conversationHistory);
     
+    // De-duplicate userMessage if caller already included it as the last history item
+    let historyToUse = normalizedHistory;
+    if (
+      historyToUse.length > 0 &&
+      historyToUse[historyToUse.length - 1].role === 'user' &&
+      historyToUse[historyToUse.length - 1].content === cleanMessage
+    ) {
+      historyToUse = historyToUse.slice(0, -1);
+    }
+
     // --- STEP 1: CONTEXT WINDOW & TOKEN BUDGETING ---
     // Allocate token budget (Ollama has smaller context window by default)
     const tokenBudget = provider === 'ollama' ? 4000 : 6000;
-    const { recent, olderToSummarize } = splitConversationHistory(normalizedHistory, tokenBudget);
+    const { recent, olderToSummarize } = splitConversationHistory(historyToUse, tokenBudget);
     
     // --- STEP 2: SYSTEM PROMPT & OUTPUT CONTRACT SPECIFICATION ---
-    let activeSystemPrompt = persona.systemPrompt + `\n\n[MANDATORY RESPONSE FORMAT]:
-At the very end of EVERY single message, you MUST append 5 response choices formatted as valid JSON:
+    let activeSystemPrompt = persona.systemPrompt + `\n\n[GLOBAL CONSTRAINTS & CONCISE OUTPUT RULES]:
+1. LENGTH & TOKEN MINIMIZATION: Keep your main Japanese reply strictly at or below 2 short sentences maximum. Be concise, direct, and token-efficient.
+2. CONTENT SAFETY & APPROPRIATENESS: All conversation topics must remain strictly wholesome, respectful, educational, and appropriate for language learners.
+3. MANDATORY RESPONSE FORMAT: At the very end of EVERY single message, you MUST append 5 response choices formatted as valid JSON:
 SUGGESTIONS: [{"text": "natural Japanese reply", "isCorrect": true, "explanation": "natural phrase"}, {"text": "unnatural reply 1", "isCorrect": false, "explanation": "wrong particle"}, {"text": "unnatural reply 2", "isCorrect": false, "explanation": "wrong verb tense"}, {"text": "unnatural reply 3", "isCorrect": false, "explanation": "too formal"}, {"text": "unnatural reply 4", "isCorrect": false, "explanation": "wrong nuance"}]`;
     
     // Inject user's About Me & Persona Context from settings
@@ -348,11 +360,11 @@ SUGGESTIONS: [{"text": "natural Japanese reply", "isCorrect": true, "explanation
     });
   } catch (err) {
     if (err instanceof AIProviderError) throw err;
-    throw new AIProviderError(
-      'network',
-      'Network error. Check your connection or local service and try again.',
-      err,
-    );
+    const name = PROVIDER_DISPLAY_NAMES[provider] || provider;
+    const networkMsg = provider === 'ollama'
+      ? 'Ollama connection failed. Make sure Ollama is running locally on port 11434.'
+      : `${name} connection failed. Check your network or API key.`;
+    throw new AIProviderError('network', networkMsg, err);
   }
 
   if (!response.ok) {
@@ -455,9 +467,10 @@ export async function translateMessage(provider, apiKey, japaneseText) {
     });
   } catch (err) {
     if (err instanceof AIProviderError) throw err;
+    const name = PROVIDER_DISPLAY_NAMES[provider] || provider;
     throw new AIProviderError(
       'network',
-      'Network error during translation. Check your connection or local service.',
+      `${name} connection failed during translation. Check your connection or local service.`,
       err,
     );
   }
@@ -487,18 +500,28 @@ export async function translateMessage(provider, apiKey, japaneseText) {
   return translation.trim();
 }
 
+const PROVIDER_DISPLAY_NAMES = {
+  ollama: 'Ollama',
+  openrouter: 'OpenRouter',
+  openai: 'OpenAI',
+  gemini: 'Gemini',
+  claude: 'Claude',
+};
+
 async function buildHttpError(response, provider) {
+  const name = PROVIDER_DISPLAY_NAMES[provider] || provider;
+
   if (response.status === 401 || response.status === 403) {
     return new AIProviderError(
       'invalid_key',
-      `${provider} API rejected the API key. Please check its validity.`,
+      `${name} API rejected the key. Please check your ${name} key.`,
     );
   }
 
   if (response.status === 429) {
     return new AIProviderError(
       'rate_limit',
-      `${provider} API rate limited this key. Wait a moment, then try again.`,
+      `${name} API rate limited this key. Wait a moment, then try again.`,
     );
   }
 
@@ -512,6 +535,6 @@ async function buildHttpError(response, provider) {
 
   return new AIProviderError(
     'api_error',
-    `${provider} request failed with status ${response.status}${detail ? `: ${detail}` : ''}`,
+    `${name} request failed with status ${response.status}${detail ? `: ${detail}` : ''}`,
   );
 }
