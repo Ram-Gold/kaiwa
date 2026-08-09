@@ -6,6 +6,7 @@ import { saveAiProviderSettings } from '../../lib/firebase/firestore';
 
 export const PROVIDER_STORAGE_KEY = 'kaiwa.ai.provider';
 export const API_KEYS_STORAGE_PREFIX = 'kaiwa.ai.apiKey.';
+export const OPENROUTER_MODEL_STORAGE_KEY = 'kaiwa.ai.openRouterModel';
 
 export function loadStoredProvider() {
   return localStorage.getItem(PROVIDER_STORAGE_KEY) || 'ollama';
@@ -20,14 +21,20 @@ export function loadStoredApiKeys() {
   };
 }
 
+export function loadStoredOpenRouterModel() {
+  return localStorage.getItem(OPENROUTER_MODEL_STORAGE_KEY) || 'google/gemini-2.0-flash-lite-preview-02-05:free';
+}
+
 export default function AiProviderSettingsCard({
   provider,
   apiKeys,
+  openRouterModel,
   onSettingsSaved,
 }) {
   const { user } = useAuth();
   const [draftProvider, setDraftProvider] = useState(provider);
   const [draftKey, setDraftKey] = useState('');
+  const [draftModel, setDraftModel] = useState(openRouterModel || 'google/gemini-2.0-flash-lite-preview-02-05:free');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -35,6 +42,10 @@ export default function AiProviderSettingsCard({
   useEffect(() => {
     setDraftProvider(provider);
   }, [provider]);
+
+  useEffect(() => {
+    if (openRouterModel) setDraftModel(openRouterModel);
+  }, [openRouterModel]);
 
   // Load key specifically when draftProvider or apiKeys change
   useEffect(() => {
@@ -81,15 +92,19 @@ export default function AiProviderSettingsCard({
     if (isSaveDisabled) return;
 
     const cleanKey = draftKey.trim();
+    const cleanModel = draftModel.trim() || 'google/gemini-2.0-flash-lite-preview-02-05:free';
 
     if (typeof window !== 'undefined' && window.localStorage) {
       window.localStorage.setItem(PROVIDER_STORAGE_KEY, draftProvider);
+      window.localStorage.setItem(OPENROUTER_MODEL_STORAGE_KEY, cleanModel);
       if (draftProvider !== 'ollama') {
         window.localStorage.setItem(`${API_KEYS_STORAGE_PREFIX}${draftProvider}`, cleanKey);
       }
     }
 
     if (user) {
+      // If we had a way to save the model to firestore, we would do it here.
+      // But for now, we'll rely on the existing saveAiProviderSettings which takes provider and key.
       await saveAiProviderSettings(user.uid, draftProvider, cleanKey);
     }
 
@@ -103,7 +118,7 @@ export default function AiProviderSettingsCard({
     setError('');
 
     // Trigger parent callback to update App-level state
-    onSettingsSaved(draftProvider, updatedKeys);
+    onSettingsSaved(draftProvider, updatedKeys, cleanModel);
   }
 
   function handleClearKey() {
@@ -119,7 +134,7 @@ export default function AiProviderSettingsCard({
       ...apiKeys,
       [draftProvider]: '',
     };
-    onSettingsSaved(draftProvider, updatedKeys);
+    onSettingsSaved(draftProvider, updatedKeys, draftModel);
   }
 
   const isConnected = draftProvider === 'ollama' || Boolean(apiKeys[draftProvider]);
@@ -195,6 +210,29 @@ export default function AiProviderSettingsCard({
           </div>
         )}
 
+        {draftProvider === 'openrouter' && (
+          <div>
+            <label htmlFor="model-input" className="label-mono block font-bold">
+              Model
+            </label>
+            <input
+              id="model-input"
+              type="text"
+              value={draftModel}
+              onChange={(e) => {
+                setDraftModel(e.target.value);
+                setSuccess('');
+              }}
+              placeholder="e.g. google/gemini-2.0-flash-lite-preview-02-05:free"
+              autoComplete="off"
+              className="brutal-border mt-2 w-full bg-paper px-4 py-3 font-mono text-sm font-bold shadow-shadow"
+            />
+            <p className="mt-2 text-xs text-shu">
+              Leave blank to use the default recommended free model.
+            </p>
+          </div>
+        )}
+
         {validationError && (
           <p
             id="api-key-error"
@@ -206,13 +244,15 @@ export default function AiProviderSettingsCard({
         )}
 
         {success && (
-          <p
-            role="status"
-            aria-live="polite"
-            className="font-mono text-sm font-black text-moss"
-          >
-            {success}
-          </p>
+          <div className="fixed bottom-6 right-6 z-50 animate-fade-in-up rounded-base brutal-border bg-moss px-6 py-4 shadow-brutal">
+            <p
+              role="status"
+              aria-live="polite"
+              className="font-mono text-sm font-black text-paper"
+            >
+              {success}
+            </p>
+          </div>
         )}
 
         <div className="flex flex-col gap-3 sm:flex-row">

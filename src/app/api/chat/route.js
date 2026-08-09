@@ -1,5 +1,22 @@
 import { NextResponse } from 'next/server';
 
+/**
+ * ============================================================================
+ * AI ENGINEERING GUIDE: SERVERLESS PROXY & BACKEND ROUTING
+ * ============================================================================
+ * 
+ * Purpose:
+ * This Next.js Serverless API Route acts as a secure proxy between client-side
+ * AI Kaiwa logic and external/local LLM inference providers.
+ * 
+ * Why this design?
+ * 1. CORS Prevention: Bypasses browser CORS restrictions on provider APIs.
+ * 2. Key Security: Keeps user-provided API keys in server-side HTTP headers without
+ *    exposing raw bearer tokens in browser fetch requests.
+ * 3. Unified Endpoint: Client code only talks to `/api/chat`, regardless of whether
+ *    the backend is Ollama (localhost:11434), OpenRouter, OpenAI, Gemini, or Claude.
+ * ============================================================================
+ */
 export async function POST(req) {
   try {
     const body = await req.json();

@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { IoCheckmarkSharp, IoCloseSharp, IoTrashSharp, IoSearchSharp } from 'react-icons/io5';
 import { cn } from '../../lib/utils.js';
 import Button from '../ui/Button.jsx';
-import { PROVIDER_STORAGE_KEY, API_KEYS_STORAGE_PREFIX } from '../dashboard/AiProviderSettingsCard.jsx';
+import { PROVIDER_STORAGE_KEY, API_KEYS_STORAGE_PREFIX, OPENROUTER_MODEL_STORAGE_KEY } from '../dashboard/AiProviderSettingsCard.jsx';
 import CreditsSettingsView from '../settings/CreditsSettings.jsx';
 import ProfileSettings from '../settings/ProfileSettings.jsx';
 import SubscriptionSettings from '../settings/SubscriptionSettings.jsx';
@@ -105,6 +105,7 @@ function ApiProvidersSettings() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [apiKeys, setApiKeys] = useState({});
   const [draftKey, setDraftKey] = useState('');
+  const [draftModel, setDraftModel] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
   useEffect(() => {
@@ -125,6 +126,9 @@ function ApiProvidersSettings() {
       }
     });
     setApiKeys(keys);
+
+    const storedModel = storage?.getItem?.(OPENROUTER_MODEL_STORAGE_KEY) || 'google/gemini-2.0-flash-lite-preview-02-05:free';
+    setDraftModel(storedModel);
   }, []);
 
   useEffect(() => {
@@ -147,6 +151,10 @@ function ApiProvidersSettings() {
       storage?.setItem?.(`${API_KEYS_STORAGE_PREFIX}${provider}`, draftKey.trim());
       setApiKeys(prev => ({ ...prev, [provider]: draftKey.trim() }));
     }
+    
+    const cleanModel = draftModel.trim() || 'google/gemini-2.0-flash-lite-preview-02-05:free';
+    storage?.setItem?.(OPENROUTER_MODEL_STORAGE_KEY, cleanModel);
+    
     setSuccessMsg('Settings saved successfully!');
     // Trigger global event so ApiGuard can re-check
     window.dispatchEvent(new Event('kaiwa:provider-updated'));
@@ -230,6 +238,23 @@ function ApiProvidersSettings() {
             )}
           />
         </div>
+
+        {provider === 'openrouter' && (
+          <div>
+            <label className="label-mono block font-bold">Model</label>
+            <input
+              type="text"
+              value={draftModel}
+              onChange={(e) => { setDraftModel(e.target.value); setSuccessMsg(''); }}
+              placeholder="e.g. google/gemini-2.0-flash-lite-preview-02-05:free"
+              autoComplete="off"
+              className="brutal-border mt-2 w-full bg-white px-4 py-3 font-mono text-sm font-bold text-ink shadow-shadow"
+            />
+            <p className="mt-2 text-xs text-shu font-bold">
+              Leave blank to use the default recommended free model.
+            </p>
+          </div>
+        )}
 
         {successMsg && <p className="font-mono text-sm font-black text-moss">{successMsg}</p>}
 

@@ -12,17 +12,11 @@ let messageCounter = 0;
 
 export default function ChatScreen({ provider, apiKey, personaId, onBackToDashboard }) {
   const persona = useMemo(() => getPersonaById(personaId), [personaId]);
-  const [messages, setMessages] = useState(() => [
-    createMessage('assistant', getOpeningLine(persona)),
-  ]);
+  const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isOptionsOpen, setIsOptionsOpen] = useState(true);
-  const [suggestions, setSuggestions] = useState([
-    { text: 'こんにちは！', isCorrect: true },
-    { text: '今日は日本語を練習したいです。', isCorrect: true },
-    { text: 'ゆっくり話してください。', isCorrect: true },
-  ]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [translations, setTranslations] = useState({});
   const [translatingIds, setTranslatingIds] = useState({});
   const [activeDictionaryEntry, setActiveDictionaryEntry] = useState(null);
@@ -34,7 +28,42 @@ export default function ChatScreen({ provider, apiKey, personaId, onBackToDashbo
   const { user } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
   const messagesEndRef = useRef(null);
+  const hasInitiatedRef = useRef(false);
 
+  useEffect(() => {
+    if (!hasInitiatedRef.current && persona) {
+      hasInitiatedRef.current = true;
+      initiateConversation();
+    }
+  }, [persona]);
+
+  async function initiateConversation() {
+    setIsLoading(true);
+    setMessages([]);
+    setSuggestions([]);
+    try {
+      const reply = await sendMessage(
+        provider,
+        apiKey,
+        persona,
+        [],
+        "(System: The user has just approached you. Please start the conversation according to your persona and generate 5 response options for the user.)"
+      );
+      setMessages([createMessage('assistant', reply.text)]);
+      setSuggestions(reply.suggestions);
+    } catch (error) {
+      setMessages([
+        createMessage('assistant', getOpeningLine(persona)),
+        {
+          id: `error-${Date.now()}`,
+          role: 'error',
+          content: error?.userMessage || 'Could not auto-generate the first message. You can try typing to begin.',
+        },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  }
   useEffect(() => {
     function handleShowDictionary(event) {
       const incoming = event.detail;
@@ -102,17 +131,12 @@ export default function ChatScreen({ provider, apiKey, personaId, onBackToDashbo
   }
 
   function resetConversation() {
-    setMessages([createMessage('assistant', getOpeningLine(persona))]);
     setInput('');
     setTranslations({});
     setTranslatingIds({});
     setMistakesCount(0);
     setTotalTurns(0);
-    setSuggestions([
-      { text: 'こんにちは！', isCorrect: true },
-      { text: '今日は日本語を練習したいです。', isCorrect: true },
-      { text: 'ゆっくり話してください。', isCorrect: true },
-    ]);
+    initiateConversation();
   }
 
   async function handleSaveSession() {

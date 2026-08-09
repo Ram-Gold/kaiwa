@@ -9,6 +9,15 @@ import JapaneseText, { DictionaryPopover } from './JapaneseText.jsx';
 import { speakJapanese } from '../../lib/speech.js';
 import { translateJapaneseToEnglish } from '../../lib/translation.js';
 import { toRomajiText } from '../../lib/japaneseText.js';
+import { sendMessage } from '../../lib/ai.js';
+import { loadStoredProvider, loadStoredApiKeys, loadStoredOpenRouterModel } from '../dashboard/AiProviderSettingsCard.jsx';
+import { useAuth } from '../../lib/auth/AuthContext';
+import { saveChatSession } from '../../lib/firebase/firestore.js';
+import { useRouter } from 'next/navigation';
+
+function createMessage(role, content) {
+  return { id: `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, role, content };
+}
 
 const FALLBACK_BRIEFING = {
   title: 'Kaiwa Practice',
@@ -150,11 +159,25 @@ const KANA_ROMAJI = {
   ー: '-',
 };
 
-export default function ConversationStage({ briefing = FALLBACK_BRIEFING }) {
+export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEFING }) {
   const scenario = briefing ?? FALLBACK_BRIEFING;
   const theme = ACCENT_THEME[scenario.accent] ?? ACCENT_THEME.aizome;
   const initialCards = useMemo(() => buildCards(scenario), [scenario]);
-  const [availableCards, setAvailableCards] = useState(initialCards);
+  const [availableCards, setAvailableCards] = useState([]);
+  const [messages, setMessages] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
+  const [mistakesCount, setMistakesCount] = useState(0);
+  const [totalTurns, setTotalTurns] = useState(0);
+  
+  const { user } = useAuth();
+  const router = useRouter();
+  const hasInitiatedRef = useRef(false);
+  const turnCardsRef = useRef(initialCards);
+  const [provider, setProvider] = useState('ollama');
+  const [apiKey, setApiKey] = useState('');
+  const [openRouterModel, setOpenRouterModel] = useState('');
+
   const [message, setMessage] = useState('');
   const [showCards, setShowCards] = useState(true);
   const [showMessages, setShowMessages] = useState(true);
@@ -202,6 +225,142 @@ export default function ConversationStage({ briefing = FALLBACK_BRIEFING }) {
       recognitionRef.current?.stop?.();
     };
   }, []);
+
+  useEffect(() => {
+    const loadedProvider = loadStoredProvider();
+    const keys = loadStoredApiKeys();
+    setProvider(loadedProvider);
+    setApiKey(keys[loadedProvider] || '');
+    setOpenRouterModel(loadStoredOpenRouterModel());
+  }, []);
+
+  useEffect(() => {
+    if (!hasInitiatedRef.current && provider && scenario) {
+      hasInitiatedRef.current = true;
+      initiateConversation();
+    }
+  }, [provider, scenario]);
+
+  async function initiateConversation() {
+    setIsLoading(true);
+    try {
+      const reply = await sendMessage(
+        provider,
+        apiKey,
+        personaId || scenario.id || 'sensei', 
+        [],
+        "(System: The user has just approached you. Please start the conversation according to your persona and generate 5 response options for the user.)",
+        openRouterModel
+      );
+      setMessages([createMessage('assistant', reply.text)]);
+      
+      if (reply.suggestions && reply.suggestions.length > 0) {
+        const formattedCards = reply.suggestions.map(s => ({
+          id: Math.random().toString(36).slice(2, 9),
+          kana: s.text,
+          romaji: toRomajiText(s.text),
+          isCorrect: s.isCorrect,
+          explanation: s.explanation,
+        }));
+        turnCardsRef.current = formattedCards;
+        setAvailableCards(formattedCards);
+      } else {
+        setAvailableCards(initialCards); // fallback
+        turnCardsRef.current = initialCards;
+      }
+    } catch (error) {
+      setMessages([
+        createMessage('assistant', `こんにちは。${scenario.jpTitle} の練習を始めましょう。`),
+        {
+          id: `error-${Date.now()}`,
+          role: 'error',
+          content: error?.userMessage || 'Could not auto-generate the first message. Using fallback.',
+        },
+      ]);
+      setAvailableCards(initialCards);
+      turnCardsRef.current = initialCards;
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handleMessageSubmit(text) {
+    const cleanText = text.trim();
+    if (!cleanText || isSending || isLoading) return;
+
+    setIsSending(true);
+    setTotalTurns((prev) => prev + 1);
+
+    const userMsg = createMessage('user', cleanText);
+    const newMessages = [...messages, userMsg];
+    setMessages(newMessages);
+    setMessage('');
+    
+    const matchedCard = turnCardsRef.current.find(c => c.kana === cleanText || c.romaji === cleanText || c.phrase === cleanText);
+    if (matchedCard && !matchedCard.isCorrect) {
+      setMistakesCount((prev) => prev + 1);
+    }
+
+    const previousCards = [...availableCards].filter(c => c.id !== matchedCard?.id);
+    setAvailableCards([]); 
+
+    try {
+      const historyForApi = newMessages.filter((m) => ['user', 'assistant'].includes(m.role));
+      const reply = await sendMessage(provider, apiKey, personaId || scenario.id || 'sensei', historyForApi, cleanText, openRouterModel);
+      
+      setMessages((current) => [...current, createMessage('assistant', reply.text)]);
+      
+      if (reply.suggestions && reply.suggestions.length > 0) {
+        const formattedCards = reply.suggestions.map(s => ({
+          id: Math.random().toString(36).slice(2, 9),
+          kana: s.text,
+          romaji: toRomajiText(s.text),
+          isCorrect: s.isCorrect,
+          explanation: s.explanation,
+        }));
+        turnCardsRef.current = formattedCards;
+        setAvailableCards(formattedCards);
+      } else {
+        setAvailableCards(previousCards.length > 0 ? previousCards : initialCards);
+        turnCardsRef.current = previousCards.length > 0 ? previousCards : initialCards;
+      }
+    } catch (error) {
+      setMessages((current) => [
+        ...current,
+        {
+          id: `error-${Date.now()}`,
+          role: 'error',
+          content: error?.userMessage || 'Something went wrong while contacting the AI.',
+        },
+      ]);
+      setAvailableCards(previousCards.length > 0 ? previousCards : initialCards);
+    } finally {
+      setIsSending(false);
+    }
+  }
+
+  async function handleSaveSession() {
+    if (!user) {
+      router.push('/grading');
+      return;
+    }
+    const scorePercentage = totalTurns > 0 ? Math.max(0, 100 - Math.round((mistakesCount / totalTurns) * 100)) : 100;
+    const isPassing = scorePercentage >= 60;
+    try {
+      await saveChatSession(user.uid, {
+        personaId: scenario.id || scenario.title,
+        startedAt: new Date().toISOString(),
+        completed: true,
+        score: scorePercentage,
+        mistakes: mistakesCount,
+        passed: isPassing,
+        messages: messages.map(m => ({ role: m.role, content: m.content })),
+      });
+    } catch (error) {
+      console.error('Failed to save session:', error);
+    }
+    router.push('/grading');
+  }
 
   function useCard(card, sourceElement) {
     if (selectedCardId) return;
@@ -341,7 +500,7 @@ export default function ConversationStage({ briefing = FALLBACK_BRIEFING }) {
 
           <TipButton isOpen={isTipOpen} setIsOpen={setIsTipOpen} theme={theme} />
           <div className="relative z-10">
-            <PhoneFrame scenario={scenario} theme={theme} showMessages={showMessages} showPhoneChrome={showPhoneChrome} notchStyle={notchStyle} readingMode={readingMode} message={message} setMessage={setMessage} isTipOpen={isTipOpen} setIsTipOpen={setIsTipOpen} />
+            <PhoneFrame scenario={scenario} theme={theme} showMessages={showMessages} showPhoneChrome={showPhoneChrome} notchStyle={notchStyle} readingMode={readingMode} message={message} setMessage={setMessage} isTipOpen={isTipOpen} setIsTipOpen={setIsTipOpen} messages={messages} isLoading={isLoading} onSubmit={handleMessageSubmit} isSending={isSending} />
             {expToast ? <ExpToast text={expToast} /> : null}
           </div>
           {showCards ? (
@@ -385,9 +544,9 @@ export default function ConversationStage({ briefing = FALLBACK_BRIEFING }) {
       ) : null}
 
       <div className="fixed bottom-6 left-6 z-20">
-        <Link href="/grading" className="brutal-border bg-mustard text-ink px-5 py-3 font-mono text-sm font-black uppercase tracking-[0.1em] shadow-shadow transition-transform hover:-translate-y-1 active:scale-95 flex items-center gap-2">
+        <button onClick={handleSaveSession} className="brutal-border bg-mustard text-ink px-5 py-3 font-mono text-sm font-black uppercase tracking-[0.1em] shadow-shadow transition-transform hover:-translate-y-1 active:scale-95 flex items-center gap-2">
           Finish & Grade
-        </Link>
+        </button>
       </div>
     </div>
   );
@@ -405,21 +564,21 @@ function ScenarioBackdrop({ scenario, theme }) {
   );
 }
 
-function PhoneFrame({ scenario, theme, showMessages, showPhoneChrome, notchStyle, readingMode, message, setMessage, isTipOpen, setIsTipOpen }) {
+function PhoneFrame({ scenario, theme, showMessages, showPhoneChrome, notchStyle, readingMode, message, setMessage, isTipOpen, setIsTipOpen, messages, isLoading, onSubmit, isSending }) {
   return (
     <div className="relative mx-auto max-w-[24.5rem] text-ink">
       <div className="pointer-events-none absolute bottom-[-1.75rem] left-[12%] right-[12%] h-4 rounded-full bg-ink/25 blur-xl" aria-hidden="true" />
       <PhoneSideButtons />
       <div className="relative rounded-[3rem] border border-[#3d3140] bg-gradient-to-br from-[#050505] via-[#242024] to-[#120f12] p-3 shadow-[inset_0_0_0_2px_#050505,inset_0_0_0_5px_#262226,inset_0_0_0_7px_rgba(255,255,255,0.08),0_0_0_1px_#1C1C1C,0_1.1rem_2.6rem_rgba(28,28,28,0.28)]">
-        <div className="min-h-[42rem] overflow-hidden rounded-[2.25rem] bg-[#fffefa] shadow-[inset_0_0_0_2px_rgba(255,255,255,0.9),inset_0_0_0_4px_rgba(0,0,0,0.08)]">
+        <div className="min-h-[42rem] flex flex-col overflow-hidden rounded-[2.25rem] bg-[#fffefa] shadow-[inset_0_0_0_2px_rgba(255,255,255,0.9),inset_0_0_0_4px_rgba(0,0,0,0.08)]">
           {showPhoneChrome ? <PhoneStatusBar notchStyle={notchStyle} /> : null}
           {isTipOpen ? <TipNotification setIsTipOpen={setIsTipOpen} /> : null}
-          <div className="relative mx-3 min-h-[31.75rem] overflow-hidden bg-[#fffefa] p-3">
-            {showMessages ? <MessageThread readingMode={readingMode} scenario={scenario} theme={theme} /> : <HiddenMessages />}
+          <div className="relative mx-3 flex-1 overflow-hidden bg-[#fffefa] p-3">
+            {showMessages ? <MessageThread readingMode={readingMode} scenario={scenario} theme={theme} messages={messages} isLoading={isLoading} /> : <HiddenMessages />}
           </div>
 
-          <div className="px-3 pb-4">
-            <Composer message={message} setMessage={setMessage} />
+          <div className="px-3 pb-4 shrink-0">
+            <Composer message={message} setMessage={setMessage} onSubmit={onSubmit} isSending={isSending} />
           </div>
         </div>
       </div>
@@ -503,20 +662,21 @@ function PhoneNotch({ notchStyle }) {
   return <span aria-label="Dynamic Island notch" className="absolute left-1/2 top-3 h-5 w-[4.6rem] -translate-x-1/2 rounded-full bg-[#0a0a0a] shadow-[inset_0_-1px_0_rgba(255,255,255,0.16),0_1px_2px_rgba(0,0,0,0.35)]">{lens}</span>;
 }
 
-function MessageThread({ readingMode, scenario, theme }) {
+function MessageThread({ readingMode, scenario, theme, messages, isLoading }) {
   return (
     <div className="flex min-h-[30.5rem] flex-col justify-end gap-4">
       <span className="sr-only">Reading mode: {readingMode}</span>
-      <MessageBubble
-        from="ai"
-        theme={theme}
-        text={`こんにちは。${scenario.jpTitle} の練習を始めましょう。`}
-        initialSubtext={`Konnichiwa. Let’s start this scene.`}
-      />
+      
+      {messages.map((msg) => (
+        <MessageBubble
+          key={msg.id}
+          from={msg.role === 'assistant' ? 'ai' : 'user'}
+          theme={theme}
+          text={msg.content}
+        />
+      ))}
 
-      <MessageBubble from="user" theme={theme} text="お願いします。" />
-
-      <MessageBubble from="ai" theme={theme} thinking />
+      {isLoading && <MessageBubble from="ai" theme={theme} thinking />}
     </div>
   );
 }
@@ -806,9 +966,15 @@ function ExpToast({ text }) {
   );
 }
 
-function Composer({ message, setMessage }) {
+function Composer({ message, setMessage, onSubmit, isSending }) {
   return (
-    <div className="relative mt-4 grid grid-cols-[1fr_auto] gap-3">
+    <form 
+      className="relative mt-4 grid grid-cols-[1fr_auto] gap-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit(message);
+      }}
+    >
       <div className="relative min-w-0 overflow-visible">
         <IoMicSharp className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-xl text-ink/55" aria-hidden="true" />
         <label className="sr-only" htmlFor="conversation-message">Message text</label>
@@ -818,17 +984,19 @@ function Composer({ message, setMessage }) {
           value={message}
           onChange={(event) => setMessage(event.target.value)}
           placeholder="Type your message in Japanese..."
-          className="brutal-border h-12 w-full min-w-0 bg-paper pl-12 pr-4 font-jp text-base font-black text-ink shadow-nav placeholder:font-sans placeholder:text-ink/45"
+          disabled={isSending}
+          className="brutal-border h-12 w-full min-w-0 bg-paper pl-12 pr-4 font-jp text-base font-black text-ink shadow-nav placeholder:font-sans placeholder:text-ink/45 disabled:opacity-50"
         />
       </div>
       <button
-        type="button"
+        type="submit"
         aria-label="Send message"
-        className="brutal-border grid h-12 w-12 place-items-center rounded-full bg-mustard text-xl text-ink shadow-nav transition-transform hover:-translate-y-0.5 active:scale-95"
+        disabled={isSending}
+        className="brutal-border grid h-12 w-12 place-items-center rounded-full bg-mustard text-xl text-ink shadow-nav transition-transform hover:-translate-y-0.5 active:scale-95 disabled:opacity-50 disabled:hover:translate-y-0"
       >
         <IoSendSharp />
       </button>
-    </div>
+    </form>
   );
 }
 

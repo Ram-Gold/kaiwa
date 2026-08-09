@@ -1,10 +1,13 @@
-import { personas } from '../../prompts/personas.js';
+import { ROLEPLAY_PERSONAS } from '../../prompts/personas.js';
 import Card from '../ui/Card.jsx';
 
 const accentClasses = {
   moss: 'bg-moss text-paper',
   shu: 'bg-shu text-paper',
   ai: 'bg-ai text-paper',
+  mustard: 'bg-mustard text-ink',
+  correction: 'bg-correction text-paper',
+  aizome: 'bg-aizome text-paper',
 };
 
 export default function PersonaGrid({ onSelectPersona }) {
@@ -15,7 +18,7 @@ export default function PersonaGrid({ onSelectPersona }) {
         <h2 className="mt-2 font-display text-4xl">Personas</h2>
       </div>
       <div className="grid gap-4 md:grid-cols-3">
-        {personas.map((persona) => (
+        {ROLEPLAY_PERSONAS.map((persona) => (
           <Card
             key={persona.id}
             as="button"

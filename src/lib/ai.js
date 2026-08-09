@@ -1,6 +1,33 @@
 import { getPersonaById } from '../prompts/personas.js';
 import { splitConversationHistory } from './contextManagement.js';
 
+/**
+ * ============================================================================
+ * AI ENGINEERING GUIDE: PIPELINE, PROMPT ASSEMBLY & RESPONSE PARSING
+ * ============================================================================
+ * 
+ * This module is the core AI Inference & Prompt Engineering engine of KAIwa.
+ * It is structured into 4 primary functional layers:
+ * 
+ * 1. PROMPT ASSEMBLY & CONTEXT INJECTION (`sendMessage`):
+ *    - Dynamically assembles System Prompt = Persona Prompt + User Bio Context + Memory Summaries.
+ *    - Applies token budget limits (`splitConversationHistory`) based on provider (Ollama vs Cloud).
+ *    - Appends mandatory JSON output contract rules (`SUGGESTIONS: [...]`).
+ * 
+ * 2. MODEL PAYLOAD GENERATION & PROVIDER ROUTING:
+ *    - Formats request body specifically for Ollama, OpenRouter, OpenAI, Gemini, or Claude.
+ *    - Proxies requests to local Next.js `/api/chat` serverless route (preventing CORS & leaking keys).
+ * 
+ * 3. STRUCTURED OUTPUT EXTRACTION (`parseModelReply`, `extractSuggestions`):
+ *    - Robust multi-regex fallback engine that isolates the Japanese assistant reply from the 
+ *      5 distractor options JSON payload.
+ * 
+ * 4. CONTEXT WINDOW SUMMARIZATION (`summarizeOldMessages`):
+ *    - Asynchronously condenses older conversation turns into a high-density summary when total 
+ *      tokens exceed the safety window.
+ * ============================================================================
+ */
+
 export class AIProviderError extends Error {
   constructor(code, userMessage, cause) {
     super(userMessage);
@@ -24,17 +51,33 @@ export function parseModelReply(rawContent) {
 
 export function extractSuggestions(content) {
   const source = String(content || '').trim();
-  const candidates = [
-    ...source.matchAll(/SUGGESTIONS:\s*(\[[\s\S]*?\])\s*$/gi),
-    ...source.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi),
-    ...source.matchAll(/(\{[\s\S]*"SUGGESTIONS"[\s\S]*?\})/gi),
-  ];
+  
+  // 1. Try matching SUGGESTIONS: [...] anywhere in text
+  const suggestionsMatch = source.match(/SUGGESTIONS:\s*(\[[\s\S]*?\])/i);
+  if (suggestionsMatch) {
+    const parsed = parseSuggestions(suggestionsMatch[1]);
+    if (parsed.length) return parsed;
+  }
 
-  for (const candidate of candidates.reverse()) {
-    const parsed = parseSuggestions(candidate[1]);
-    if (parsed.length) {
-      return parsed;
-    }
+  // 2. Try matching any JSON code block ```json ... ```
+  const codeBlocks = [...source.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)];
+  for (const block of codeBlocks.reverse()) {
+    const parsed = parseSuggestions(block[1]);
+    if (parsed.length) return parsed;
+  }
+
+  // 3. Try matching any JSON object containing "SUGGESTIONS" key
+  const jsonObjectMatch = source.match(/(\{[\s\S]*?"SUGGESTIONS"[\s\S]*?\})/i);
+  if (jsonObjectMatch) {
+    const parsed = parseSuggestions(jsonObjectMatch[1]);
+    if (parsed.length) return parsed;
+  }
+
+  // 4. Fallback: try to find ANY JSON array containing objects with a "text" key
+  const arrayMatch = source.match(/(\[\s*\{[\s\S]*?"text"[\s\S]*?\}\s*\])/i);
+  if (arrayMatch) {
+    const parsed = parseSuggestions(arrayMatch[1]);
+    if (parsed.length) return parsed;
   }
 
   return [];
@@ -42,9 +85,10 @@ export function extractSuggestions(content) {
 
 function stripSuggestions(content) {
   return String(content || '')
-    .replace(/\n?\s*SUGGESTIONS:\s*\[[\s\S]*?\]\s*$/gi, '')
-    .replace(/\n?\s*```(?:json)?\s*\{?\s*"SUGGESTIONS"[\s\S]*?```\s*$/gi, '')
-    .replace(/\n?\s*\{[\s\S]*"SUGGESTIONS"[\s\S]*?\}\s*$/gi, '');
+    .replace(/\n?\s*SUGGESTIONS:\s*\[[\s\S]*?\][\s\S]*$/gi, '')
+    .replace(/\n?\s*```(?:json)?\s*[\s\S]*?```[\s\S]*$/gi, '')
+    .replace(/\n?\s*\{[\s\S]*?"SUGGESTIONS"[\s\S]*?\}[\s\S]*$/gi, '')
+    .replace(/\n?\s*\[\s*\{[\s\S]*?"text"[\s\S]*?\}\s*\][\s\S]*$/gi, '');
 }
 
 function parseSuggestions(rawValue) {
@@ -55,19 +99,20 @@ function parseSuggestions(rawValue) {
       .replace(/```$/i, '')
       .trim();
     const parsed = JSON.parse(cleaned);
-    const suggestions = Array.isArray(parsed) ? parsed : parsed?.SUGGESTIONS;
+    const suggestions = Array.isArray(parsed) ? parsed : (parsed?.SUGGESTIONS || parsed?.suggestions || parsed?.choices || parsed?.options);
 
     if (!Array.isArray(suggestions)) {
       return [];
     }
 
     return suggestions
-      .filter((suggestion) => typeof suggestion === 'object' && suggestion !== null && typeof suggestion.text === 'string')
-      .map((suggestion) => ({
-        text: suggestion.text.trim(),
-        isCorrect: Boolean(suggestion.isCorrect),
-        explanation: typeof suggestion.explanation === 'string' ? suggestion.explanation.trim() : ''
-      }))
+      .filter((suggestion) => typeof suggestion === 'object' && suggestion !== null)
+      .map((suggestion) => {
+        const text = String(suggestion.text || suggestion.phrase || suggestion.japanese || suggestion.option || '').trim();
+        const isCorrect = suggestion.isCorrect !== undefined ? Boolean(suggestion.isCorrect) : (suggestion.correct !== undefined ? Boolean(suggestion.correct) : true);
+        const explanation = String(suggestion.explanation || suggestion.reason || '').trim();
+        return { text, isCorrect, explanation };
+      })
       .filter((suggestion) => suggestion.text.length > 0)
       .slice(0, 5);
   } catch {
@@ -157,19 +202,19 @@ async function summarizeOldMessages(provider, apiKey, messagesToSummarize) {
 }
 
 /**
- * Sends a message to the chosen AI provider.
- *
- * Provider-switching & Prompt-construction:
- * Tutoring quality relies on delivering the context and tone defined by the tutor's
- * persona (e.g. systemPrompt). Different LLM backends handle system prompts and
- * message payload schemas differently:
- * - Ollama/OpenAI/Gemini support standard chat completions with a system-role message.
- * - Claude requires system prompt at the top-level request body.
- *
- * Additionally, Ollama runs locally (no network dependency, zero cost, full privacy),
- * conforming to AGENTS.md requirements for local-first operations.
+ * AI ENGINEERING SPEC: `sendMessage`
+ * ============================================================================
+ * Primary entrypoint for multi-provider AI chat inference.
+ * 
+ * PROMPT ASSEMBLY STEPS:
+ * 1. Base Persona System Prompt (from `src/prompts/personas.js`).
+ * 2. Mandatory Response Format (instructs model to output 5 suggestion cards).
+ * 3. RAG / User Context Injection (Learner Persona & Bio from localStorage).
+ * 4. Automatic Context Window Truncation & Summarization (`splitConversationHistory`).
+ * 5. Provider Payload Construction (Ollama / OpenRouter / OpenAI / Gemini / Claude).
+ * ============================================================================
  */
-export async function sendMessage(provider, apiKey, personaInput, conversationHistory, userMessage) {
+export async function sendMessage(provider, apiKey, personaInput, conversationHistory, userMessage, openRouterModel = null) {
   const cleanKey = String(apiKey || '').trim();
   const cleanMessage = String(userMessage || '').trim();
   const persona =
@@ -197,11 +242,15 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
   try {
     const normalizedHistory = normalizeHistory(conversationHistory);
     
+    // --- STEP 1: CONTEXT WINDOW & TOKEN BUDGETING ---
     // Allocate token budget (Ollama has smaller context window by default)
     const tokenBudget = provider === 'ollama' ? 4000 : 6000;
     const { recent, olderToSummarize } = splitConversationHistory(normalizedHistory, tokenBudget);
     
-    let activeSystemPrompt = persona.systemPrompt;
+    // --- STEP 2: SYSTEM PROMPT & OUTPUT CONTRACT SPECIFICATION ---
+    let activeSystemPrompt = persona.systemPrompt + `\n\n[MANDATORY RESPONSE FORMAT]:
+At the very end of EVERY single message, you MUST append 5 response choices formatted as valid JSON:
+SUGGESTIONS: [{"text": "natural Japanese reply", "isCorrect": true, "explanation": "natural phrase"}, {"text": "unnatural reply 1", "isCorrect": false, "explanation": "wrong particle"}, {"text": "unnatural reply 2", "isCorrect": false, "explanation": "wrong verb tense"}, {"text": "unnatural reply 3", "isCorrect": false, "explanation": "too formal"}, {"text": "unnatural reply 4", "isCorrect": false, "explanation": "wrong nuance"}]`;
     
     // Inject user's About Me & Persona Context from settings
     if (typeof window !== 'undefined') {
@@ -256,7 +305,7 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
       };
     } else if (provider === 'openrouter') {
       payload = {
-        model: 'meta-llama/llama-3.3-70b-instruct:free',
+        model: openRouterModel || 'google/gemini-2.0-flash-lite-preview-02-05:free',
         messages: [
           { role: 'system', content: activeSystemPrompt },
           ...recent,
@@ -315,7 +364,7 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
 
   if (provider === 'ollama') {
     rawReply = data?.message?.content;
-  } else if (provider === 'openai' || provider === 'gemini') {
+  } else if (provider === 'openai' || provider === 'gemini' || provider === 'openrouter') {
     rawReply = data?.choices?.[0]?.message?.content;
   } else if (provider === 'claude') {
     rawReply = data?.content?.[0]?.text;
@@ -422,7 +471,7 @@ export async function translateMessage(provider, apiKey, japaneseText) {
 
   if (provider === 'ollama') {
     translation = data?.message?.content;
-  } else if (provider === 'openai' || provider === 'gemini') {
+  } else if (provider === 'openai' || provider === 'gemini' || provider === 'openrouter') {
     translation = data?.choices?.[0]?.message?.content;
   } else if (provider === 'claude') {
     translation = data?.content?.[0]?.text;
