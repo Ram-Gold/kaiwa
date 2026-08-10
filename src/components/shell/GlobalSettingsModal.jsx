@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { IoCheckmarkSharp, IoCloseSharp, IoTrashSharp, IoSearchSharp } from 'react-icons/io5';
 import { cn } from '../../lib/utils.js';
 import Button from '../ui/Button.jsx';
@@ -8,8 +8,10 @@ import { PROVIDER_STORAGE_KEY, API_KEYS_STORAGE_PREFIX, OPENROUTER_MODEL_STORAGE
 import CreditsSettingsView from '../settings/CreditsSettings.jsx';
 import ProfileSettings from '../settings/ProfileSettings.jsx';
 import SubscriptionSettings from '../settings/SubscriptionSettings.jsx';
+import DeveloperSettings from '../settings/DeveloperSettings.jsx';
 import { useAuth } from '../../lib/auth/AuthContext.jsx';
 import { saveUserSettings } from '../../lib/firebase/firestore.js';
+import { PERMISSIONS, hasPermission } from '../../lib/auth/rbac.js';
 
 const CHAT_NOTCH_STYLES = [
   { id: 'dynamic-island', label: 'Dynamic Island' },
@@ -44,7 +46,43 @@ const API_PROVIDERS = [
 
 export default function GlobalSettingsModal({ onClose }) {
   const [category, setCategory] = useState('Profile Settings');
-  
+  const { user, profile } = useAuth();
+  const [simulatedRole, setSimulatedRole] = useState(null);
+
+  useEffect(() => {
+    const storage = getLocalStorage();
+    if (storage) {
+      setSimulatedRole(storage.getItem?.('kaiwa.dev.simulated_role') || null);
+      const handleRoleChange = () => {
+        setSimulatedRole(storage.getItem?.('kaiwa.dev.simulated_role') || null);
+      };
+      window.addEventListener('kaiwa:role-changed', handleRoleChange);
+      return () => window.removeEventListener('kaiwa:role-changed', handleRoleChange);
+    }
+  }, []);
+
+  const realUserOrProfile = profile || user;
+  const isRealDeveloper = hasPermission(realUserOrProfile, PERMISSIONS.VIEW_DEVELOPER_OPTIONS);
+  const activeUserOrProfile = simulatedRole || realUserOrProfile;
+  const canAccessDevOptions = isRealDeveloper || hasPermission(activeUserOrProfile, PERMISSIONS.VIEW_DEVELOPER_OPTIONS);
+
+  const categories = useMemo(() => {
+    const base = [
+      'Profile Settings',
+      'Subscription',
+      'API Providers',
+      'Engines (TTS/STT)',
+      'About me & Privacy',
+      'Roleplay',
+      'Display',
+      'Credits',
+    ];
+    if (canAccessDevOptions) {
+      return [...base, 'Developer Options'];
+    }
+    return base;
+  }, [canAccessDevOptions]);
+
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Settings overlay">
       <div 
@@ -67,7 +105,7 @@ export default function GlobalSettingsModal({ onClose }) {
 
         <div className="mt-5 grid gap-4 md:grid-cols-[12rem_minmax(0,1fr)] overflow-y-auto flex-1 pb-4">
           <nav className="grid content-start gap-2 overflow-y-auto pr-2 pb-4" aria-label="Settings categories">
-            {['Profile Settings', 'Subscription', 'API Providers', 'Engines (TTS/STT)', 'About me & Privacy', 'Roleplay', 'Display', 'Credits'].map((item) => (
+            {categories.map((item) => (
               <button
                 key={item}
                 type="button"
@@ -76,6 +114,7 @@ export default function GlobalSettingsModal({ onClose }) {
                 className={cn(
                   'brutal-border bg-white px-3 py-3 text-left font-mono text-xs font-black uppercase tracking-[0.12em] shadow-nav transition-all hover:bg-mustard',
                   category === item && 'bg-mustard',
+                  item === 'Developer Options' && 'border-l-4 border-l-correction'
                 )}
               >
                 {item}
@@ -92,6 +131,18 @@ export default function GlobalSettingsModal({ onClose }) {
             {category === 'Roleplay' && <RoleplaySettings />}
             {category === 'Display' && <DisplaySettings />}
             {category === 'Credits' && <CreditsSettings />}
+            {category === 'Developer Options' && (
+              canAccessDevOptions ? (
+                <DeveloperSettings />
+              ) : (
+                <div className="brutal-border bg-white p-6 shadow-nav text-center font-mono space-y-2">
+                  <h3 className="text-xl font-black text-shu uppercase">Access Restricted</h3>
+                  <p className="text-xs font-bold text-ink/75">
+                    Developer Options are only accessible to accounts with the Developer role.
+                  </p>
+                </div>
+              )
+            )}
           </section>
         </div>
       </section>

@@ -11,11 +11,16 @@ import {
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../firebase/client';
 import { DEFAULT_PROFILE } from '../../components/settings/ProfileSettings';
+import { getUserRole, hasPermission, hasRole, isDeveloper } from './rbac';
 
 const AuthContext = createContext({
   user: null,
   profile: null,
   loading: true,
+  role: 'FREE',
+  hasPermission: () => false,
+  hasRole: () => false,
+  isDeveloper: false,
   signInWithGoogle: async () => {},
   registerWithEmail: async () => {},
   loginWithEmail: async () => {},
@@ -156,10 +161,19 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const activeRole = getUserRole(profile || user);
+  const checkPermission = (perm) => hasPermission(profile || user, perm);
+  const checkRole = (r) => hasRole(profile || user, r);
+  const checkIsDeveloper = isDeveloper(profile || user);
+
   const value = {
     user,
     profile,
     loading,
+    role: activeRole,
+    hasPermission: checkPermission,
+    hasRole: checkRole,
+    isDeveloper: checkIsDeveloper,
     signInWithGoogle,
     registerWithEmail,
     loginWithEmail,

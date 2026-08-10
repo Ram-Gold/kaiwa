@@ -144,6 +144,14 @@ textarea:focus-visible {
     will-change: transform, translate, scale;
   }
 
+  .animate-card-slide-up {
+    animation: card-slide-up 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .animate-card-slide-down {
+    animation: card-slide-down 280ms cubic-bezier(0.7, 0, 0.84, 0) both;
+  }
+
   .typing-dots span {
     animation: typing-dot 1s infinite;
     display: inline-block;
@@ -260,6 +268,32 @@ textarea:focus-visible {
   to {
     opacity: 0;
     transform: translateY(-4px);
+  }
+}
+
+@keyframes card-slide-up {
+  from {
+    opacity: 0;
+    translate: 0 16rem;
+    scale: 0.9;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+    scale: 1;
+  }
+}
+
+@keyframes card-slide-down {
+  from {
+    opacity: 1;
+    translate: 0 0;
+    scale: 1;
+  }
+  to {
+    opacity: 0;
+    translate: 0 16rem;
+    scale: 0.9;
   }
 }
 

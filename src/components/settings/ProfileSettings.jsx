@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { IoPersonSharp, IoAddSharp, IoTrashSharp, IoLinkSharp, IoCheckmarkSharp, IoSparklesSharp, IoLogoGithub, IoCameraSharp } from 'react-icons/io5';
 import { cn } from '../../lib/utils.js';
 import { useAuth } from '../../lib/auth/AuthContext';

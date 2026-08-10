@@ -167,9 +167,10 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [isExiting, setIsExiting] = useState(false);
   const [mistakesCount, setMistakesCount] = useState(0);
   const [totalTurns, setTotalTurns] = useState(0);
-  
+
   const { user } = useAuth();
   const router = useRouter();
   const hasInitiatedRef = useRef(false);
@@ -268,13 +269,13 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
       const reply = await sendMessage(
         provider,
         apiKey,
-        personaId || scenario.id || 'sensei', 
+        personaId || scenario.id || 'sensei',
         [],
         "(System: The user has just approached you. Please start the conversation according to your persona and generate 5 response options for the user.)",
         openRouterModel
       );
       setMessages([createMessage('assistant', reply.text)]);
-      
+
       if (reply.suggestions && reply.suggestions.length > 0) {
         const formattedCards = reply.suggestions.map((s, idx) => ({
           id: Math.random().toString(36).slice(2, 9),
@@ -319,20 +320,27 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     setMessage('');
-    
+
     const matchedCard = turnCardsRef.current.find(c => c.kana === cleanText || c.romaji === cleanText || c.phrase === cleanText);
     if (matchedCard && !matchedCard.isCorrect) {
       setMistakesCount((prev) => prev + 1);
     }
 
-    setAvailableCards([]); 
+    // Trigger exit animation for cards sliding down
+    setIsExiting(true);
+
+    // Delay clearing cards to let slide down animation finish
+    setTimeout(() => {
+      setAvailableCards([]);
+      setIsExiting(false);
+    }, 280);
 
     try {
       const historyForApi = newMessages.filter((m) => ['user', 'assistant'].includes(m.role));
       const reply = await sendMessage(provider, apiKey, personaId || scenario.id || 'sensei', historyForApi, cleanText, openRouterModel);
-      
+
       setMessages((current) => [...current, createMessage('assistant', reply.text)]);
-      
+
       if (reply.suggestions && reply.suggestions.length > 0) {
         const formattedCards = reply.suggestions.map((s, idx) => ({
           id: Math.random().toString(36).slice(2, 9),
@@ -509,7 +517,7 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
       <div className="relative mx-auto min-h-screen max-w-6xl px-4 py-3 sm:px-6 lg:py-4">
         <section
           className={cn(
-            'relative mx-auto mt-12 w-full max-w-[24.5rem] xl:mt-3 xl:-translate-y-2',
+            'relative mx-auto mt-16 w-full max-w-[24.5rem] xl:mt-12 xl:-translate-y-2',
             returnTransition?.cardId ? 'z-50' : 'z-0',
           )}
           aria-label={`${scenario.title} conversation`}
@@ -532,19 +540,21 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
             <PhoneFrame scenario={scenario} theme={theme} showMessages={showMessages} showPhoneChrome={showPhoneChrome} notchStyle={notchStyle} readingMode={readingMode} message={message} setMessage={setMessage} isTipOpen={isTipOpen} setIsTipOpen={setIsTipOpen} messages={messages} isLoading={isLoading} onSubmit={handleMessageSubmit} isSending={isSending} />
             {expToast ? <ExpToast text={expToast} /> : null}
           </div>
-          {showCards ? (
-            <CardHand
-              cards={availableCards}
-              onUseCard={useCard}
-              selectedCardId={selectedCardId}
-              returnTransition={returnTransition}
-              onReturnDestinationReady={handleReturnDestinationReady}
-              onReturnFlightComplete={completeReturnHandoff}
-              theme={theme}
-            />
-          ) : null}
         </section>
       </div>
+
+      {showCards ? (
+        <CardHand
+          cards={availableCards}
+          onUseCard={useCard}
+          selectedCardId={selectedCardId}
+          returnTransition={returnTransition}
+          onReturnDestinationReady={handleReturnDestinationReady}
+          onReturnFlightComplete={completeReturnHandoff}
+          theme={theme}
+          isExiting={isExiting}
+        />
+      ) : null}
 
       {recitationCard ? (
         <button
@@ -606,7 +616,7 @@ function PhoneFrame({ scenario, theme, showMessages, showPhoneChrome, notchStyle
             {showMessages ? <MessageThread readingMode={readingMode} scenario={scenario} theme={theme} messages={messages} isLoading={isLoading} /> : <HiddenMessages />}
           </div>
 
-          <div className="px-3 pb-4 shrink-0">
+          <div className="px-3 pb-12 shrink-0">
             <Composer message={message} setMessage={setMessage} onSubmit={onSubmit} isSending={isSending} />
           </div>
         </div>
@@ -711,7 +721,7 @@ function MessageThread({ readingMode, scenario, theme, messages, isLoading }) {
   return (
     <div className="flex min-h-full flex-col justify-end gap-3 pb-1">
       <span className="sr-only">Reading mode: {readingMode}</span>
-      
+
       {messages.map((msg) => {
         if (msg.role === 'error' || msg.role === 'system') {
           return <SystemNoticeMessage key={msg.id} text={msg.content} />;
@@ -1020,7 +1030,7 @@ function ExpToast({ text }) {
 
 function Composer({ message, setMessage, onSubmit, isSending }) {
   return (
-    <form 
+    <form
       className="relative mt-4 grid grid-cols-[1fr_auto] gap-3"
       onSubmit={(e) => {
         e.preventDefault();
@@ -1052,23 +1062,18 @@ function Composer({ message, setMessage, onSubmit, isSending }) {
   );
 }
 
-function CardHand({ cards, onUseCard, selectedCardId, returnTransition, onReturnDestinationReady, onReturnFlightComplete, theme }) {
+function CardHand({ cards, onUseCard, selectedCardId, returnTransition, onReturnDestinationReady, onReturnFlightComplete, theme, isExiting }) {
   const isReturningToHand = Boolean(returnTransition?.cardId);
 
   if (cards.length === 0) {
-    return (
-      <div className="absolute -bottom-20 left-1/2 z-30 w-72 -translate-x-1/2 rotate-[-2deg] brutal-border bg-paper p-4 text-center shadow-shadow">
-        <p className="font-display text-2xl leading-none">All cards used</p>
-        <p className="mt-2 text-sm font-bold">New suggestions will arrive after the next response.</p>
-      </div>
-    );
+    return null;
   }
 
   return (
     <div
       data-returning={isReturningToHand ? 'true' : 'false'}
       className={cn(
-        'pointer-events-none absolute -bottom-52 left-1/2 h-64 w-[38rem] max-w-[130vw] -translate-x-1/2',
+        'pointer-events-none fixed bottom-0 left-1/2 h-80 w-[46rem] max-w-[100vw] -translate-x-1/2 [clip-path:inset(-100vh_-100vw_0px_-100vw)]',
         isReturningToHand ? 'z-50' : 'z-30',
         !isReturningToHand && 'group/hand',
       )}
@@ -1089,13 +1094,14 @@ function CardHand({ cards, onUseCard, selectedCardId, returnTransition, onReturn
           onUseCard={onUseCard}
           theme={theme}
           total={Math.min(cards.length, 5)}
+          isExiting={isExiting}
         />
       ))}
     </div>
   );
 }
 
-function PhraseCard({ card, index, isSelected, isReturnDestination, returnPhase, isReturningToHand, returnTransition, onReturnDestinationReady, onReturnFlightComplete, onUseCard, theme, total }) {
+function PhraseCard({ card, index, isSelected, isReturnDestination, returnPhase, isReturningToHand, returnTransition, onReturnDestinationReady, onReturnFlightComplete, onUseCard, theme, total, isExiting }) {
   const slotRef = useRef(null);
   const cardRef = useRef(null);
   const offset = index - (total - 1) / 2;
@@ -1149,13 +1155,15 @@ function PhraseCard({ card, index, isSelected, isReturnDestination, returnPhase,
     <div
       ref={slotRef}
       className={cn(
-        'absolute left-1/2 top-0 [transform:var(--rest-transform)] transition-transform duration-300 ease-out',
+        'absolute left-1/2 top-16 [transform:var(--rest-transform)] transition-transform duration-300 ease-out',
+        isExiting ? 'animate-card-slide-down' : 'animate-card-slide-up',
         !isReturningToHand && 'group-hover/hand:[transform:var(--spread-transform)] group-hover/hand:duration-500',
         isReturnDestination && returnPhase === 'returning' && 'animate-card-return-settle',
       )}
       style={{
         '--rest-transform': `translateX(calc(-50% + ${translateX}rem)) rotate(${rotation}deg)`,
         '--spread-transform': `translateX(calc(-50% + ${spreadX}rem)) translateY(${spreadY}rem) rotate(${spreadRotation}deg)`,
+        animationDelay: `${index * 60}ms`,
       }}
     >
       <button

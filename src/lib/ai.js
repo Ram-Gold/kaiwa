@@ -227,6 +227,31 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
   const persona =
     typeof personaInput === 'string' ? getPersonaById(personaInput) : personaInput;
 
+  let isMockAi = false;
+  if (typeof window !== 'undefined') {
+    try {
+      const savedFlags = window.localStorage.getItem('kaiwa.dev.debug_flags');
+      if (savedFlags) {
+        const parsed = JSON.parse(savedFlags);
+        isMockAi = !!parsed.mockAi;
+      }
+    } catch (e) {}
+  }
+
+  if (isMockAi) {
+    await new Promise(r => setTimeout(r, 600)); // simulate network delay
+    return {
+      text: "これはモックのAI返信です。(Mock AI Response Mode is active. API has been bypassed.)",
+      suggestions: [
+        { text: "分かりました", isCorrect: true, explanation: "I understand." },
+        { text: "はい、そうですね", isCorrect: true, explanation: "Yes, that's right." },
+        { text: "だめです", isCorrect: false, explanation: "Too blunt." },
+        { text: "なんでやねん", isCorrect: false, explanation: "Kansai dialect." },
+        { text: "設定を変更する", isCorrect: false, explanation: "Change settings to disable mock mode." }
+      ]
+    };
+  }
+
   if (provider !== 'ollama' && !cleanKey) {
     throw new AIProviderError(
       'missing_key',
@@ -406,6 +431,22 @@ SUGGESTIONS: [{"text": "short user reply", "isCorrect": true, "explanation": "na
 export async function translateMessage(provider, apiKey, japaneseText) {
   const cleanKey = String(apiKey || '').trim();
   const cleanText = String(japaneseText || '').trim();
+
+  let isMockAi = false;
+  if (typeof window !== 'undefined') {
+    try {
+      const savedFlags = window.localStorage.getItem('kaiwa.dev.debug_flags');
+      if (savedFlags) {
+        const parsed = JSON.parse(savedFlags);
+        isMockAi = !!parsed.mockAi;
+      }
+    } catch (e) {}
+  }
+
+  if (isMockAi) {
+    await new Promise(r => setTimeout(r, 400));
+    return "[Mock Translation]: " + cleanText;
+  }
 
   if (provider !== 'ollama' && !cleanKey) {
     throw new AIProviderError(

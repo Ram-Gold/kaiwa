@@ -4,6 +4,7 @@ import { IoCheckmarkCircleSharp, IoCloseCircleSharp } from 'react-icons/io5';
 
 export default function RoleplayCards({ disabled, onPickSuggestion, suggestions, onMistake }) {
   const [selectedIdx, setSelectedIdx] = useState(null);
+  const [isExiting, setIsExiting] = useState(false);
 
   if (!suggestions || suggestions.length === 0) {
     return null;
@@ -22,15 +23,20 @@ export default function RoleplayCards({ disabled, onPickSuggestion, suggestions,
       if (onMistake) onMistake(suggestion);
     }
 
-    // Small delay to let the user see the red/green feedback before it sends
+    // After brief feedback, trigger exit animation (cards slide down) before submitting
+    setTimeout(() => {
+      setIsExiting(true);
+    }, 700);
+
     setTimeout(() => {
       onPickSuggestion(textToSubmit);
       setSelectedIdx(null);
-    }, 1200);
+      setIsExiting(false);
+    }, 1100);
   };
 
   return (
-    <div className="flex flex-col gap-3 w-full">
+    <div className="flex flex-col gap-3 w-full overflow-hidden p-1">
       {suggestions.map((suggestion, index) => {
         const text = isStringArray ? suggestion : suggestion.text;
         const isSelected = selectedIdx === index;
@@ -51,10 +57,17 @@ export default function RoleplayCards({ disabled, onPickSuggestion, suggestions,
         }
 
         return (
-          <div key={`${text}-${index}`} className="flex flex-col w-full animate-message-in">
+          <div
+            key={`${text}-${index}`}
+            className={cn(
+              "flex flex-col w-full transition-all duration-300",
+              isExiting ? "animate-card-slide-down" : "animate-card-slide-up"
+            )}
+            style={{ animationDelay: `${index * 50}ms` }}
+          >
              <button
               type="button"
-              disabled={disabled || selectedIdx !== null}
+              disabled={disabled || selectedIdx !== null || isExiting}
               onClick={() => handlePick(suggestion, index)}
               className={cn(
                 "brutal-border w-full px-4 py-3 text-left font-mono text-sm font-black shadow-shadow transition-all hover:translate-x-boxShadowX hover:translate-y-boxShadowY hover:shadow-none disabled:cursor-not-allowed",
