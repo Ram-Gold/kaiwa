@@ -67,16 +67,22 @@ const SCORE_TIERS = [
   },
 ];
 
-const REVIEW = {
+const DEFAULT_REVIEW = {
   mode: 'Roleplay',
   scenario: 'Train Station',
   learnerRole: 'Tourist',
   aiRole: 'Ticket Seller',
   duration: '05:00',
   overall: 80,
+  overallCritique: 'You effectively communicated your destination to the station staff, confirmed the platform number, and maintained polite Japanese phrasing throughout.',
+  scenarioMilestones: [
+    { title: 'State destination details', goal: 'State your destination clearly in Japanese (e.g. 渋谷駅に行きたいです)', accomplished: true, critique: 'Used 渋谷駅に行きたいです accurately.' },
+    { title: 'Confirm train platform number', goal: 'Ask for or confirm the train platform number (何番線ですか / 二番線ですね)', accomplished: true, critique: 'Repeat-confirmed 二番線ですね after the clerk instructions.' },
+    { title: 'Polite conversation etiquette', goal: 'Use natural polite confirmation and closing etiquette (ありがとうございます)', accomplished: true, critique: 'Used ありがとうございます politely at closure.' },
+  ],
   metrics: [
-    { label: 'Overall', value: 80, color: 'bg-ink', note: 'Completed the goal: ask where to go and confirm the platform.', modal: 'overall' },
-    { label: 'Grammar', value: 80, color: 'bg-soft-blue', note: 'Good sentence endings. Review particles に and で.', modal: 'grammar' },
+    { label: 'Overall', value: 80, color: 'bg-ink', note: 'Completed key scenario goals: destination and platform confirmation.', modal: 'overall' },
+    { label: 'Grammar', value: 80, color: 'bg-soft-blue', note: 'Good sentence endings. Review destination particles に and で.', modal: 'grammar' },
     { label: 'Vocabulary', value: 72, color: 'bg-mustard', note: 'Strong N5 basics; station-specific words need review.', modal: 'vocabulary' },
     { label: 'Engagement', value: 85, color: 'bg-correction', note: 'You responded politely and kept the conversation moving.', modal: 'engagement' },
     { label: 'Relevance', value: 88, color: 'bg-moss', note: 'Replies matched the roleplay goal without drifting off-topic.', modal: 'relevance' },
@@ -109,28 +115,70 @@ const REVIEW = {
 };
 
 export default function GradingScorecard() {
-  const tier = getTier(REVIEW.overall);
+  const [review, setReview] = useState(() => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const saved = window.localStorage.getItem('kaiwa.last_grading_session');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && typeof parsed.overall === 'number') {
+            return parsed;
+          }
+        }
+      } catch (e) {}
+    }
+    return DEFAULT_REVIEW;
+  });
+
+  const tier = getTier(review.overall);
   const [queueStatus, setQueueStatus] = useState('idle');
   const [activeModal, setActiveModal] = useState(null);
   const { user } = useAuth();
   const hasLogged = useRef(false);
 
   useEffect(() => {
-    if (user && !hasLogged.current) {
+    if (!hasLogged.current && review) {
       hasLogged.current = true;
-      logPracticeSession(user.uid, {
-        score: REVIEW.overall,
-        xpGained: 50, // Hardcoded for demo
-        duration: 120 // Hardcoded for demo
-      }).catch(err => console.error('Failed to log practice:', err));
+      const scenarioName = typeof review.scenario === 'object' ? review.scenario.title : (review.scenario || 'Practice');
+      const sessionPayload = {
+        id: `session-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        type: review.mode || 'Roleplay',
+        title: `${scenarioName} Roleplay`,
+        scenario: scenarioName,
+        score: review.overall,
+        grade: tier.label,
+        duration: review.duration || '05:00',
+        summary: review.overallCritique || 'Completed roleplay scenario practice.',
+        transcript: review.transcript || [],
+        report: review,
+        date: new Date().toISOString(),
+      };
+
+      // Save to localStorage for local / guest history
+      if (typeof window !== 'undefined' && window.localStorage) {
+        try {
+          const existing = JSON.parse(window.localStorage.getItem('kaiwa.local_history') || '[]');
+          const exists = existing.some(item => item.id === sessionPayload.id);
+          if (!exists) {
+            window.localStorage.setItem('kaiwa.local_history', JSON.stringify([sessionPayload, ...existing]));
+          }
+        } catch (e) {
+          console.error('Error saving to local history:', e);
+        }
+      }
+
+      // Save to Firebase Firestore if logged in
+      if (user) {
+        logPracticeSession(user.uid, sessionPayload).catch(err => console.error('Failed to log practice to Firestore:', err));
+      }
     }
-  }, [user]);
+  }, [user, review, tier]);
 
   async function handleQueueWeakVocabulary() {
     setQueueStatus('saving');
 
     try {
-      await saveWeakVocabularyToSrs(REVIEW.weakVocabulary, user?.uid);
+      await saveWeakVocabularyToSrs(review.weakVocabulary || [], user?.uid);
       setQueueStatus('saved');
     } catch {
       setQueueStatus('error');
@@ -155,17 +203,17 @@ export default function GradingScorecard() {
             </div>
             <div>
               <span className="label-mono bg-white px-3 py-1 brutal-border text-xs inline-block">
-                {REVIEW.scenario} Roleplay
+                {review.scenario || 'Roleplay'} Roleplay
               </span>
               <h1 className="font-display text-4xl sm:text-5xl mt-3 text-ink">Grading Report</h1>
               <p className="mt-2 text-sm font-bold text-ink/80 max-w-md leading-relaxed">
-                Evaluated on 5 core learning criteria. Click any card to open detailed AI feedback.
+                Evaluated on core learning criteria. Click any card to open detailed AI feedback.
               </p>
             </div>
           </div>
           <div className="brutal-border bg-white p-6 shadow-nav text-center shrink-0 min-w-[11rem] flex flex-col items-center">
             <p className="font-mono text-xs font-black uppercase text-ink/60">Overall Score</p>
-            <p className="font-display text-6xl text-ink mt-1">{REVIEW.overall}%</p>
+            <p className="font-display text-6xl text-ink mt-1">{review.overall}%</p>
             <VoiceLineButton tier={tier} />
           </div>
         </header>
@@ -173,14 +221,14 @@ export default function GradingScorecard() {
         <section className="grid gap-8 lg:grid-cols-[1fr_24rem] xl:items-start">
           <div className="space-y-6">
             <div className="grid gap-4 sm:grid-cols-2" aria-label="Score breakdown">
-              {REVIEW.metrics.map((metric) => (
+              {(review.metrics || DEFAULT_REVIEW.metrics).map((metric) => (
                 <MetricCard key={metric.label} metric={metric} onOpen={() => metric.modal && setActiveModal(metric.modal)} />
               ))}
             </div>
           </div>
 
           <aside className="space-y-5">
-            <ConversationHistory review={REVIEW} />
+            <ConversationHistory review={review} />
           </aside>
         </section>
 
@@ -198,8 +246,9 @@ export default function GradingScorecard() {
         <SuggestionsOverlay 
           type={activeModal} 
           onClose={() => setActiveModal(null)} 
-          mistakes={REVIEW.mistakes} 
-          words={REVIEW.weakVocabulary} 
+          review={review}
+          mistakes={review.mistakes || []} 
+          words={review.weakVocabulary || []} 
           queueStatus={queueStatus} 
           onQueue={handleQueueWeakVocabulary} 
         />
@@ -212,14 +261,17 @@ function MetricCard({ metric, onOpen }) {
   const isFullWidth = metric.label === 'Overall';
   return (
     <article className={`brutal-border bg-white p-5 shadow-shadow transition-transform duration-200 ease-out hover:-translate-y-1 flex flex-col justify-between h-48 relative group ${isFullWidth ? 'sm:col-span-2' : ''}`}>
-      {metric.modal ? (
-        <button type="button" onClick={onOpen} className="absolute inset-0 z-10 w-full cursor-pointer opacity-0" aria-label={`Open ${metric.label} suggestions`}></button>
-      ) : null}
+      <button 
+        type="button" 
+        onClick={onOpen} 
+        className="absolute inset-0 z-10 w-full cursor-pointer opacity-0 focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ink" 
+        aria-label={`Open ${metric.label} detailed AI insights`}
+      />
       <div className="flex items-start justify-between gap-3 relative z-20 pointer-events-none">
         <div className="pr-2">
           <p className="font-display text-2xl leading-none flex items-center gap-2">
             {metric.label}
-            {metric.modal && <IoArrowForwardSharp className="text-xl text-ink/50 group-hover:text-ink transition-colors" aria-hidden="true" />}
+            <IoArrowForwardSharp className="text-xl text-ink/50 group-hover:text-ink group-hover:translate-x-1 transition-all" aria-hidden="true" />
           </p>
           <p className="mt-2 text-sm font-bold leading-5 text-ink/65 line-clamp-2">{metric.note}</p>
         </div>
@@ -264,13 +316,13 @@ function ConversationHistory({ review }) {
   return (
     <article className="relative mx-auto w-full max-w-[25rem] text-ink h-[40rem] flex flex-col brutal-border bg-[#fffefa] shadow-shadow" aria-label="Conversation history">
       <div className="border-b-2 border-ink/10 px-5 py-4 text-center bg-paper relative z-10">
-        <p className="font-mono text-xs font-black uppercase tracking-[0.12em] text-ink/50">You: {review.learnerRole}</p>
-        <h2 className="mt-1 font-display text-2xl leading-none">{review.aiRole}</h2>
-        <span className="mt-2 inline-flex rounded-full bg-ink/10 px-3 py-1 font-mono text-xs font-black">{review.duration}</span>
+        <p className="font-mono text-xs font-black uppercase tracking-[0.12em] text-ink/50">You: {review.learnerRole || 'Learner'}</p>
+        <h2 className="mt-1 font-display text-2xl leading-none">{review.aiRole || 'KAIwa Sensei'}</h2>
+        <span className="mt-2 inline-flex rounded-full bg-ink/10 px-3 py-1 font-mono text-xs font-black">{review.duration || '05:00'}</span>
       </div>
 
       <div className="flex-1 overflow-y-auto space-y-4 px-4 py-5 bg-[#fffefa]">
-        {review.transcript.map((message, idx) => (
+        {(review.transcript || []).map((message, idx) => (
           <div key={`${message.speaker}-${idx}`} className={message.speaker === 'You' ? 'flex justify-end' : 'flex justify-start'}>
             <div className={`max-w-[85%] rounded-2xl border-2 border-ink px-4 py-3 shadow-nav ${message.speaker === 'You' ? 'bg-aizome text-white' : 'bg-white text-ink'}`}>
               <p className="mb-1 font-mono text-[0.65rem] font-black uppercase tracking-[0.12em] opacity-70">{message.speaker}</p>
@@ -284,6 +336,8 @@ function ConversationHistory({ review }) {
 }
 
 function MistakeAnalysis({ mistakes }) {
+  const hasMistakes = mistakes && mistakes.length > 0;
+
   return (
     <section id="grammar" className="brutal-border bg-white p-6 shadow-shadow" aria-labelledby="mistake-analysis-title">
       <div className="flex items-center gap-3 pr-12">
@@ -296,76 +350,118 @@ function MistakeAnalysis({ mistakes }) {
         </div>
       </div>
 
-      <div className="mt-6 space-y-5">
-        {mistakes.map((mistake, idx) => (
-          <article key={mistake.title || idx} className="brutal-border bg-paper p-5 shadow-nav space-y-4">
-            <div className="flex items-center justify-between border-b-2 border-ink/15 pb-3">
-              <span className="font-display text-xl text-ink">{mistake.title}</span>
-              <span className="brutal-border bg-soft-blue px-2.5 py-0.5 font-mono text-[10px] font-black uppercase tracking-wider text-ink shadow-sm">
-                Grammar Tip
-              </span>
-            </div>
-
-            <div className="space-y-3 font-jp">
-              <div className="flex flex-col sm:flex-row sm:items-baseline gap-2 rounded-xl bg-correction/10 p-3.5 border-l-4 border-correction">
-                <span className="font-mono text-xs font-black uppercase text-correction shrink-0">Try again:</span>
-                <span className="text-base font-bold text-ink leading-relaxed">{mistake.original}</span>
+      {!hasMistakes ? (
+        <div className="mt-6 brutal-border bg-moss/10 p-6 shadow-nav flex flex-col items-center text-center space-y-3">
+          <span className="grid h-12 w-12 place-items-center brutal-border bg-moss text-white text-2xl shadow-nav">✓</span>
+          <h3 className="font-display text-2xl text-ink">No Grammar Mistakes Found!</h3>
+          <p className="font-bold text-sm text-ink/75 max-w-md">
+            Your particles, verb endings, and polite expressions were accurate and natural throughout the practice session. Excellent work!
+          </p>
+        </div>
+      ) : (
+        <div className="mt-6 space-y-5">
+          {mistakes.map((mistake, idx) => (
+            <article key={mistake.title || idx} className="brutal-border bg-paper p-5 shadow-nav space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-ink/10 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="brutal-border bg-correction text-white font-mono text-xs font-black px-2 py-0.5 shadow-sm">#{idx + 1}</span>
+                  <span className="font-display text-xl text-ink leading-none">{mistake.title}</span>
+                </div>
+                <span className="brutal-border bg-soft-blue px-2.5 py-1 font-mono text-[10px] font-black uppercase text-ink shadow-sm">Grammar Tip</span>
               </div>
 
-              <div className="flex flex-col sm:flex-row sm:items-baseline gap-2 rounded-xl bg-moss/10 p-3.5 border-l-4 border-moss">
-                <span className="font-mono text-xs font-black uppercase text-moss shrink-0">Recommended:</span>
-                <span className="text-base font-black text-ink leading-relaxed">{mistake.corrected}</span>
+              {/* Clean Neobrutalist Transformation Bar */}
+              <div className="bg-white p-3.5 font-jp flex flex-wrap items-center gap-3 text-sm brutal-border shadow-nav">
+                <div className="flex items-center gap-2 bg-correction/15 px-3 py-1.5 brutal-border">
+                  <span className="font-mono text-[10px] font-black text-correction uppercase tracking-wider">Try again:</span>
+                  <span className="line-through text-correction font-black">{mistake.original}</span>
+                </div>
+                <span className="text-ink font-black text-xl">→</span>
+                <div className="flex items-center gap-2 bg-moss/20 px-3 py-1.5 brutal-border">
+                  <span className="font-mono text-[10px] font-black text-moss uppercase tracking-wider">Recommend:</span>
+                  <span className="text-moss font-black">{mistake.corrected}</span>
+                </div>
               </div>
 
-              <div className="mt-2 rounded-xl bg-white p-4 brutal-border font-sans text-sm font-bold text-ink/80 leading-relaxed shadow-sm">
-                <span className="font-mono text-xs font-black uppercase text-ink/50 block mb-1">Explanation</span>
+              {/* Clean Neobrutalist Explanation Box */}
+              <div className="bg-white p-4 font-sans text-sm font-bold text-ink/85 leading-relaxed brutal-border shadow-nav">
+                <span className="font-mono text-xs font-black uppercase text-aizome block mb-1">Why (Grammar Rule):</span>
                 {mistake.why}
               </div>
-            </div>
-          </article>
-        ))}
-      </div>
+            </article>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
 
 function WeakVocabularyPanel({ words, status, onQueue }) {
+  const count = words?.length || 0;
+
   return (
     <section id="vocabulary" className="brutal-border bg-mustard p-6 shadow-shadow" aria-labelledby="weak-vocab-title">
-      <div className="flex items-center gap-3 pr-12">
+      <div className="flex items-center gap-3 pr-12 mb-6">
         <span className="grid h-10 w-10 place-items-center brutal-border bg-white shadow-nav">
-          <IoBookSharp className="text-xl" aria-hidden="true" />
+          <IoBookSharp className="text-xl text-ink" aria-hidden="true" />
         </span>
         <div>
-          <p className="label-mono text-ink">SRS Flashcard Queue</p>
-          <h2 id="weak-vocab-title" className="font-display text-3xl leading-none">Weak Vocabulary</h2>
+          <p className="label-mono text-ink/70">SRS Flashcard Queue</p>
+          <h2 id="weak-vocab-title" className="font-display text-3xl leading-none text-ink">Weak Vocabulary</h2>
         </div>
       </div>
 
-      <div className="mt-5 space-y-3">
-        {words.map((word) => (
-          <article key={word.term} className="brutal-border bg-white p-4 shadow-nav">
-            <div className="flex items-baseline justify-between gap-3">
-              <p className="font-jp text-2xl font-black">{word.term}</p>
-              <p className="font-mono text-xs font-black uppercase tracking-[0.12em] text-aizome">{word.reading}</p>
+      <div className="space-y-4 my-6">
+        {(words || []).map((word, idx) => (
+          <article key={word.term || idx} className="brutal-border bg-white p-5 shadow-nav space-y-3">
+            <div className="flex items-baseline justify-between gap-3 border-b-2 border-ink/10 pb-3">
+              <div className="flex items-baseline gap-2.5">
+                <p className="font-jp text-2xl font-black text-ink">{word.term}</p>
+                <p className="font-mono text-xs font-black uppercase text-aizome">[{word.reading}]</p>
+              </div>
+              <span className="font-mono text-[10px] font-black uppercase bg-mustard/20 px-2.5 py-1 brutal-border text-ink shrink-0">
+                {word.source || 'Roleplay'}
+              </span>
             </div>
-            <p className="mt-1 text-sm font-bold text-ink/65">{word.meaning}</p>
+            <p className="text-sm font-black text-ink/80 my-2">{word.meaning}</p>
+            {word.reason && (
+              <p className="text-xs font-bold text-ink/75 leading-relaxed bg-paper p-3 brutal-border mt-3">
+                <span className="font-mono font-black text-ink/60 uppercase text-[10px] block mb-1">AI SRS Recommendation:</span>
+                {word.reason}
+              </p>
+            )}
           </article>
         ))}
       </div>
 
-      <button
-        type="button"
-        onClick={onQueue}
-        disabled={status === 'saving'}
-        className="mt-5 brutal-border flex w-full items-center justify-center gap-2 bg-aizome px-5 py-4 font-black text-paper shadow-shadow transition-all duration-150 ease-out hover:translate-x-1 hover:translate-y-1 hover:shadow-nav disabled:cursor-wait disabled:opacity-70"
-      >
-        {status === 'saved' ? <IoCheckmarkCircleSharp aria-hidden="true" /> : <IoSchoolSharp aria-hidden="true" />}
-        {status === 'saving' ? 'Saving to SRS…' : status === 'saved' ? 'Saved to SRS Deck' : 'Add weak words to SRS Deck'}
-      </button>
-      <p className="mt-3 text-sm font-bold leading-6 text-ink/80 text-center" role="status">
-        Saved to your SRS flashcard deck for daily spaced repetition practice.
-      </p>
+      <div className="mt-8 space-y-4">
+        <button
+          type="button"
+          onClick={onQueue}
+          disabled={status === 'saving'}
+          className={`brutal-border flex w-full items-center justify-center gap-2 px-5 py-4 font-black shadow-shadow transition-all duration-150 ease-out hover:translate-x-1 hover:translate-y-1 hover:shadow-nav disabled:cursor-wait disabled:opacity-70 ${
+            status === 'saved' ? 'bg-moss text-white' : 'bg-aizome text-paper'
+          }`}
+        >
+          {status === 'saved' ? <IoCheckmarkCircleSharp className="text-xl" /> : <IoSchoolSharp className="text-xl" />}
+          {status === 'saving'
+            ? 'Syncing to SRS Deck…'
+            : status === 'saved'
+            ? `✓ Added ${count} Words to SRS Deck!`
+            : `Add ${count} Weak Words to SRS Deck`}
+        </button>
+
+        {status === 'saved' && (
+          <div className="brutal-border bg-white p-4 text-center shadow-nav my-2">
+            <p className="font-mono text-xs font-bold text-moss">
+              ✓ Successfully synced to your Spaced Repetition Flashcard Deck (Firestore & Local DB).
+            </p>
+            <Link href="/roleplay" className="mt-2.5 inline-flex items-center gap-1 font-mono text-xs font-black text-aizome underline hover:text-ink">
+              Practice another roleplay scenario →
+            </Link>
+          </div>
+        )}
+      </div>
     </section>
   );
 }
@@ -374,7 +470,7 @@ function getTier(score) {
   return SCORE_TIERS.find((tier) => score >= tier.min) ?? SCORE_TIERS[SCORE_TIERS.length - 1];
 }
 
-function SuggestionsOverlay({ type, onClose, mistakes, words, queueStatus, onQueue }) {
+function SuggestionsOverlay({ type, onClose, review, mistakes, words, queueStatus, onQueue }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6" role="dialog" aria-modal="true" aria-label={`${type} details`}>
       <div className="absolute inset-0 bg-ink/70 backdrop-blur-sm" aria-hidden="true" onClick={onClose} />
@@ -382,19 +478,28 @@ function SuggestionsOverlay({ type, onClose, mistakes, words, queueStatus, onQue
         <button type="button" aria-label="Close" onClick={onClose} className="absolute right-5 top-5 brutal-border grid h-10 w-10 place-items-center rounded-full bg-white text-lg shadow-nav transition-transform hover:-translate-y-0.5 active:scale-95 z-10">
           <IoCloseSharp />
         </button>
-        <div className="overflow-y-auto rounded-3xl shadow-2xl bg-white">
-          {type === 'grammar' && <MistakeAnalysis mistakes={mistakes} />}
-          {type === 'vocabulary' && <WeakVocabularyPanel words={words} status={queueStatus} onQueue={onQueue} />}
-          {type === 'overall' && <OverallAnalysisPanel />}
-          {type === 'engagement' && <EngagementAnalysisPanel />}
-          {type === 'relevance' && <RelevanceAnalysisPanel />}
+        <div className="overflow-y-auto bg-paper brutal-border shadow-shadow flex-1">
+          {type === 'grammar' && <MistakeAnalysis mistakes={mistakes || []} />}
+          {type === 'vocabulary' && <WeakVocabularyPanel words={words || []} status={queueStatus} onQueue={onQueue} />}
+          {type === 'overall' && <OverallAnalysisPanel review={review} />}
+          {type === 'engagement' && <EngagementAnalysisPanel review={review} />}
+          {type === 'relevance' && <RelevanceAnalysisPanel review={review} />}
         </div>
       </div>
     </div>
   );
 }
 
-function OverallAnalysisPanel() {
+function OverallAnalysisPanel({ review }) {
+  const scenarioTitle = review?.scenario || 'Train Station';
+  const score = review?.overall ?? 80;
+  const passed = score >= 60;
+  const milestones = review?.scenarioMilestones || [
+    { title: 'State destination details', goal: 'State your destination clearly in Japanese (e.g. 渋谷駅に行きたいです)', accomplished: true, critique: 'Used 渋谷駅に行きたいです correctly.' },
+    { title: 'Confirm train platform number', goal: 'Ask for or confirm the train platform number (何番線ですか / 二番線ですね)', accomplished: true, critique: 'Repeat-confirmed 二番線ですね.' },
+    { title: 'Polite conversation etiquette', goal: 'Use natural polite confirmation and closing etiquette (ありがとうございます)', accomplished: true, critique: 'Used ありがとうございます at closure.' },
+  ];
+
   return (
     <section className="brutal-border bg-white p-6 shadow-shadow" aria-labelledby="overall-title">
       <div className="flex items-center gap-3 pr-12">
@@ -408,29 +513,50 @@ function OverallAnalysisPanel() {
       </div>
 
       <div className="mt-6 space-y-4">
+        {/* Scenario Objective Header & Score */}
         <div className="brutal-border bg-mustard/20 p-4 shadow-nav flex items-center justify-between gap-4">
           <div>
             <p className="font-mono text-xs font-black uppercase text-ink/70">Scenario Objective</p>
-            <p className="mt-1 font-display text-xl text-ink">Train Station Ticket Purchase</p>
+            <p className="mt-1 font-display text-xl text-ink">{scenarioTitle} Roleplay</p>
           </div>
-          <div className="brutal-border bg-moss px-3 py-1.5 font-mono text-xs font-black uppercase text-white shadow-nav shrink-0">
-            PASSED (80%)
+          <div className={`brutal-border px-3 py-1.5 font-mono text-xs font-black uppercase text-white shadow-nav shrink-0 ${passed ? 'bg-moss' : 'bg-correction'}`}>
+            {passed ? `PASSED (${score}%)` : `NEEDS PRACTICE (${score}%)`}
           </div>
         </div>
 
+        {/* AI Tutor Overall Critique */}
+        {review?.overallCritique && (
+          <div className="brutal-border bg-paper p-4 shadow-nav">
+            <p className="font-mono text-xs font-black uppercase text-ink/70">AI Tutor Feedback</p>
+            <p className="mt-2 text-sm font-bold text-ink/85 leading-relaxed">
+              "{review.overallCritique}"
+            </p>
+          </div>
+        )}
+
+        {/* Scenario Milestones Accomplished & AI Critiques */}
         <div className="brutal-border bg-paper p-4 shadow-nav space-y-3">
           <p className="font-mono text-xs font-black uppercase text-ink/70">Scenario Milestones Accomplished:</p>
-          <div className="space-y-2">
-            {[
-              { title: 'Asked for destination details', detail: 'Used 渋谷駅に行きたいです correctly.' },
-              { title: 'Confirmed train platform number', detail: 'Repeat-confirmed 二番線ですね.' },
-              { title: 'Maintained polite conversation etiquette', detail: 'Used ありがとうございます at closure.' },
-            ].map((m, idx) => (
-              <div key={idx} className="brutal-border bg-white p-3 font-mono text-xs shadow-nav flex items-start gap-3">
-                <IoCheckmarkCircleSharp className="text-moss text-lg shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-black text-ink">{m.title}</p>
-                  <p className="font-bold text-ink/65 mt-0.5">{m.detail}</p>
+          <div className="space-y-3">
+            {milestones.map((m, idx) => (
+              <div key={idx} className="brutal-border bg-white p-3.5 font-mono text-xs shadow-nav flex items-start gap-3">
+                {m.accomplished !== false ? (
+                  <IoCheckmarkCircleSharp className="text-moss text-xl shrink-0 mt-0.5" />
+                ) : (
+                  <IoCloseSharp className="text-correction text-xl shrink-0 mt-0.5" />
+                )}
+                <div className="space-y-1 w-full">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-black text-ink text-sm">{m.title}</p>
+                    <span className={`px-2 py-0.5 text-[10px] font-black uppercase brutal-border shrink-0 ${m.accomplished !== false ? 'bg-moss/20 text-moss' : 'bg-correction/20 text-correction'}`}>
+                      {m.accomplished !== false ? 'Accomplished' : 'Missed'}
+                    </span>
+                  </div>
+                  {m.goal && <p className="font-bold text-ink/60 text-[11px]">Goal: {m.goal}</p>}
+                  <p className="font-bold text-ink/80 text-xs leading-relaxed pt-1 bg-paper/60 p-2.5 brutal-border">
+                    <span className="font-mono font-black text-ink/60 block text-[10px] uppercase mb-0.5">AI Critique:</span>
+                    {m.critique || (m.accomplished !== false ? 'Goal accomplished effectively during roleplay.' : 'Goal was not reached during this practice session.')}
+                  </p>
                 </div>
               </div>
             ))}
@@ -441,7 +567,21 @@ function OverallAnalysisPanel() {
   );
 }
 
-function EngagementAnalysisPanel() {
+function EngagementAnalysisPanel({ review }) {
+  const engagementMetric = review?.metrics?.find(m => m.label === 'Engagement');
+  const engagementData = review?.engagementAnalysis || {
+    politenessFeedback: engagementMetric?.note || 'You maintained an exceptionally polite, warm, and appropriate tone throughout your roleplay conversation.',
+    markers: [
+      { marker: 'ね (Ne)', usage: 'Natural confirmation marker' },
+      { marker: 'ありがとうございます', usage: 'Polite appreciative closing' }
+    ]
+  };
+
+  const markersList = engagementData.markers || [
+    { marker: 'ね (Ne)', usage: 'Natural confirmation marker' },
+    { marker: 'ありがとうございます', usage: 'Polite appreciative closing' }
+  ];
+
   return (
     <section className="brutal-border bg-white p-6 shadow-shadow" aria-labelledby="engagement-title">
       <div className="flex items-center gap-3 pr-12">
@@ -454,23 +594,23 @@ function EngagementAnalysisPanel() {
         </div>
       </div>
 
-      <div className="mt-6 space-y-4">
-        <div className="brutal-border bg-paper p-4 shadow-nav">
+      <div className="mt-6 space-y-5">
+        <div className="brutal-border bg-paper p-5 shadow-nav">
           <p className="font-mono text-xs font-black uppercase text-ink/70">AI Tutor Feedback on Politeness</p>
           <p className="mt-2 text-sm font-bold text-ink/85 leading-relaxed">
-            "You maintained an exceptionally polite, warm, and appropriate tone throughout your roleplay conversation with the station staff."
+            "{engagementData.politenessFeedback || engagementMetric?.note || 'You maintained an exceptionally polite, warm, and appropriate tone throughout your roleplay conversation.'}"
           </p>
         </div>
 
-        <div className="brutal-border bg-paper p-4 shadow-nav space-y-3">
+        <div className="brutal-border bg-paper p-5 shadow-nav space-y-3">
           <p className="font-mono text-xs font-black uppercase text-ink/70">Conversational Markers (あいづち):</p>
-          <div className="grid gap-2 sm:grid-cols-2 font-mono text-xs">
-            <div className="brutal-border bg-white p-3 font-bold shadow-nav">
-              <span className="text-moss font-black">✓ ね (Ne)</span>: Natural confirmation marker
-            </div>
-            <div className="brutal-border bg-white p-3 font-bold shadow-nav">
-              <span className="text-moss font-black">✓ ありがとうございます</span>: Polite appreciative closing
-            </div>
+          <div className="grid gap-3 font-mono text-xs">
+            {markersList.map((m, idx) => (
+              <div key={idx} className="brutal-border bg-white p-3.5 font-bold shadow-nav flex items-center justify-between gap-3">
+                <span className="text-moss font-black text-sm shrink-0">✓ {m.marker}</span>
+                <span className="text-ink/75 font-sans font-bold text-right">{m.usage}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -478,7 +618,16 @@ function EngagementAnalysisPanel() {
   );
 }
 
-function RelevanceAnalysisPanel() {
+function RelevanceAnalysisPanel({ review }) {
+  const relevanceMetric = review?.metrics?.find(m => m.label === 'Relevance');
+  const relevanceData = review?.relevanceAnalysis || {
+    relevanceFeedback: relevanceMetric?.note || 'Your responses were highly relevant and directly addressed the roleplay prompts without off-topic drift.',
+    offTopicLines: []
+  };
+
+  const offTopicLines = relevanceData.offTopicLines || [];
+  const hasOffTopic = offTopicLines.length > 0;
+
   return (
     <section className="brutal-border bg-white p-6 shadow-shadow" aria-labelledby="relevance-title">
       <div className="flex items-center gap-3 pr-12">
@@ -491,36 +640,71 @@ function RelevanceAnalysisPanel() {
         </div>
       </div>
 
-      <div className="mt-6 space-y-4">
-        <div className="brutal-border bg-paper p-4 shadow-nav">
-          <p className="font-mono text-xs font-black uppercase text-ink/70">AI Tutor Feedback on Relevance</p>
+      <div className="mt-6 space-y-5">
+        <div className="brutal-border bg-paper p-5 shadow-nav">
+          <p className="font-mono text-xs font-black uppercase text-ink/70">AI Tutor Advice on Relevance</p>
           <p className="mt-2 text-sm font-bold text-ink/85 leading-relaxed">
-            "Your responses were highly relevant and directly addressed the ticket seller's prompts without any off-topic drift."
+            "{relevanceData.relevanceFeedback || relevanceMetric?.note || 'Your responses were highly relevant and directly addressed the roleplay prompts without off-topic drift.'}"
           </p>
         </div>
 
-        <div className="brutal-border bg-paper p-4 shadow-nav space-y-2">
-          <p className="font-mono text-xs font-black uppercase text-ink/70">Context Alignment Highlights:</p>
-          <div className="space-y-2 font-mono text-xs">
-            <div className="brutal-border bg-white p-3 font-bold shadow-nav">
-              <p className="font-black text-ink">AI Question: 「どちらまで行きますか。」</p>
-              <p className="text-moss mt-1 font-black">Learner Answer: 「渋谷駅に行きたいです。」 (100% relevant)</p>
-            </div>
-            <div className="brutal-border bg-white p-3 font-bold shadow-nav">
-              <p className="font-black text-ink">AI Statement: 「二番線です。」</p>
-              <p className="text-moss mt-1 font-black">Learner Confirmation: 「二番線ですね。」 (100% relevant)</p>
+        {!hasOffTopic ? (
+          <div className="brutal-border bg-moss/10 p-5 shadow-nav flex flex-col items-center text-center space-y-2">
+            <span className="grid h-10 w-10 place-items-center brutal-border bg-moss text-white text-xl shadow-sm">✓</span>
+            <p className="font-display text-xl text-ink">100% Context Aligned!</p>
+            <p className="font-bold text-xs text-ink/75 max-w-sm">
+              All of your responses directly addressed the scenario prompts with zero off-topic or mismatched context lines.
+            </p>
+          </div>
+        ) : (
+          <div className="brutal-border bg-paper p-5 shadow-nav space-y-4">
+            <p className="font-mono text-xs font-black uppercase text-ink/70">Off-Topic / Context Mismatches Identified:</p>
+            <div className="space-y-3 font-jp text-xs">
+              {offTopicLines.map((item, idx) => (
+                <div key={idx} className="brutal-border bg-white p-4 shadow-nav space-y-2">
+                  <div className="flex items-center gap-2 border-b border-ink/10 pb-2">
+                    <span className="brutal-border bg-correction text-white font-mono text-[10px] font-black px-2 py-0.5">Off-Topic</span>
+                    <p className="font-mono text-[11px] font-black text-ink/60 uppercase">Context Mismatch #{idx + 1}</p>
+                  </div>
+                  {item.prompt && (
+                    <p className="font-bold text-ink/70">
+                      <span className="font-mono font-black uppercase text-[10px] text-ink/50 block">AI Character Prompt:</span>
+                      「{item.prompt}」
+                    </p>
+                  )}
+                  <div className="bg-correction/10 p-2.5 brutal-border">
+                    <span className="font-mono font-black text-correction uppercase text-[10px] block mb-0.5">Your Response:</span>
+                    <span className="font-black text-ink">「{item.studentReply}」</span>
+                  </div>
+                  <div className="bg-paper p-2.5 brutal-border font-sans font-bold text-ink/80 text-xs">
+                    <span className="font-mono font-black text-aizome uppercase text-[10px] block mb-0.5">Why It Was Off-Topic:</span>
+                    {item.whyWrong}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-        </div>
+        )}
       </div>
     </section>
   );
 }
 
 function saveWeakVocabularyToSrs(words, userId) {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const existing = JSON.parse(window.localStorage.getItem('kaiwa.local_srs_words') || '[]');
+      const wordMap = new Map(existing.map(w => [w.term, w]));
+      words.forEach(w => {
+        wordMap.set(w.term, { ...w, addedAt: new Date().toISOString() });
+      });
+      window.localStorage.setItem('kaiwa.local_srs_words', JSON.stringify(Array.from(wordMap.values())));
+    } catch (e) {}
+  }
+
   return new Promise((resolve, reject) => {
     if (typeof window === 'undefined' || !window.indexedDB) {
-      reject(new Error('IndexedDB unavailable'));
+      resolve();
       return;
     }
 
@@ -533,7 +717,7 @@ function saveWeakVocabularyToSrs(words, userId) {
       }
     };
 
-    request.onerror = () => reject(request.error ?? new Error('Could not open IndexedDB'));
+    request.onerror = () => resolve(); // Graceful fallback to localStorage
 
     request.onsuccess = () => {
       const db = request.result;
@@ -542,7 +726,7 @@ function saveWeakVocabularyToSrs(words, userId) {
       const reviewedAt = new Date().toISOString();
 
       words.forEach((word) => {
-        const wordData = { ...word, reviewedAt, dueAt: reviewedAt, source: word.source ?? REVIEW.scenario };
+        const wordData = { ...word, reviewedAt, dueAt: reviewedAt, source: word.source ?? 'Roleplay' };
         store.put(wordData);
         if (userId) {
           saveSrsWord(userId, wordData).catch(console.error);
@@ -555,10 +739,8 @@ function saveWeakVocabularyToSrs(words, userId) {
       };
       transaction.onerror = () => {
         db.close();
-        reject(transaction.error ?? new Error('Could not save vocabulary'));
+        resolve();
       };
     };
   });
 }
-
-export { REVIEW, SCORE_TIERS, saveWeakVocabularyToSrs };

@@ -9,7 +9,7 @@ import JapaneseText, { DictionaryPopover } from './JapaneseText.jsx';
 import { speakJapanese } from '../../lib/speech.js';
 import { translateJapaneseToEnglish } from '../../lib/translation.js';
 import { toRomajiText } from '../../lib/japaneseText.js';
-import { sendMessage } from '../../lib/ai.js';
+import { sendMessage, evaluateSession, evaluateSessionFallback } from '../../lib/ai.js';
 import { loadStoredProvider, loadStoredApiKeys, loadStoredOpenRouterModel } from '../dashboard/AiProviderSettingsCard.jsx';
 import { useAuth } from '../../lib/auth/AuthContext';
 import { saveChatSession } from '../../lib/firebase/firestore.js';
@@ -376,27 +376,64 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
     }
   }
 
+  const [isGrading, setIsGrading] = useState(false);
+
   async function handleSaveSession() {
-    if (!user) {
-      router.push('/grading');
-      return;
-    }
-    const scorePercentage = totalTurns > 0 ? Math.max(0, 100 - Math.round((mistakesCount / totalTurns) * 100)) : 100;
-    const isPassing = scorePercentage >= 60;
+    if (isGrading) return;
+    setIsGrading(true);
+
     try {
-      await saveChatSession(user.uid, {
-        personaId: scenario.id || scenario.title,
-        startedAt: new Date().toISOString(),
-        completed: true,
-        score: scorePercentage,
-        mistakes: mistakesCount,
-        passed: isPassing,
-        messages: messages.map(m => ({ role: m.role, content: m.content })),
-      });
-    } catch (error) {
-      console.error('Failed to save session:', error);
+      const validMessages = messages.filter(m => m.role !== 'error');
+      const sessionData = {
+        mode: scenario.kind === 'roleplay' ? 'Roleplay' : 'Lesson',
+        scenario: scenario,
+        learnerRole: 'Tourist',
+        aiRole: personaId === 'idol' ? 'Idol' : 'KAIwa Sensei',
+        duration: '05:00',
+        messages: validMessages.map(m => ({
+          speaker: m.role === 'user' ? 'You' : (personaId === 'idol' ? 'Idol' : 'KAIwa'),
+          text: m.content
+        })),
+      };
+
+      let evaluatedReport = null;
+      try {
+        evaluatedReport = await evaluateSession(provider, apiKey, sessionData, openRouterModel);
+      } catch (e) {
+        console.warn('Failed to evaluate session:', e);
+        evaluatedReport = evaluateSessionFallback(sessionData);
+      }
+
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem('kaiwa.last_grading_session', JSON.stringify(evaluatedReport));
+      }
+
+      if (user) {
+        try {
+          await saveChatSession(user.uid, {
+            personaId: scenario.id || scenario.title,
+            startedAt: new Date().toISOString(),
+            completed: true,
+            score: evaluatedReport.overall,
+            mistakes: mistakesCount,
+            passed: evaluatedReport.overall >= 60,
+            messages: validMessages.map(m => ({ role: m.role, content: m.content })),
+            report: evaluatedReport,
+          });
+        } catch (error) {
+          console.error('Failed to save session to Firestore:', error);
+        }
+      }
+
+      router.push('/grading');
+    } catch (err) {
+      console.error('Error during handleSaveSession:', err);
+      if (typeof window !== 'undefined') {
+        window.location.href = '/grading';
+      }
+    } finally {
+      setIsGrading(false);
     }
-    router.push('/grading');
   }
 
   function useCard(card, sourceElement) {
@@ -583,8 +620,19 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
       ) : null}
 
       <div className="fixed bottom-6 left-6 z-20">
-        <button onClick={handleSaveSession} className="brutal-border bg-mustard text-ink px-5 py-3 font-mono text-sm font-black uppercase tracking-[0.1em] shadow-shadow transition-transform hover:-translate-y-1 active:scale-95 flex items-center gap-2">
-          Finish & Grade
+        <button 
+          onClick={handleSaveSession} 
+          disabled={isGrading}
+          className="brutal-border bg-mustard text-ink px-5 py-3 font-mono text-sm font-black uppercase tracking-[0.1em] shadow-shadow transition-transform hover:-translate-y-1 active:scale-95 flex items-center gap-2 disabled:opacity-70 disabled:cursor-wait"
+        >
+          {isGrading ? (
+            <>
+              <span className="h-3.5 w-3.5 rounded-full border-2 border-ink border-t-transparent animate-spin" />
+              Grading Session…
+            </>
+          ) : (
+            'Finish & Grade'
+          )}
         </button>
       </div>
     </div>
