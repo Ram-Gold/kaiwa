@@ -6,6 +6,10 @@ import GlobalSettingsModal from '../shell/GlobalSettingsModal';
 import DeveloperSettings from './DeveloperSettings';
 import { useAuth } from '../../lib/auth/AuthContext';
 
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+}));
+
 // Mock useAuth
 vi.mock('../../lib/auth/AuthContext', async () => {
   const actual = await vi.importActual('../../lib/auth/AuthContext');
@@ -18,7 +22,7 @@ vi.mock('../../lib/auth/AuthContext', async () => {
 describe('Developer Access & Settings', () => {
   beforeEach(() => {
     cleanup();
-    if (typeof window !== 'undefined' && window.localStorage) {
+    if (typeof window !== 'undefined' && window.localStorage?.clear) {
       window.localStorage.clear();
     }
   });
@@ -89,5 +93,20 @@ describe('Developer Access & Settings', () => {
     render(<GlobalSettingsModal onClose={() => {}} />);
 
     expect(screen.getByText('Developer Options')).toBeDefined();
+  });
+
+  it('renders Edit & Override Grading Score Mode flag', () => {
+    vi.mocked(useAuth).mockReturnValue({
+      user: { uid: 'dev-uid', email: 'ram@kaiwa.dev' },
+      profile: { userType: 'DEVELOPER', tier: 'DEVELOPER' },
+      role: 'DEVELOPER',
+      hasPermission: () => true,
+      isDeveloper: true,
+    });
+
+    render(<DeveloperSettings />);
+
+    expect(screen.getByText('Edit & Override Grading Score Mode')).toBeDefined();
+    expect(screen.getByText('Verbose AI Prompt & Response Logging')).toBeDefined();
   });
 });

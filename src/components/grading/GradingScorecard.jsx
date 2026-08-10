@@ -23,6 +23,48 @@ import Badge from '../ui/Badge.jsx';
 import Button from '../ui/Button.jsx';
 import { useAuth } from '../../lib/auth/AuthContext.jsx';
 import { saveSrsWord, logPracticeSession } from '../../lib/firebase/firestore.js';
+import confetti from 'canvas-confetti';
+import { cn } from '../../lib/utils.js';
+
+function fireFulfillingConfetti() {
+  const count = 160;
+  const defaults = {
+    origin: { y: 0.65 },
+    zIndex: 9999,
+  };
+
+  function fire(particleRatio, opts) {
+    confetti({
+      ...defaults,
+      ...opts,
+      particleCount: Math.floor(count * particleRatio)
+    });
+  }
+
+  // Multi-angle festive pop (lasts ~1.5 seconds)
+  fire(0.25, {
+    spread: 35,
+    startVelocity: 50,
+    origin: { x: 0.25, y: 0.65 }
+  });
+  fire(0.2, {
+    spread: 60,
+    origin: { x: 0.5, y: 0.65 }
+  });
+  fire(0.35, {
+    spread: 90,
+    decay: 0.91,
+    scalar: 0.9,
+    origin: { x: 0.75, y: 0.65 }
+  });
+  fire(0.2, {
+    spread: 120,
+    startVelocity: 35,
+    decay: 0.92,
+    scalar: 1.1,
+    origin: { x: 0.5, y: 0.55 }
+  });
+}
 
 const SCORE_TIERS = [
   {
@@ -114,6 +156,48 @@ const DEFAULT_REVIEW = {
   ],
 };
 
+function DevScoreOverrideBar({ currentScore, onOverrideScore }) {
+  return (
+    <div className="brutal-border bg-mustard p-4 shadow-shadow mb-6 flex flex-col md:flex-row items-center justify-between gap-4">
+      <div className="flex items-center gap-2">
+        <span className="brutal-border bg-ink text-mustard px-2.5 py-1 font-mono text-xs font-black uppercase shadow-nav">
+          🛠️ DEV OVERRIDE ACTIVE
+        </span>
+        <p className="font-mono text-xs font-bold text-ink">
+          Edit final score (disregarding AI output):
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {[10, 30, 50, 60, 75, 85, 95].map((val) => (
+          <button
+            key={val}
+            type="button"
+            onClick={() => onOverrideScore(val)}
+            className={cn(
+              'brutal-border px-3 py-1 font-mono text-xs font-black shadow-nav transition-all hover:bg-ink hover:text-paper',
+              currentScore === val ? 'bg-ink text-paper' : 'bg-white text-ink'
+            )}
+          >
+            {val}%
+          </button>
+        ))}
+        <div className="flex items-center gap-2 font-mono text-xs font-black brutal-border bg-white px-3 py-1 shadow-nav">
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="5"
+            value={currentScore}
+            onChange={(e) => onOverrideScore(Number(e.target.value))}
+            className="w-24 accent-ink cursor-pointer"
+          />
+          <span>{currentScore}%</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function GradingScorecard() {
   const [review, setReview] = useState(() => {
     if (typeof window !== 'undefined' && window.localStorage) {
@@ -133,8 +217,60 @@ export default function GradingScorecard() {
   const tier = getTier(review.overall);
   const [queueStatus, setQueueStatus] = useState('idle');
   const [activeModal, setActiveModal] = useState(null);
+  const [isOverrideMode, setIsOverrideMode] = useState(false);
   const { user } = useAuth();
   const hasLogged = useRef(false);
+  const confettiFiredRef = useRef(false);
+
+  useEffect(() => {
+    function checkOverrideFlag() {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        try {
+          const flags = JSON.parse(window.localStorage.getItem('kaiwa.dev.debug_flags') || '{}');
+          setIsOverrideMode(!!flags.overrideGradingScore);
+        } catch (e) {}
+      }
+    }
+    checkOverrideFlag();
+    window.addEventListener('kaiwa:debug-flags-updated', checkOverrideFlag);
+    return () => window.removeEventListener('kaiwa:debug-flags-updated', checkOverrideFlag);
+  }, []);
+
+  function handleOverrideScore(newScore) {
+    const val = Math.max(0, Math.min(100, Math.round(newScore)));
+    setReview((prev) => {
+      const updatedMetrics = (prev.metrics || []).map((m) =>
+        m.label === 'Overall' ? { ...m, value: val } : m
+      );
+      const updated = {
+        ...prev,
+        overall: val,
+        metrics: updatedMetrics,
+      };
+
+      if (typeof window !== 'undefined' && window.localStorage) {
+        try {
+          window.localStorage.setItem('kaiwa.last_grading_session', JSON.stringify(updated));
+        } catch (e) {}
+      }
+
+      return updated;
+    });
+
+    if (val >= 70) {
+      fireFulfillingConfetti();
+    }
+  }
+
+  useEffect(() => {
+    if (!confettiFiredRef.current && (review?.overall ?? 0) >= 70) {
+      confettiFiredRef.current = true;
+      const timer = setTimeout(() => {
+        fireFulfillingConfetti();
+      }, 450);
+      return () => clearTimeout(timer);
+    }
+  }, [review]);
 
   useEffect(() => {
     if (!hasLogged.current && review) {
@@ -191,6 +327,9 @@ export default function GradingScorecard() {
       <div className="pointer-events-none absolute bottom-[-10rem] right-[-8rem] h-96 w-96 rounded-full bg-soft-blue/40 blur-3xl" aria-hidden="true" />
 
       <div className="relative mx-auto max-w-7xl">
+        {isOverrideMode && (
+          <DevScoreOverrideBar currentScore={review.overall} onOverrideScore={handleOverrideScore} />
+        )}
         <header className="brutal-border bg-mustard p-8 shadow-shadow flex flex-col md:flex-row items-center justify-between gap-6 mb-10">
           <div className="flex flex-col sm:flex-row items-center gap-6 text-center sm:text-left">
             <div className="relative shrink-0">

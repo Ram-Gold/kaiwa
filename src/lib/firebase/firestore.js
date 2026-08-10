@@ -216,9 +216,11 @@ export async function getAllUsers(currentUid) {
  */
 export async function logPracticeSession(uid, sessionData) {
   if (!uid) return;
-  const historyRef = collection(db, 'users', uid, 'history');
-  const docRef = await addDoc(historyRef, {
+  const docId = sessionData.id || `session-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const docRef = doc(db, 'users', uid, 'history', docId);
+  await setDoc(docRef, {
     ...sessionData,
+    id: docId,
     timestamp: serverTimestamp(),
   });
 
@@ -233,7 +235,7 @@ export async function logPracticeSession(uid, sessionData) {
     updatedAt: serverTimestamp(),
   }, { merge: true });
 
-  return docRef.id;
+  return docId;
 }
 
 export async function addPracticeHistory(userId, historyData) {
@@ -264,7 +266,7 @@ export async function fetchPracticeHistory(uid, limitCount = 10, startAfterDoc =
   }
 
   const snapshot = await getDocs(q);
-  const docs = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+  const docs = snapshot.docs.map((docSnap) => ({ ...docSnap.data(), id: docSnap.id }));
   const lastDoc = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
 
   return { docs, lastDoc };

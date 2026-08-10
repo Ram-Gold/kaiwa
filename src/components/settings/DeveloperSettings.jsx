@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   IoCodeSlashSharp,
   IoKeySharp,
@@ -11,6 +12,7 @@ import {
   IoTerminalSharp,
   IoShieldCheckmarkSharp,
   IoPersonSharp,
+  IoSchoolSharp,
 } from 'react-icons/io5';
 import { useAuth } from '../../lib/auth/AuthContext.jsx';
 import { ROLES, PERMISSIONS, getUserRole, ROLE_PERMISSIONS } from '../../lib/auth/rbac.js';
@@ -18,13 +20,101 @@ import { PROVIDER_STORAGE_KEY } from '../dashboard/AiProviderSettingsCard.jsx';
 import Button from '../ui/Button.jsx';
 import { cn } from '../../lib/utils.js';
 
+export function generateSimulatedReport(targetScore = 80, scenarioTitle = 'Idol Cheki') {
+  const score = Math.max(0, Math.min(100, Math.round(targetScore)));
+  let critique = '';
+
+  if (score >= 90) {
+    critique = `Outstanding Japanese skills in the ${scenarioTitle} scenario! Flawless grammar, natural aizuchi, and complete milestone mastery.`;
+  } else if (score >= 80) {
+    critique = `Great roleplay session in the ${scenarioTitle} scenario! Excellent sentence structure and natural polite phrasing throughout.`;
+  } else if (score >= 70) {
+    critique = `Good roleplay performance! You maintained polite conversation and completed the primary goals for ${scenarioTitle}.`;
+  } else if (score >= 50) {
+    critique = `Satisfactory effort in ${scenarioTitle}. You sustained a basic conversation, but made several particle and grammar errors.`;
+  } else {
+    critique = `The conversation for ${scenarioTitle} ended too early or contained major off-topic/grammar issues. Please review your N5 basics and try again!`;
+  }
+
+  const passed = score >= 60;
+
+  return {
+    mode: 'Roleplay',
+    scenario: scenarioTitle,
+    learnerRole: 'Learner',
+    aiRole: scenarioTitle.includes('Idol') ? 'Idol' : 'KAIwa Sensei',
+    duration: '05:00',
+    overall: score,
+    overallCritique: critique,
+    scenarioMilestones: [
+      {
+        title: 'Initial Greeting & Tone',
+        goal: 'Greet appropriately and set scenario context.',
+        accomplished: score >= 40,
+        critique: score >= 40 ? 'Greeting was natural and polite.' : 'Greeting was missing or unnatural.',
+      },
+      {
+        title: 'Core Scenario Objective',
+        goal: `Express main objective for ${scenarioTitle}.`,
+        accomplished: score >= 60,
+        critique: score >= 60 ? 'Successfully communicated key scenario request.' : 'Failed to communicate primary request.',
+      },
+      {
+        title: 'Polite Closing Etiquette',
+        goal: 'Use proper polite closing phrases (ありがとうございます).',
+        accomplished: score >= 75,
+        critique: score >= 75 ? 'Polite closing etiquette maintained.' : 'Closing etiquette was informal or incomplete.',
+      },
+    ],
+    metrics: [
+      { label: 'Overall', value: score, color: 'bg-ink', note: critique, modal: 'overall' },
+      { label: 'Grammar', value: Math.min(100, Math.max(10, score + (score >= 60 ? 5 : -10))), color: 'bg-soft-blue', note: score >= 70 ? 'No grammar issues found.' : '2 grammar issue(s) found.', modal: 'grammar' },
+      { label: 'Vocabulary', value: Math.min(100, Math.max(10, score - 5)), color: 'bg-mustard', note: `${score >= 60 ? '3' : '5'} words to review.`, modal: 'vocabulary' },
+      { label: 'Engagement', value: Math.min(100, Math.max(10, score + 8)), color: 'bg-correction', note: 'Politeness and tone evaluated.', modal: 'engagement' },
+      { label: 'Relevance', value: Math.min(100, Math.max(10, score + (passed ? 10 : -15))), color: 'bg-moss', note: passed ? 'All replies on topic.' : 'Off-topic drift detected.', modal: 'relevance' },
+    ],
+    weakVocabulary: [
+      { term: 'ライブ', reading: 'らいぶ', meaning: 'live concert', source: `${scenarioTitle} roleplay`, reason: 'Key word for scenario practice.' },
+      { term: '応援', reading: 'おうえん', meaning: 'support / cheering', source: `${scenarioTitle} roleplay`, reason: 'Expressing fandom support.' },
+      { term: '最高', reading: 'さいこう', meaning: 'awesome / the best', source: `${scenarioTitle} roleplay`, reason: 'High frequency praise adjective.' },
+    ],
+    engagementAnalysis: {
+      politenessFeedback: score >= 60 ? 'Maintained warm, encouraging, and polite Japanese tone throughout.' : 'Tone was too informal or abrupt for this scenario.',
+      markers: [
+        { marker: 'ね', usage: 'Confirmation particle used appropriately.' },
+        { marker: 'はい', usage: 'Polite affirmation.' }
+      ]
+    },
+    relevanceAnalysis: {
+      relevanceFeedback: passed ? '100% context aligned with scenario objectives.' : 'Topic drifted or requested English.',
+      offTopicLines: passed ? [] : ['英語でヒントをください。']
+    },
+    mistakes: score >= 85 ? [] : [
+      {
+        title: 'Particle Choice',
+        original: `${scenarioTitle}で行きたいです。`,
+        corrected: `${scenarioTitle}に行きたいです。`,
+        why: 'Use に for direction/destination.',
+      }
+    ],
+    transcript: [
+      { speaker: 'KAIwa', text: `こんにちは！${scenarioTitle}の練習を始めましょう！` },
+      { speaker: 'You', text: '今日のライブ、本当に最高でした！応援しています！' },
+      { speaker: 'KAIwa', text: 'ありがとうございます！とても嬉しいです！' },
+    ],
+  };
+}
+
 export default function DeveloperSettings() {
+  const router = useRouter();
   const { user, profile } = useAuth();
   const currentRole = getUserRole(profile || user);
   const grantedPermissions = ROLE_PERMISSIONS[currentRole] || [];
 
-  // Local simulator state for testing different roles
+  // Local simulator state for testing different roles & grading
   const [simulatedRole, setSimulatedRole] = useState(currentRole);
+  const [simulatedScore, setSimulatedScore] = useState(80);
+  const [simulatedScenario, setSimulatedScenario] = useState('Idol Cheki');
   const [debugFlags, setDebugFlags] = useState({
     verboseLogs: false,
     mockAi: false,
@@ -33,6 +123,17 @@ export default function DeveloperSettings() {
   const [activeProvider, setActiveProvider] = useState('ollama');
   const [actionStatus, setActionStatus] = useState('');
   const [isUpdatingTier, setIsUpdatingTier] = useState(false);
+
+  function handleSimulateGrading(scoreToUse = simulatedScore) {
+    const report = generateSimulatedReport(scoreToUse, simulatedScenario);
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem('kaiwa.last_grading_session', JSON.stringify(report));
+    }
+    setActionStatus(`Simulating ${scoreToUse}% grading report for ${simulatedScenario}... Redirecting!`);
+    setTimeout(() => {
+      router.push('/grading');
+    }, 300);
+  }
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window?.localStorage) {
@@ -277,6 +378,11 @@ export default function DeveloperSettings() {
 
         <div className="space-y-3">
           {[
+            {
+              key: 'overrideGradingScore',
+              label: 'Edit & Override Grading Score Mode',
+              desc: 'Enable real-time score editing toolbar on the grading scorecard of any scenario, disregarding AI output.',
+            },
             {
               key: 'verboseLogs',
               label: 'Verbose AI Prompt & Response Logging',

@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "canvas-confetti": "^1.9.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "firebase": "^12.17.1",
@@ -19,6 +20,7 @@
     "lucide-react": "^1.30.0",
     "motion": "^13.0.0",
     "next": "^16.2.12",
+    "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-icons": "^5.7.0",

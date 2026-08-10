@@ -103,8 +103,8 @@ export default function GlobalSettingsModal({ onClose }) {
           )}
         </div>
 
-        <div className="mt-5 grid gap-4 md:grid-cols-[12rem_minmax(0,1fr)] overflow-y-auto flex-1 pb-4">
-          <nav className="grid content-start gap-2 overflow-y-auto pr-2 pb-4" aria-label="Settings categories">
+        <div className="mt-4 flex flex-col md:flex-row gap-4 flex-1 min-h-0 overflow-hidden">
+          <nav className="w-full md:w-52 shrink-0 overflow-y-auto pr-1 flex flex-col gap-2 max-md:max-h-36 max-md:flex-row max-md:overflow-x-auto max-md:pb-2" aria-label="Settings categories">
             {categories.map((item) => (
               <button
                 key={item}
@@ -112,7 +112,7 @@ export default function GlobalSettingsModal({ onClose }) {
                 aria-current={category === item ? 'page' : undefined}
                 onClick={() => setCategory(item)}
                 className={cn(
-                  'brutal-border bg-white px-3 py-3 text-left font-mono text-xs font-black uppercase tracking-[0.12em] shadow-nav transition-all hover:bg-mustard',
+                  'brutal-border bg-white px-3 py-3 text-left font-mono text-xs font-black uppercase tracking-[0.12em] shadow-nav transition-all hover:bg-mustard shrink-0',
                   category === item && 'bg-mustard',
                   item === 'Developer Options' && 'border-l-4 border-l-correction'
                 )}
@@ -122,7 +122,7 @@ export default function GlobalSettingsModal({ onClose }) {
             ))}
           </nav>
 
-          <section className="brutal-border bg-paper p-4 shadow-nav overflow-visible" aria-label={`${category} settings`}>
+          <section className="flex-1 brutal-border bg-paper p-4 md:p-6 shadow-nav overflow-y-auto min-h-0" aria-label={`${category} settings`}>
             {category === 'Profile Settings' && <ProfileSettings />}
             {category === 'Subscription' && <SubscriptionSettings />}
             {category === 'API Providers' && <ApiProvidersSettings />}

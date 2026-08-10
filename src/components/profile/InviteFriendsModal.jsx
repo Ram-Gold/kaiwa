@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import QRCode from 'qrcode';
 import {
   IoCloseSharp,
   IoCopySharp,
@@ -15,7 +16,23 @@ import { cn } from '../../lib/utils.js';
 export default function InviteFriendsModal({ onClose }) {
   const [copied, setCopied] = useState(false);
   const [showQR, setShowQR] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState('');
   const inviteUrl = typeof window !== 'undefined' ? `${window.location.origin}/invite` : 'https://kaiwa.app/invite';
+
+  useEffect(() => {
+    if (showQR && inviteUrl) {
+      QRCode.toDataURL(inviteUrl, {
+        margin: 1,
+        width: 240,
+        color: {
+          dark: '#1c1c1c',
+          light: '#ffffff'
+        }
+      })
+        .then((url) => setQrDataUrl(url))
+        .catch((err) => console.error('Error generating QR Code:', err));
+    }
+  }, [showQR, inviteUrl]);
 
   const handleCopy = () => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -92,10 +109,19 @@ export default function InviteFriendsModal({ onClose }) {
 
           {showQR && (
             <div className="brutal-border bg-white p-4 text-center animate-panel-in space-y-2">
-              <div className="mx-auto h-32 w-32 brutal-border bg-ink p-2 grid place-items-center">
-                <div className="h-full w-full bg-white p-2 font-mono text-[9px] font-black break-all flex items-center justify-center text-center leading-tight">
-                  [QR CODE FOR KAIWA INVITE LINK]
-                </div>
+              <div className="mx-auto h-36 w-36 brutal-border bg-white p-2 grid place-items-center shadow-nav">
+                {qrDataUrl ? (
+                  <img
+                    src={qrDataUrl}
+                    alt="KAIwa Friend Pass QR Code"
+                    className="h-full w-full object-contain"
+                    draggable="false"
+                  />
+                ) : (
+                  <div className="h-full w-full grid place-items-center font-mono text-xs font-bold text-ink/50 animate-pulse">
+                    Generating QR...
+                  </div>
+                )}
               </div>
               <p className="font-mono text-[10px] font-bold text-ink/60">Scan with phone camera</p>
             </div>

@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { IoTrashSharp, IoWarningSharp, IoCloseSharp, IoArrowUndoSharp } from 'react-icons/io5';
+import { IoTrashSharp, IoWarningSharp, IoCloseSharp, IoArrowUndoSharp, IoChevronDownSharp } from 'react-icons/io5';
 
 import Badge from '../ui/Badge.jsx';
 import Card from '../ui/Card.jsx';
@@ -18,6 +18,7 @@ export default function HistoryLedger({ sessions: initialSessions }) {
   const [sessions, setSessions] = useState(initialSessions);
   const [sessionId, setSessionId] = useState(null);
   const [mounted, setMounted] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(5);
   
   // Pattern 1: Delete confirmation modal state
   const [sessionToDelete, setSessionToDelete] = useState(null);
@@ -195,7 +196,7 @@ export default function HistoryLedger({ sessions: initialSessions }) {
               <span className="text-center">Action</span>
             </div>
             <div className="divide-y-2 divide-border">
-              {sessions.map((session) => {
+              {sessions.slice(0, visibleCount).map((session) => {
                 const isExiting = animatingOutId === session.id;
                 return (
                   <div
@@ -252,6 +253,19 @@ export default function HistoryLedger({ sessions: initialSessions }) {
                 );
               })}
             </div>
+
+            {visibleCount < sessions.length && (
+              <div className="border-t-2 border-border p-4 text-center bg-paper/60">
+                <button
+                  type="button"
+                  onClick={() => setVisibleCount((prev) => prev + 5)}
+                  className="brutal-border bg-mustard text-ink px-6 py-2.5 font-mono text-xs font-black uppercase tracking-[0.14em] shadow-nav transition-transform hover:-translate-y-0.5 active:scale-95 inline-flex items-center gap-2"
+                >
+                  <IoChevronDownSharp className="text-sm" />
+                  Show 5 More Practices ({sessions.length - visibleCount} remaining)
+                </button>
+              </div>
+            )}
           </Card>
         )}
       </section>
