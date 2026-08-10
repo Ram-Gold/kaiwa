@@ -29,6 +29,7 @@ export default function HistoryLedger({ sessions: initialSessions }) {
   const [showUndoToast, setShowUndoToast] = useState(false);
   
   const timerIntervalRef = useRef(null);
+  const pendingDeleteRef = useRef(null);
 
   useEffect(() => {
     setMounted(true);
@@ -38,14 +39,26 @@ export default function HistoryLedger({ sessions: initialSessions }) {
     setSessions(initialSessions);
   }, [initialSessions]);
 
-  // Clean up timer on unmount
+  // Clean up timer on unmount & commit any pending deletion
   useEffect(() => {
+    function handleBeforeUnload() {
+      if (pendingDeleteRef.current?.data) {
+        deletePracticeSession(user?.uid, pendingDeleteRef.current.data.id);
+      }
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
     return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current);
       }
+      if (pendingDeleteRef.current?.data) {
+        deletePracticeSession(user?.uid, pendingDeleteRef.current.data.id);
+      }
     };
-  }, []);
+  }, [user]);
 
   const selectedSession = useMemo(
     () => sessions.find((session) => session.id === sessionId) ?? null,
@@ -69,7 +82,9 @@ export default function HistoryLedger({ sessions: initialSessions }) {
       setAnimatingOutId(null);
 
       // Set pending deletion & reset 5s timer
-      setPendingDelete({ data: targetSession, index: targetIndex });
+      const pendingObj = { data: targetSession, index: targetIndex };
+      pendingDeleteRef.current = pendingObj;
+      setPendingDelete(pendingObj);
       setTimeLeft(UNDO_TIMER_SECONDS);
       setShowUndoToast(true);
 
@@ -96,10 +111,11 @@ export default function HistoryLedger({ sessions: initialSessions }) {
   async function executeFinalDeletion(targetSession) {
     setShowUndoToast(false);
     setPendingDelete(null);
+    pendingDeleteRef.current = null;
 
-    if (user?.uid && targetSession?.id) {
+    if (targetSession?.id) {
       try {
-        await deletePracticeSession(user.uid, targetSession.id);
+        await deletePracticeSession(user?.uid, targetSession.id);
       } catch (err) {
         console.error('Error permanently deleting session:', err);
       }
@@ -112,8 +128,8 @@ export default function HistoryLedger({ sessions: initialSessions }) {
       clearInterval(timerIntervalRef.current);
     }
 
-    if (pendingDelete) {
-      const { data: restoredData, index } = pendingDelete;
+    if (pendingDeleteRef.current) {
+      const { data: restoredData, index } = pendingDeleteRef.current;
       // Re-insert into UI list at original index with entrance transition
       setSessions((prev) => {
         const next = [...prev];
@@ -126,6 +142,7 @@ export default function HistoryLedger({ sessions: initialSessions }) {
       });
     }
 
+    pendingDeleteRef.current = null;
     setShowUndoToast(false);
     setPendingDelete(null);
   }

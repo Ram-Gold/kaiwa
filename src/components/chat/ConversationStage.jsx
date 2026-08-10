@@ -574,7 +574,7 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
 
           <TipButton isOpen={isTipOpen} setIsOpen={setIsTipOpen} theme={theme} />
           <div className="relative z-10">
-            <PhoneFrame scenario={scenario} theme={theme} showMessages={showMessages} showPhoneChrome={showPhoneChrome} notchStyle={notchStyle} readingMode={readingMode} message={message} setMessage={setMessage} isTipOpen={isTipOpen} setIsTipOpen={setIsTipOpen} messages={messages} isLoading={isLoading} onSubmit={handleMessageSubmit} isSending={isSending} />
+            <PhoneFrame scenario={scenario} theme={theme} showMessages={showMessages} showPhoneChrome={showPhoneChrome} notchStyle={notchStyle} readingMode={readingMode} message={message} setMessage={setMessage} isTipOpen={isTipOpen} setIsTipOpen={setIsTipOpen} messages={messages} isLoading={isLoading || isSending} onSubmit={handleMessageSubmit} isSending={isSending} />
             {expToast ? <ExpToast text={expToast} /> : null}
           </div>
         </section>

@@ -271,37 +271,44 @@ export async function fetchPracticeHistory(uid, limitCount = 10, startAfterDoc =
 }
 
 /**
- * Delete a practice session record from history
+ * Delete a practice session record from history (Firestore & LocalStorage)
  */
 export async function deletePracticeSession(uid, sessionId) {
-  if (!uid || !sessionId) {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      try {
-        const stored = JSON.parse(window.localStorage.getItem('kaiwa.local_history') || '[]');
-        const updated = stored.filter((item) => item.id !== sessionId);
-        window.localStorage.setItem('kaiwa.local_history', JSON.stringify(updated));
-      } catch (err) {
-        console.error('Error removing local practice history:', err);
-      }
+  if (!sessionId) return;
+
+  // 1. Always remove from localStorage
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const stored = JSON.parse(window.localStorage.getItem('kaiwa.local_history') || '[]');
+      const updated = stored.filter((item) => item.id !== sessionId);
+      window.localStorage.setItem('kaiwa.local_history', JSON.stringify(updated));
+    } catch (err) {
+      console.error('Error removing local practice history:', err);
     }
-    return;
   }
 
-  const sessionRef = doc(db, 'users', uid, 'history', sessionId);
-  await deleteDoc(sessionRef);
+  // 2. Remove from Firestore if user is authenticated
+  if (uid) {
+    try {
+      const sessionRef = doc(db, 'users', uid, 'history', sessionId);
+      await deleteDoc(sessionRef);
 
-  // Decrement totalPractices in user stats to reflect deletion on user profile stats backend
-  const userRef = doc(db, 'users', uid);
-  await setDoc(
-    userRef,
-    {
-      stats: {
-        totalPractices: increment(-1),
-      },
-      updatedAt: serverTimestamp(),
-    },
-    { merge: true }
-  ).catch((err) => console.error('Error updating user stats on delete:', err));
+      // Decrement totalPractices in user stats
+      const userRef = doc(db, 'users', uid);
+      await setDoc(
+        userRef,
+        {
+          stats: {
+            totalPractices: increment(-1),
+          },
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      ).catch((err) => console.error('Error updating user stats on delete:', err));
+    } catch (err) {
+      console.error('Error deleting practice session from Firestore:', err);
+    }
+  }
 }
 
 /**

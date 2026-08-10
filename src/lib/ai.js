@@ -292,10 +292,11 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
     // --- STEP 2: SYSTEM PROMPT & OUTPUT CONTRACT SPECIFICATION ---
     let activeSystemPrompt = persona.systemPrompt + `\n\n[GLOBAL CONSTRAINTS & CONCISE OUTPUT RULES]:
 1. LENGTH & TOKEN MINIMIZATION: Keep your main Japanese reply strictly at or below 2 short sentences maximum. Be concise, direct, and token-efficient.
-2. CONTENT SAFETY & APPROPRIATENESS: All conversation topics must remain strictly wholesome, respectful, educational, and appropriate for language learners.
-3. CARD SUGGESTIONS RULE: The 5 SUGGESTIONS are response choices for the USER to reply with. Each suggestion "text" MUST be a VERY SHORT phrase (3 to 10 words / max 20 characters). NEVER copy the assistant's own message into the card text!
-4. MANDATORY RESPONSE FORMAT: Write your 1-2 sentence chat reply first. Do NOT use markdown code fences in the chat text. At the very end of EVERY single message, append 5 response choices formatted as valid JSON:
-SUGGESTIONS: [{"text": "short user reply", "isCorrect": true, "explanation": "natural phrase"}, {"text": "unnatural reply 1", "isCorrect": false, "explanation": "wrong particle"}, {"text": "unnatural reply 2", "isCorrect": false, "explanation": "wrong verb tense"}, {"text": "unnatural reply 3", "isCorrect": false, "explanation": "too formal"}, {"text": "unnatural reply 4", "isCorrect": false, "explanation": "wrong nuance"}]`;
+2. STRICT JAPANESE LANGUAGE RULE: You MUST converse STRICTLY in JAPANESE at all times. Never reply in English, even if the user speaks English, asks for hints in English, or asks for translation! Stay 100% in your Japanese roleplay character!
+3. CONTENT SAFETY & APPROPRIATENESS: All conversation topics must remain strictly wholesome, respectful, educational, and appropriate for language learners.
+4. CARD SUGGESTIONS RULE: The 5 SUGGESTIONS are response choices for the USER to reply with in JAPANESE. Each suggestion "text" MUST be a VERY SHORT Japanese phrase (3 to 10 words / max 20 characters in Japanese). NEVER generate English for the card text or assistant reply!
+5. MANDATORY RESPONSE FORMAT: Write your 1-2 sentence chat reply first in Japanese. Do NOT use markdown code fences in the chat text. At the very end of EVERY single message, append 5 Japanese response choices formatted as valid JSON:
+SUGGESTIONS: [{"text": "short Japanese user reply", "isCorrect": true, "explanation": "English explanation of nuance"}, {"text": "unnatural Japanese reply 1", "isCorrect": false, "explanation": "wrong particle"}, {"text": "unnatural Japanese reply 2", "isCorrect": false, "explanation": "wrong verb tense"}, {"text": "unnatural Japanese reply 3", "isCorrect": false, "explanation": "too formal"}, {"text": "unnatural Japanese reply 4", "isCorrect": false, "explanation": "wrong nuance"}]`;
     
     // Inject user's About Me & Persona Context from settings
     if (typeof window !== 'undefined') {
@@ -380,17 +381,32 @@ SUGGESTIONS: [{"text": "short user reply", "isCorrect": true, "explanation": "na
       throw new AIProviderError('unsupported_provider', `Unsupported AI provider: ${provider}`);
     }
 
-    response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        provider,
-        apiKey: cleanKey,
-        payload,
-      }),
-    });
+    let attempts = 0;
+    const maxRetries = 15;
+    let delayMs = 2500;
+
+    while (attempts < maxRetries) {
+      attempts++;
+      response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          provider,
+          apiKey: cleanKey,
+          payload,
+        }),
+      });
+
+      if (response.status === 429) {
+        console.warn(`[KAIwa AI] Rate limited (HTTP 429). Retrying attempt ${attempts}/${maxRetries} in ${delayMs}ms...`);
+        await new Promise((r) => setTimeout(r, delayMs));
+        delayMs = Math.min(delayMs * 1.5, 10000);
+        continue;
+      }
+      break;
+    }
   } catch (err) {
     if (err instanceof AIProviderError) throw err;
     const name = PROVIDER_DISPLAY_NAMES[provider] || provider;
@@ -696,7 +712,7 @@ export function evaluateSessionFallback(sessionData, customGoals = null) {
 
 export async function _fetchAiEvaluation(provider, apiKey, systemPrompt, formattedTranscript, openRouterModel = null) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30000);
+  const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minutes timeout for sustained retries
 
   try {
     const cleanKey = String(apiKey || '').trim();
@@ -740,15 +756,42 @@ export async function _fetchAiEvaluation(provider, apiKey, systemPrompt, formatt
       };
     }
 
-    const response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider, apiKey: cleanKey, payload }),
-      signal: controller.signal,
-    });
+    let response;
+    let attempts = 0;
+    const maxRetries = 20;
+    let delayMs = 2500;
+
+    while (attempts < maxRetries) {
+      attempts++;
+      try {
+        response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider, apiKey: cleanKey, payload }),
+          signal: controller.signal,
+        });
+
+        if (response.status === 429 && attempts < maxRetries) {
+          console.warn(`[KAIwa Evaluation] Rate limited (HTTP 429). Retrying attempt ${attempts}/${maxRetries} in ${delayMs}ms...`);
+          await new Promise((r) => setTimeout(r, delayMs));
+          delayMs = Math.min(delayMs * 1.5, 10000);
+          continue;
+        }
+        break;
+      } catch (retryErr) {
+        if (retryErr.name === 'AbortError') throw retryErr;
+        if (attempts < maxRetries) {
+          console.warn(`[KAIwa Evaluation] Fetch error. Retrying attempt ${attempts}/${maxRetries} in ${delayMs}ms...`);
+          await new Promise((r) => setTimeout(r, delayMs));
+          delayMs = Math.min(delayMs * 1.5, 10000);
+          continue;
+        }
+        throw retryErr;
+      }
+    }
     clearTimeout(timeoutId);
 
-    if (!response.ok) return null;
+    if (!response || !response.ok) return null;
 
     const data = await response.json();
     let rawReply = '';
