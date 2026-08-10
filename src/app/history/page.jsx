@@ -13,7 +13,16 @@ export default function HistoryPage() {
   useEffect(() => {
     async function loadHistory() {
       if (!user) {
-        setSessions([]);
+        if (typeof window !== 'undefined' && window.localStorage) {
+          try {
+            const localHistory = JSON.parse(window.localStorage.getItem('kaiwa.local_history') || '[]');
+            setSessions(localHistory);
+          } catch {
+            setSessions([]);
+          }
+        } else {
+          setSessions([]);
+        }
         setLoading(false);
         return;
       }

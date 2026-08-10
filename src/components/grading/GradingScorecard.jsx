@@ -12,6 +12,7 @@ import {
   IoRefreshSharp,
   IoSchoolSharp,
   IoVolumeHighSharp,
+  IoVolumeMediumSharp,
   IoWifiSharp,
   IoArrowDownSharp,
   IoArrowForwardSharp,
@@ -74,12 +75,11 @@ const REVIEW = {
   duration: '05:00',
   overall: 80,
   metrics: [
-    { label: 'Overall', value: 80, color: 'bg-ink', note: 'Completed the goal: ask where to go and confirm the platform.' },
-    { label: 'Fluency', value: 75, color: 'bg-blush', note: 'A few pauses before key nouns, but the flow stayed understandable.' },
+    { label: 'Overall', value: 80, color: 'bg-ink', note: 'Completed the goal: ask where to go and confirm the platform.', modal: 'overall' },
     { label: 'Grammar', value: 80, color: 'bg-soft-blue', note: 'Good sentence endings. Review particles に and で.', modal: 'grammar' },
     { label: 'Vocabulary', value: 72, color: 'bg-mustard', note: 'Strong N5 basics; station-specific words need review.', modal: 'vocabulary' },
-    { label: 'Engagement', value: 85, color: 'bg-correction', note: 'You responded politely and kept the conversation moving.' },
-    { label: 'Relevance', value: 88, color: 'bg-moss', note: 'Replies matched the roleplay goal without drifting off-topic.' },
+    { label: 'Engagement', value: 85, color: 'bg-correction', note: 'You responded politely and kept the conversation moving.', modal: 'engagement' },
+    { label: 'Relevance', value: 88, color: 'bg-moss', note: 'Replies matched the roleplay goal without drifting off-topic.', modal: 'relevance' },
   ],
   weakVocabulary: [
     { term: '何番線', reading: 'なんばんせん', meaning: 'which platform / track number', source: 'Train Station roleplay' },
@@ -143,22 +143,34 @@ export default function GradingScorecard() {
       <div className="pointer-events-none absolute bottom-[-10rem] right-[-8rem] h-96 w-96 rounded-full bg-soft-blue/40 blur-3xl" aria-hidden="true" />
 
       <div className="relative mx-auto max-w-7xl">
-        <header className="mb-12 flex flex-col items-center text-center">
-          <div className="relative mb-6">
-            <img src={tier.stamp} alt={`${tier.label} stamp`} className="mx-auto h-48 w-48 animate-stamp-slam object-contain drop-shadow-xl" draggable="false" />
-            <div className="absolute -bottom-4 left-1/2 -translate-x-1/2">
-              <VoiceLineButton tier={tier} />
+        <header className="brutal-border bg-mustard p-8 shadow-shadow flex flex-col md:flex-row items-center justify-between gap-6 mb-10">
+          <div className="flex flex-col sm:flex-row items-center gap-6 text-center sm:text-left">
+            <div className="relative shrink-0">
+              <img
+                src={tier.stamp}
+                alt={`${tier.label} stamp`}
+                className="h-36 w-36 sm:h-44 sm:w-44 animate-stamp-slam object-contain drop-shadow-xl"
+                draggable="false"
+              />
+            </div>
+            <div>
+              <span className="label-mono bg-white px-3 py-1 brutal-border text-xs inline-block">
+                {REVIEW.scenario} Roleplay
+              </span>
+              <h1 className="font-display text-4xl sm:text-5xl mt-3 text-ink">Grading Report</h1>
+              <p className="mt-2 text-sm font-bold text-ink/80 max-w-md leading-relaxed">
+                Evaluated on 5 core learning criteria. Click any card to open detailed AI feedback.
+              </p>
             </div>
           </div>
-          <p className="label-mono text-correction mt-4">Grading & Review Scorecard</p>
-          <h1 className="mt-3 font-display text-5xl leading-none sm:text-7xl">Nice Job</h1>
-          <p className="mt-3 font-display text-3xl text-ink">Score: {REVIEW.overall}%</p>
-          <p className="mx-auto mt-3 max-w-2xl text-lg font-bold leading-8 text-ink/75">
-            AI-style grading based on goal completion, fluency, grammar, vocabulary, engagement, and relevance.
-          </p>
+          <div className="brutal-border bg-white p-6 shadow-nav text-center shrink-0 min-w-[11rem] flex flex-col items-center">
+            <p className="font-mono text-xs font-black uppercase text-ink/60">Overall Score</p>
+            <p className="font-display text-6xl text-ink mt-1">{REVIEW.overall}%</p>
+            <VoiceLineButton tier={tier} />
+          </div>
         </header>
 
-        <section className="grid gap-8 lg:grid-cols-[1fr_minmax(20rem,28rem)] xl:items-start">
+        <section className="grid gap-8 lg:grid-cols-[1fr_24rem] xl:items-start">
           <div className="space-y-6">
             <div className="grid gap-4 sm:grid-cols-2" aria-label="Score breakdown">
               {REVIEW.metrics.map((metric) => (
@@ -172,12 +184,12 @@ export default function GradingScorecard() {
           </aside>
         </section>
 
-        <footer className="mt-12 flex flex-col gap-3 pb-16 sm:flex-row sm:items-center sm:justify-center">
+        <footer className="mt-12 flex flex-col gap-4 pb-16 sm:flex-row sm:items-center sm:justify-center">
           <Button as={Link} href="/roleplay" variant="secondary">
-            Practice another roleplay
+            Practice more Roleplay
           </Button>
           <Button as={Link} href="/">
-            Return home
+            Return Home
           </Button>
         </footer>
       </div>
@@ -197,8 +209,9 @@ export default function GradingScorecard() {
 }
 
 function MetricCard({ metric, onOpen }) {
+  const isFullWidth = metric.label === 'Overall';
   return (
-    <article className="brutal-border bg-white p-5 shadow-shadow transition-transform duration-200 ease-out hover:-translate-y-1 flex flex-col justify-between h-48 relative group">
+    <article className={`brutal-border bg-white p-5 shadow-shadow transition-transform duration-200 ease-out hover:-translate-y-1 flex flex-col justify-between h-48 relative group ${isFullWidth ? 'sm:col-span-2' : ''}`}>
       {metric.modal ? (
         <button type="button" onClick={onOpen} className="absolute inset-0 z-10 w-full cursor-pointer opacity-0" aria-label={`Open ${metric.label} suggestions`}></button>
       ) : null}
@@ -219,8 +232,6 @@ function MetricCard({ metric, onOpen }) {
   );
 }
 
-
-
 function VoiceLineButton({ tier }) {
   const audioRef = useRef(null);
   const [status, setStatus] = useState('idle');
@@ -239,14 +250,12 @@ function VoiceLineButton({ tier }) {
       <button
         type="button"
         onClick={playVoiceLine}
-        className="brutal-border inline-flex items-center gap-2 bg-aizome px-4 py-3 font-black text-paper shadow-nav transition-all duration-150 ease-out hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-none"
+        className="brutal-border flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-black uppercase tracking-wider text-ink shadow-nav transition-all hover:-translate-y-0.5 active:scale-95"
       >
-        <IoVolumeHighSharp aria-hidden="true" /> Play score voice
+        <IoVolumeMediumSharp className="text-base text-aizome" />
+        <span>{status === 'playing' ? 'Playing sfx…' : 'Play voice'}</span>
       </button>
-      <audio ref={audioRef} src={tier.voice} preload="metadata" onEnded={() => setStatus('idle')} />
-      <p className="mt-2 text-sm font-bold text-ink/60" role="status">
-        {status === 'playing' ? 'Playing matching voice line…' : status === 'blocked' ? 'Tap again if your browser blocked audio.' : 'Voice line corresponds to this score.'}
-      </p>
+      <audio ref={audioRef} src={tier.voice} preload="auto" onEnded={() => setStatus('idle')} />
     </div>
   );
 }
@@ -276,25 +285,42 @@ function ConversationHistory({ review }) {
 
 function MistakeAnalysis({ mistakes }) {
   return (
-    <section id="grammar" className="brutal-border bg-white p-5 shadow-shadow scroll-mt-6" aria-labelledby="mistake-analysis-title">
+    <section id="grammar" className="brutal-border bg-white p-6 shadow-shadow" aria-labelledby="mistake-analysis-title">
       <div className="flex items-center gap-3 pr-12">
-        <span className="grid h-10 w-10 place-items-center brutal-border bg-correction text-paper shadow-nav">
-          <IoRefreshSharp aria-hidden="true" />
+        <span className="grid h-10 w-10 place-items-center brutal-border bg-soft-blue text-ink shadow-nav">
+          <IoRefreshSharp className="text-xl" aria-hidden="true" />
         </span>
         <div>
-          <p className="label-mono text-correction">Detailed mistake analysis</p>
-          <h2 id="mistake-analysis-title" className="font-display text-3xl leading-none">Grammar suggestions</h2>
+          <p className="label-mono text-aizome">Detailed Grammar Analysis</p>
+          <h2 id="mistake-analysis-title" className="font-display text-3xl leading-none">Grammar Suggestions</h2>
         </div>
       </div>
 
-      <div className="mt-5 space-y-4">
-        {mistakes.map((mistake) => (
-          <article key={mistake.title} className="brutal-border bg-paper p-4 shadow-nav">
-            <p className="font-black">{mistake.title}</p>
-            <div className="mt-3 grid gap-3 text-sm font-bold leading-6">
-              <p><span className="text-correction">Try again:</span> {mistake.original}</p>
-              <p><span className="text-moss">Better:</span> {mistake.corrected}</p>
-              <p className="text-ink/65">{mistake.why}</p>
+      <div className="mt-6 space-y-5">
+        {mistakes.map((mistake, idx) => (
+          <article key={mistake.title || idx} className="brutal-border bg-paper p-5 shadow-nav space-y-4">
+            <div className="flex items-center justify-between border-b-2 border-ink/15 pb-3">
+              <span className="font-display text-xl text-ink">{mistake.title}</span>
+              <span className="brutal-border bg-soft-blue px-2.5 py-0.5 font-mono text-[10px] font-black uppercase tracking-wider text-ink shadow-sm">
+                Grammar Tip
+              </span>
+            </div>
+
+            <div className="space-y-3 font-jp">
+              <div className="flex flex-col sm:flex-row sm:items-baseline gap-2 rounded-xl bg-correction/10 p-3.5 border-l-4 border-correction">
+                <span className="font-mono text-xs font-black uppercase text-correction shrink-0">Try again:</span>
+                <span className="text-base font-bold text-ink leading-relaxed">{mistake.original}</span>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-baseline gap-2 rounded-xl bg-moss/10 p-3.5 border-l-4 border-moss">
+                <span className="font-mono text-xs font-black uppercase text-moss shrink-0">Recommended:</span>
+                <span className="text-base font-black text-ink leading-relaxed">{mistake.corrected}</span>
+              </div>
+
+              <div className="mt-2 rounded-xl bg-white p-4 brutal-border font-sans text-sm font-bold text-ink/80 leading-relaxed shadow-sm">
+                <span className="font-mono text-xs font-black uppercase text-ink/50 block mb-1">Explanation</span>
+                {mistake.why}
+              </div>
             </div>
           </article>
         ))}
@@ -305,14 +331,14 @@ function MistakeAnalysis({ mistakes }) {
 
 function WeakVocabularyPanel({ words, status, onQueue }) {
   return (
-    <section id="vocabulary" className="brutal-border bg-mustard p-5 shadow-shadow scroll-mt-6" aria-labelledby="weak-vocab-title">
+    <section id="vocabulary" className="brutal-border bg-mustard p-6 shadow-shadow" aria-labelledby="weak-vocab-title">
       <div className="flex items-center gap-3 pr-12">
         <span className="grid h-10 w-10 place-items-center brutal-border bg-white shadow-nav">
-          <IoBookSharp aria-hidden="true" />
+          <IoBookSharp className="text-xl" aria-hidden="true" />
         </span>
         <div>
-          <p className="label-mono">Local SRS queue</p>
-          <h2 id="weak-vocab-title" className="font-display text-3xl leading-none">Weak vocabulary</h2>
+          <p className="label-mono text-ink">SRS Flashcard Queue</p>
+          <h2 id="weak-vocab-title" className="font-display text-3xl leading-none">Weak Vocabulary</h2>
         </div>
       </div>
 
@@ -335,10 +361,10 @@ function WeakVocabularyPanel({ words, status, onQueue }) {
         className="mt-5 brutal-border flex w-full items-center justify-center gap-2 bg-aizome px-5 py-4 font-black text-paper shadow-shadow transition-all duration-150 ease-out hover:translate-x-1 hover:translate-y-1 hover:shadow-nav disabled:cursor-wait disabled:opacity-70"
       >
         {status === 'saved' ? <IoCheckmarkCircleSharp aria-hidden="true" /> : <IoSchoolSharp aria-hidden="true" />}
-        {status === 'saving' ? 'Saving locally…' : status === 'saved' ? 'Saved to local SRS' : 'Add weak words to SRS'}
+        {status === 'saving' ? 'Saving to SRS…' : status === 'saved' ? 'Saved to SRS Deck' : 'Add weak words to SRS Deck'}
       </button>
-      <p className="mt-3 text-sm font-bold leading-6 text-ink/70" role="status">
-        {status === 'error' ? 'IndexedDB was unavailable in this browser session.' : 'Stored locally in IndexedDB; nothing is sent to a server.'}
+      <p className="mt-3 text-sm font-bold leading-6 text-ink/80 text-center" role="status">
+        Saved to your SRS flashcard deck for daily spaced repetition practice.
       </p>
     </section>
   );
@@ -350,21 +376,144 @@ function getTier(score) {
 
 function SuggestionsOverlay({ type, onClose, mistakes, words, queueStatus, onQueue }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6" role="dialog" aria-modal="true" aria-label={`${type} suggestions`}>
-      <div className="absolute inset-0 bg-paper/40 backdrop-blur-[2px]" aria-hidden="true" onClick={onClose} />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6" role="dialog" aria-modal="true" aria-label={`${type} details`}>
+      <div className="absolute inset-0 bg-ink/70 backdrop-blur-sm" aria-hidden="true" onClick={onClose} />
       <div className="animate-panel-in relative w-full max-w-2xl max-h-[90vh] flex flex-col">
         <button type="button" aria-label="Close" onClick={onClose} className="absolute right-5 top-5 brutal-border grid h-10 w-10 place-items-center rounded-full bg-white text-lg shadow-nav transition-transform hover:-translate-y-0.5 active:scale-95 z-10">
           <IoCloseSharp />
         </button>
-        <div className="overflow-y-auto rounded-3xl shadow-2xl">
-          {type === 'grammar' ? (
-            <MistakeAnalysis mistakes={mistakes} />
-          ) : (
-            <WeakVocabularyPanel words={words} status={queueStatus} onQueue={onQueue} />
-          )}
+        <div className="overflow-y-auto rounded-3xl shadow-2xl bg-white">
+          {type === 'grammar' && <MistakeAnalysis mistakes={mistakes} />}
+          {type === 'vocabulary' && <WeakVocabularyPanel words={words} status={queueStatus} onQueue={onQueue} />}
+          {type === 'overall' && <OverallAnalysisPanel />}
+          {type === 'engagement' && <EngagementAnalysisPanel />}
+          {type === 'relevance' && <RelevanceAnalysisPanel />}
         </div>
       </div>
     </div>
+  );
+}
+
+function OverallAnalysisPanel() {
+  return (
+    <section className="brutal-border bg-white p-6 shadow-shadow" aria-labelledby="overall-title">
+      <div className="flex items-center gap-3 pr-12">
+        <span className="grid h-10 w-10 place-items-center brutal-border bg-ink text-paper shadow-nav">
+          <IoCheckmarkCircleSharp className="text-2xl text-mustard" aria-hidden="true" />
+        </span>
+        <div>
+          <p className="label-mono text-ink/60">Comprehensive Performance</p>
+          <h2 id="overall-title" className="font-display text-3xl leading-none">Overall Performance</h2>
+        </div>
+      </div>
+
+      <div className="mt-6 space-y-4">
+        <div className="brutal-border bg-mustard/20 p-4 shadow-nav flex items-center justify-between gap-4">
+          <div>
+            <p className="font-mono text-xs font-black uppercase text-ink/70">Scenario Objective</p>
+            <p className="mt-1 font-display text-xl text-ink">Train Station Ticket Purchase</p>
+          </div>
+          <div className="brutal-border bg-moss px-3 py-1.5 font-mono text-xs font-black uppercase text-white shadow-nav shrink-0">
+            PASSED (80%)
+          </div>
+        </div>
+
+        <div className="brutal-border bg-paper p-4 shadow-nav space-y-3">
+          <p className="font-mono text-xs font-black uppercase text-ink/70">Scenario Milestones Accomplished:</p>
+          <div className="space-y-2">
+            {[
+              { title: 'Asked for destination details', detail: 'Used 渋谷駅に行きたいです correctly.' },
+              { title: 'Confirmed train platform number', detail: 'Repeat-confirmed 二番線ですね.' },
+              { title: 'Maintained polite conversation etiquette', detail: 'Used ありがとうございます at closure.' },
+            ].map((m, idx) => (
+              <div key={idx} className="brutal-border bg-white p-3 font-mono text-xs shadow-nav flex items-start gap-3">
+                <IoCheckmarkCircleSharp className="text-moss text-lg shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-black text-ink">{m.title}</p>
+                  <p className="font-bold text-ink/65 mt-0.5">{m.detail}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function EngagementAnalysisPanel() {
+  return (
+    <section className="brutal-border bg-white p-6 shadow-shadow" aria-labelledby="engagement-title">
+      <div className="flex items-center gap-3 pr-12">
+        <span className="grid h-10 w-10 place-items-center brutal-border bg-correction text-white shadow-nav">
+          <IoSchoolSharp className="text-xl" aria-hidden="true" />
+        </span>
+        <div>
+          <p className="label-mono text-correction">Tone & Connection</p>
+          <h2 id="engagement-title" className="font-display text-3xl leading-none">Engagement Metrics</h2>
+        </div>
+      </div>
+
+      <div className="mt-6 space-y-4">
+        <div className="brutal-border bg-paper p-4 shadow-nav">
+          <p className="font-mono text-xs font-black uppercase text-ink/70">AI Tutor Feedback on Politeness</p>
+          <p className="mt-2 text-sm font-bold text-ink/85 leading-relaxed">
+            "You maintained an exceptionally polite, warm, and appropriate tone throughout your roleplay conversation with the station staff."
+          </p>
+        </div>
+
+        <div className="brutal-border bg-paper p-4 shadow-nav space-y-3">
+          <p className="font-mono text-xs font-black uppercase text-ink/70">Conversational Markers (あいづち):</p>
+          <div className="grid gap-2 sm:grid-cols-2 font-mono text-xs">
+            <div className="brutal-border bg-white p-3 font-bold shadow-nav">
+              <span className="text-moss font-black">✓ ね (Ne)</span>: Natural confirmation marker
+            </div>
+            <div className="brutal-border bg-white p-3 font-bold shadow-nav">
+              <span className="text-moss font-black">✓ ありがとうございます</span>: Polite appreciative closing
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function RelevanceAnalysisPanel() {
+  return (
+    <section className="brutal-border bg-white p-6 shadow-shadow" aria-labelledby="relevance-title">
+      <div className="flex items-center gap-3 pr-12">
+        <span className="grid h-10 w-10 place-items-center brutal-border bg-moss text-white shadow-nav">
+          <IoBookSharp className="text-xl" aria-hidden="true" />
+        </span>
+        <div>
+          <p className="label-mono text-moss">Context & Task Alignment</p>
+          <h2 id="relevance-title" className="font-display text-3xl leading-none">Relevance Score</h2>
+        </div>
+      </div>
+
+      <div className="mt-6 space-y-4">
+        <div className="brutal-border bg-paper p-4 shadow-nav">
+          <p className="font-mono text-xs font-black uppercase text-ink/70">AI Tutor Feedback on Relevance</p>
+          <p className="mt-2 text-sm font-bold text-ink/85 leading-relaxed">
+            "Your responses were highly relevant and directly addressed the ticket seller's prompts without any off-topic drift."
+          </p>
+        </div>
+
+        <div className="brutal-border bg-paper p-4 shadow-nav space-y-2">
+          <p className="font-mono text-xs font-black uppercase text-ink/70">Context Alignment Highlights:</p>
+          <div className="space-y-2 font-mono text-xs">
+            <div className="brutal-border bg-white p-3 font-bold shadow-nav">
+              <p className="font-black text-ink">AI Question: 「どちらまで行きますか。」</p>
+              <p className="text-moss mt-1 font-black">Learner Answer: 「渋谷駅に行きたいです。」 (100% relevant)</p>
+            </div>
+            <div className="brutal-border bg-white p-3 font-bold shadow-nav">
+              <p className="font-black text-ink">AI Statement: 「二番線です。」</p>
+              <p className="text-moss mt-1 font-black">Learner Confirmation: 「二番線ですね。」 (100% relevant)</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
