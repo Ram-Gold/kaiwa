@@ -56,5 +56,33 @@ describe('StreamingChatMessages Component', () => {
     );
 
     expect(screen.getByTestId('thinking-indicator')).toBeDefined();
+    expect(screen.getByText(/thinking \(思考中\)/i)).toBeDefined();
+  });
+
+  it('renders distinct UI for model thinking in gray and saying in black', () => {
+    const messages = [
+      {
+        id: '2',
+        role: 'assistant',
+        content: '<think>User is asking for directions. Formulate response.</think>まっすぐ行ってください。',
+      },
+    ];
+
+    render(
+      <StreamingChatMessages
+        messages={messages}
+        persona={mockPersona}
+        isThinking={false}
+        isStreaming={false}
+      />
+    );
+
+    const thinkingBlock = screen.getByTestId('thinking-block');
+    expect(thinkingBlock).toBeDefined();
+    expect(thinkingBlock.textContent).toContain('User is asking for directions');
+
+    const sayingBlock = screen.getByTestId('saying-block');
+    expect(sayingBlock).toBeDefined();
+    expect(sayingBlock.textContent).toContain('まっすぐ行ってください');
   });
 });

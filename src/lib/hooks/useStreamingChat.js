@@ -139,7 +139,7 @@ export function useStreamingChat({
           model: modelConfig.model,
           system: systemPrompt,
           messages: formattedHistory,
-          max_tokens: 600,
+          max_tokens: 2048,
           temperature: modelConfig.temperature,
         };
       } else {
@@ -150,7 +150,7 @@ export function useStreamingChat({
             ...formattedHistory,
           ],
           temperature: modelConfig.temperature,
-          max_tokens: 600,
+          max_tokens: 2048,
         };
       }
 

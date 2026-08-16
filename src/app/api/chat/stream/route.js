@@ -45,17 +45,33 @@ export async function POST(req) {
       url = 'https://api.anthropic.com/v1/messages';
       headers['x-api-key'] = apiKey;
       headers['anthropic-version'] = '2023-06-01';
+      headers['anthropic-beta'] = 'prompt-caching-2024-07-31';
       if (!upstreamPayload.max_tokens) {
-        upstreamPayload.max_tokens = 600;
+        upstreamPayload.max_tokens = 4096;
+      }
+      if (typeof upstreamPayload.system === 'string') {
+        upstreamPayload.system = [
+          {
+            type: 'text',
+            text: upstreamPayload.system,
+            cache_control: { type: 'ephemeral' },
+          },
+        ];
       }
     } else if (normProvider === 'openai') {
       url = 'https://api.openai.com/v1/chat/completions';
       headers['Authorization'] = `Bearer ${apiKey}`;
+      if (!upstreamPayload.max_tokens) {
+        upstreamPayload.max_tokens = 4096;
+      }
     } else if (normProvider === 'openrouter') {
       url = 'https://openrouter.ai/api/v1/chat/completions';
       headers['Authorization'] = `Bearer ${apiKey}`;
       headers['HTTP-Referer'] = 'http://localhost:3000';
       headers['X-Title'] = 'KAIwa';
+      if (!upstreamPayload.max_tokens) {
+        upstreamPayload.max_tokens = 4096;
+      }
     } else if (normProvider === 'gemini') {
       url = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
       headers['Authorization'] = `Bearer ${apiKey}`;
@@ -106,6 +122,9 @@ export async function POST(req) {
     const textEncoder = new TextEncoder();
     const textDecoder = new TextDecoder();
 
+    let isClaudeThinking = false;
+    let isOpenAiThinking = false;
+
     const transformStream = new TransformStream({
       start() {
         this.buffer = '';
@@ -125,10 +144,26 @@ export async function POST(req) {
               const dataStr = trimmed.replace(/^data:\s*/, '');
               try {
                 const data = JSON.parse(dataStr);
-                if (data.type === 'content_block_delta' && data.delta?.text) {
+                if (data.type === 'content_block_start' && data.content_block?.type === 'thinking') {
+                  isClaudeThinking = true;
                   controller.enqueue(
-                    textEncoder.encode(`data: ${JSON.stringify({ token: data.delta.text })}\n\n`)
+                    textEncoder.encode(`data: ${JSON.stringify({ token: '<think>' })}\n\n`)
                   );
+                } else if (data.type === 'content_block_stop' && isClaudeThinking) {
+                  isClaudeThinking = false;
+                  controller.enqueue(
+                    textEncoder.encode(`data: ${JSON.stringify({ token: '</think>\n\n' })}\n\n`)
+                  );
+                } else if (data.type === 'content_block_delta') {
+                  if (data.delta?.type === 'thinking_delta' || data.delta?.thinking) {
+                    controller.enqueue(
+                      textEncoder.encode(`data: ${JSON.stringify({ token: data.delta?.thinking || data.delta?.text || '' })}\n\n`)
+                    );
+                  } else if (data.delta?.text) {
+                    controller.enqueue(
+                      textEncoder.encode(`data: ${JSON.stringify({ token: data.delta.text })}\n\n`)
+                    );
+                  }
                 }
               } catch {
                 // Ignore parse errors on keepalives or incomplete lines
@@ -139,9 +174,10 @@ export async function POST(req) {
           else if (normProvider === 'ollama') {
             try {
               const data = JSON.parse(trimmed);
-              if (data.message?.content) {
+              const token = data.message?.thinking ? `<think>${data.message.thinking}</think>` : data.message?.content;
+              if (token) {
                 controller.enqueue(
-                  textEncoder.encode(`data: ${JSON.stringify({ token: data.message.content })}\n\n`)
+                  textEncoder.encode(`data: ${JSON.stringify({ token })}\n\n`)
                 );
               }
             } catch {
@@ -157,11 +193,34 @@ export async function POST(req) {
               }
               try {
                 const data = JSON.parse(dataStr);
-                const token = data.choices?.[0]?.delta?.content;
-                if (token) {
-                  controller.enqueue(
-                    textEncoder.encode(`data: ${JSON.stringify({ token })}\n\n`)
-                  );
+                const delta = data.choices?.[0]?.delta;
+                const reasoning = delta?.reasoning_content || delta?.reasoning;
+                const content = delta?.content;
+
+                if (reasoning) {
+                  if (!isOpenAiThinking) {
+                    isOpenAiThinking = true;
+                    controller.enqueue(
+                      textEncoder.encode(`data: ${JSON.stringify({ token: `<think>${reasoning}` })}\n\n`)
+                    );
+                  } else {
+                    controller.enqueue(
+                      textEncoder.encode(`data: ${JSON.stringify({ token: reasoning })}\n\n`)
+                    );
+                  }
+                }
+
+                if (content) {
+                  if (isOpenAiThinking) {
+                    isOpenAiThinking = false;
+                    controller.enqueue(
+                      textEncoder.encode(`data: ${JSON.stringify({ token: `</think>\n\n${content}` })}\n\n`)
+                    );
+                  } else {
+                    controller.enqueue(
+                      textEncoder.encode(`data: ${JSON.stringify({ token: content })}\n\n`)
+                    );
+                  }
                 }
               } catch {
                 // Ignore partial JSON
@@ -171,6 +230,9 @@ export async function POST(req) {
         }
       },
       flush(controller) {
+        if (isClaudeThinking || isOpenAiThinking) {
+          controller.enqueue(textEncoder.encode(`data: ${JSON.stringify({ token: '</think>\n\n' })}\n\n`));
+        }
         controller.enqueue(textEncoder.encode(`data: ${JSON.stringify({ done: true })}\n\n`));
       },
     });

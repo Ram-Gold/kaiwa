@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { IoBatteryFullSharp, IoBulbSharp, IoCellularSharp, IoCloseSharp, IoMicSharp, IoSendSharp, IoWifiSharp, IoVolumeHighSharp, IoLanguageSharp, IoGlobeOutline } from 'react-icons/io5';
+import { IoBatteryFullSharp, IoBulbSharp, IoCellularSharp, IoCloseSharp, IoMicSharp, IoSendSharp, IoWifiSharp, IoVolumeHighSharp, IoLanguageSharp, IoGlobeOutline, IoSparklesSharp } from 'react-icons/io5';
 
 import { cn } from '../../lib/utils.js';
 import JapaneseText, { DictionaryPopover } from './JapaneseText.jsx';
@@ -14,11 +14,12 @@ import { loadStoredProvider, loadStoredApiKeys, loadStoredOpenRouterModel } from
 import { useAuth } from '../../lib/auth/AuthContext';
 import { saveChatSession } from '../../lib/firebase/firestore.js';
 import { useRouter } from 'next/navigation';
-import { isStreamingEnabled, assembleSystemPrompt, getAIModelConfig } from '../../lib/ai/config.js';
+import { isStreamingEnabled, assembleSystemPrompt, getAIModelConfig, parseThinkingAndSpeech } from '../../lib/ai/config.js';
 import { getPersonaById } from '../../prompts/personas.js';
+import { estimateTokenCount, estimateCost, formatDuration } from '../../lib/ai/metrics.js';
 
-function createMessage(role, content) {
-  return { id: `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, role, content };
+function createMessage(role, content, meta = {}) {
+  return { id: `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, role, content, meta };
 }
 
 const FALLBACK_BRIEFING = {
@@ -273,16 +274,20 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
 
   async function initiateConversation() {
     setIsLoading(true);
+    const startTime = Date.now();
     try {
       const reply = await sendMessage(
         provider,
         apiKey,
         personaId || scenario.id || 'sensei',
         [],
-        "(System: The user has just approached you. Please start the conversation according to your persona and generate 5 response options for the user.)",
+        "こんにちは！ (Greet the user directly in character in Japanese to begin the conversation, followed by 5 response choices for the user.)",
         openRouterModel
       );
-      setMessages([createMessage('assistant', reply.text)]);
+      const elapsed = Date.now() - startTime;
+      const tokens = estimateTokenCount(reply.text);
+      const cost = estimateCost(provider, tokens);
+      setMessages([createMessage('assistant', reply.text, { tokens, durationMs: elapsed, cost })]);
 
       if (reply.suggestions && reply.suggestions.length > 0) {
         const formattedCards = reply.suggestions.map((s, idx) => ({
@@ -357,7 +362,7 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
             model: modelConfig.model,
             system: systemPrompt,
             messages: historyForApi.map((m) => ({ role: m.role, content: m.content })),
-            max_tokens: 600,
+            max_tokens: 2048,
             temperature: modelConfig.temperature,
           };
         } else {
@@ -368,12 +373,13 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
               ...historyForApi.map((m) => ({ role: m.role, content: m.content })),
             ],
             temperature: modelConfig.temperature,
-            max_tokens: 600,
+            max_tokens: 2048,
           };
         }
 
         const asstId = `asst-${Date.now()}`;
-        setMessages((curr) => [...curr, { id: asstId, role: 'assistant', content: '' }]);
+        const streamStartTime = Date.now();
+        setMessages((curr) => [...curr, { id: asstId, role: 'assistant', content: '', meta: {} }]);
 
         const streamRes = await fetch('/api/chat/stream', {
           method: 'POST',
@@ -417,8 +423,11 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
         }
 
         const finalParsed = parseModelReply(accum);
+        const streamElapsed = Date.now() - streamStartTime;
+        const streamTokens = estimateTokenCount(finalParsed.text);
+        const streamCost = estimateCost(provider, streamTokens);
         setMessages((curr) =>
-          curr.map((m) => (m.id === asstId ? { ...m, content: finalParsed.text } : m))
+          curr.map((m) => (m.id === asstId ? { ...m, content: finalParsed.text, meta: { tokens: streamTokens, durationMs: streamElapsed, cost: streamCost } } : m))
         );
 
         if (finalParsed.suggestions && finalParsed.suggestions.length > 0) {
@@ -441,9 +450,13 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
         }
       } else {
         // Default non-streaming batch reply
+        const batchStartTime = Date.now();
         const reply = await sendMessage(provider, apiKey, personaId || scenario.id || 'sensei', historyForApi, cleanText, openRouterModel);
+        const batchElapsed = Date.now() - batchStartTime;
+        const batchTokens = estimateTokenCount(reply.text);
+        const batchCost = estimateCost(provider, batchTokens);
 
-        setMessages((current) => [...current, createMessage('assistant', reply.text)]);
+        setMessages((current) => [...current, createMessage('assistant', reply.text, { tokens: batchTokens, durationMs: batchElapsed, cost: batchCost })]);
 
         if (reply.suggestions && reply.suggestions.length > 0) {
           const formattedCards = reply.suggestions.map((s, idx) => ({
@@ -871,6 +884,10 @@ function MessageThread({ readingMode, scenario, theme, messages, isLoading }) {
     scrollRef.current?.scrollIntoView?.({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
+  // Only show separate waiting dots if loading AND the last message is NOT already an assistant message
+  const lastMessage = messages[messages.length - 1];
+  const showWaitingDots = isLoading && (!lastMessage || lastMessage.role !== 'assistant');
+
   return (
     <div className="flex min-h-full flex-col justify-end gap-3 pb-1">
       <span className="sr-only">Reading mode: {readingMode}</span>
@@ -886,17 +903,18 @@ function MessageThread({ readingMode, scenario, theme, messages, isLoading }) {
             from={msg.role === 'assistant' ? 'ai' : 'user'}
             theme={theme}
             text={msg.content}
+            meta={msg.meta}
           />
         );
       })}
 
-      {isLoading && <MessageBubble from="ai" theme={theme} thinking />}
+      {showWaitingDots && <MessageBubble from="ai" theme={theme} thinking />}
       <div ref={scrollRef} />
     </div>
   );
 }
 
-function MessageBubble({ text = '', initialSubtext, from, theme, thinking = false }) {
+function MessageBubble({ text = '', initialSubtext, from, theme, thinking = false, meta = {} }) {
   const isUser = from === 'user';
   const [showRomaji, setShowRomaji] = useState(false);
   const [showTranslation, setShowTranslation] = useState(false);
@@ -904,7 +922,13 @@ function MessageBubble({ text = '', initialSubtext, from, theme, thinking = fals
   const [isTranslating, setIsTranslating] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
 
-  const romajiText = useMemo(() => (text ? toRomajiText(text) : ''), [text]);
+  // Parse thinking vs speech from AI content
+  const parsed = useMemo(() => parseThinkingAndSpeech(text), [text]);
+  const thinkingText = parsed.thinking;
+  const speechText = parsed.speech || (parsed.thinking ? '' : text);
+  const displayText = speechText || (parsed.thinking ? '' : text);
+
+  const romajiText = useMemo(() => (displayText ? toRomajiText(displayText) : ''), [displayText]);
 
   async function handleTranslate() {
     if (showTranslation) {
@@ -916,16 +940,18 @@ function MessageBubble({ text = '', initialSubtext, from, theme, thinking = fals
       return;
     }
     setIsTranslating(true);
-    const res = await translateJapaneseToEnglish(text);
+    const res = await translateJapaneseToEnglish(displayText);
     setTranslationText(res);
     setShowTranslation(true);
     setIsTranslating(false);
   }
 
   function handleSpeak() {
-    const active = speakJapanese(text);
+    const active = speakJapanese(displayText);
     setIsPlaying(active);
   }
+
+  const [isThinkingOpen, setIsThinkingOpen] = useState(true);
 
   return (
     <div className={cn('flex items-end gap-2', isUser ? 'justify-end' : 'justify-start')}>
@@ -951,72 +977,123 @@ function MessageBubble({ text = '', initialSubtext, from, theme, thinking = fals
               <span className="block font-jp text-base font-black">{text}</span>
             ) : (
               <div>
-                <span className="block font-jp text-base font-black">
-                  <JapaneseText text={text} />
-                </span>
+                {/* Early thinking placeholder when assistant message is brand new */}
+                {!text && !thinkingText && (
+                  <div className="flex items-center gap-2 py-1 text-gray-500 font-mono text-xs italic">
+                    <IoSparklesSharp className="text-mustard text-xs animate-spin" />
+                    <span>Thinking... (思考中)</span>
+                  </div>
+                )}
 
-                {showRomaji && (
+                {/* 1. CONNECTED THINKING UI — Connected Top Panel */}
+                {thinkingText ? (
+                  <div className="-mx-4 -mt-3 mb-3 border-b-2 border-dashed border-ink/15 bg-gray-50/90 p-3 text-xs" data-testid="thinking-block">
+                    <button
+                      type="button"
+                      onClick={() => setIsThinkingOpen(!isThinkingOpen)}
+                      className="flex w-full items-center justify-between gap-1 text-left hover:opacity-80 transition"
+                      aria-label="Toggle thinking process"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <IoSparklesSharp className="text-[10px] text-mustard" />
+                        <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-ink/50">
+                          Thinking / 思考中
+                        </span>
+                      </div>
+                      <span className="font-mono text-[8px] font-bold text-ink/40 uppercase">
+                        {isThinkingOpen ? 'Hide ▲' : 'Show ▼'}
+                      </span>
+                    </button>
+                    {isThinkingOpen && (
+                      <div className="mt-1.5 max-h-24 overflow-y-auto pr-1">
+                        <p className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-gray-400 italic">
+                          {thinkingText}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+
+                {/* 2. CONNECTED SAYING UI — Bold black Japanese text (only if speech is present) */}
+                {displayText ? (
+                  <span className="block font-jp text-base font-black text-black" data-testid="saying-block">
+                    <JapaneseText text={displayText} />
+                  </span>
+                ) : null}
+
+                {showRomaji && displayText && (
                   <div className="animate-panel-in mt-2 brutal-border bg-mustard/30 p-2 text-xs font-mono font-black italic">
                     {romajiText}
                   </div>
                 )}
 
-                {showTranslation && (
+                {showTranslation && displayText && (
                   <div className="animate-panel-in mt-2 brutal-border bg-paper p-2 text-xs font-bold leading-5">
                     <span className="label-mono block text-[9px] text-shu">English</span>
                     {translationText}
                   </div>
                 )}
 
-                {initialSubtext && !showRomaji && !showTranslation && (
+                {initialSubtext && displayText && !showRomaji && !showTranslation && (
                   <span className="mt-1 block text-xs font-bold text-ink/65">{initialSubtext}</span>
                 )}
 
-                {/* 3 Circular Action Icons */}
-                <div className="mt-3 flex items-center gap-2 border-t-2 border-border/40 pt-2">
-                  {/* 1. Speaker Icon */}
-                  <button
-                    type="button"
-                    aria-label="Speak Japanese audio"
-                    title="Speak Japanese (Web Speech API)"
-                    onClick={handleSpeak}
-                    className={cn(
-                      'brutal-border grid h-7 w-7 place-items-center rounded-full bg-paper transition-all hover:bg-mustard active:scale-95',
-                      isPlaying && 'bg-mustard'
-                    )}
-                  >
-                    <IoVolumeHighSharp className="text-xs text-ink" />
-                  </button>
+                {/* 3 Circular Action Icons — only when dialogue exists */}
+                {displayText ? (
+                  <div className="mt-3 flex items-center gap-2 border-t-2 border-border/40 pt-2">
+                    {/* 1. Speaker Icon */}
+                    <button
+                      type="button"
+                      aria-label="Speak Japanese audio"
+                      title="Speak Japanese (Web Speech API)"
+                      onClick={handleSpeak}
+                      className={cn(
+                        'brutal-border grid h-7 w-7 place-items-center rounded-full bg-paper transition-all hover:bg-mustard active:scale-95',
+                        isPlaying && 'bg-mustard'
+                      )}
+                    >
+                      <IoVolumeHighSharp className="text-xs text-ink" />
+                    </button>
 
-                  {/* 2. Romaji Icon */}
-                  <button
-                    type="button"
-                    aria-label="Toggle Romaji reading"
-                    title="Toggle Romaji"
-                    onClick={() => setShowRomaji(!showRomaji)}
-                    className={cn(
-                      'brutal-border grid h-7 w-7 place-items-center rounded-full bg-paper transition-all hover:bg-mustard active:scale-95',
-                      showRomaji && 'bg-mustard'
-                    )}
-                  >
-                    <IoLanguageSharp className="text-xs text-ink" />
-                  </button>
+                    {/* 2. Romaji Icon */}
+                    <button
+                      type="button"
+                      aria-label="Toggle Romaji reading"
+                      title="Toggle Romaji"
+                      onClick={() => setShowRomaji(!showRomaji)}
+                      className={cn(
+                        'brutal-border grid h-7 w-7 place-items-center rounded-full bg-paper transition-all hover:bg-mustard active:scale-95',
+                        showRomaji && 'bg-mustard'
+                      )}
+                    >
+                      <IoLanguageSharp className="text-xs text-ink" />
+                    </button>
 
-                  {/* 3. Translate Icon */}
-                  <button
-                    type="button"
-                    aria-label="Translate to English"
-                    title="Translate with API"
-                    disabled={isTranslating}
-                    onClick={handleTranslate}
-                    className={cn(
-                      'brutal-border grid h-7 w-7 place-items-center rounded-full bg-paper transition-all hover:bg-mustard active:scale-95 disabled:opacity-50',
-                      showTranslation && 'bg-mustard'
-                    )}
-                  >
-                    <IoGlobeOutline className={cn("text-xs text-ink", isTranslating && "animate-spin")} />
-                  </button>
-                </div>
+                    {/* 3. Translate Icon */}
+                    <button
+                      type="button"
+                      aria-label="Translate to English"
+                      title="Translate with API"
+                      disabled={isTranslating}
+                      onClick={handleTranslate}
+                      className={cn(
+                        'brutal-border grid h-7 w-7 place-items-center rounded-full bg-paper transition-all hover:bg-mustard active:scale-95 disabled:opacity-50',
+                        showTranslation && 'bg-mustard'
+                      )}
+                    >
+                      <IoGlobeOutline className={cn("text-xs text-ink", isTranslating && "animate-spin")} />
+                    </button>
+                  </div>
+                ) : null}
+
+                {/* Metadata footer: tokens, time, cost */}
+                {meta && (meta.tokens || meta.durationMs) ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-border/20 pt-1.5 font-mono text-[9px] font-semibold text-ink/35" data-testid="message-meta">
+                    {meta.tokens ? <span>{meta.tokens} tokens</span> : null}
+                    {meta.durationMs ? <span>{formatDuration(meta.durationMs)}</span> : null}
+                    {meta.cost ? <span>${meta.cost.toFixed(6)}</span> : null}
+                  </div>
+                ) : null}
               </div>
             )}
           </>

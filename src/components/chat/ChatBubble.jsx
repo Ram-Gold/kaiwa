@@ -1,8 +1,10 @@
-import { useState } from 'react';
-import { IoVolumeHighSharp, IoLanguageSharp, IoGlobeOutline, IoCheckmarkSharp } from 'react-icons/io5';
+import React, { useState } from 'react';
+import { IoVolumeHighSharp, IoLanguageSharp, IoGlobeOutline, IoCheckmarkSharp, IoSparklesSharp } from 'react-icons/io5';
 import { getKnownRomajiGlosses, toRomajiText } from '../../lib/japaneseText.js';
 import { speakJapanese } from '../../lib/speech.js';
 import { translateJapaneseToEnglish } from '../../lib/translation.js';
+import { parseThinkingAndSpeech } from '../../lib/ai/config.js';
+import { formatDuration } from '../../lib/ai/metrics.js';
 import JapaneseText from './JapaneseText.jsx';
 import RoleplayCards from './RoleplayCards.jsx';
 import { cn } from '../../lib/utils.js';
@@ -16,6 +18,7 @@ export default function ChatBubble({
   suggestions = [],
   suggestionsDisabled = false,
   translation,
+  meta = {},
 }) {
   const [showRomaji, setShowRomaji] = useState(false);
   const [showTranslation, setShowTranslation] = useState(Boolean(translation));
@@ -26,8 +29,16 @@ export default function ChatBubble({
   const isUser = message.role === 'user';
   const isError = message.role === 'error';
   const canUseAiTools = message.role === 'assistant';
-  const romajiGlosses = canUseAiTools ? getKnownRomajiGlosses(message.content) : [];
-  const romajiText = canUseAiTools ? (message.romaji || toRomajiText(message.content)) : '';
+
+  const [isThinkingOpen, setIsThinkingOpen] = useState(true);
+
+  const rawText = message.rawContent || message.content || '';
+  const parsed = parseThinkingAndSpeech(rawText);
+  const thinking = message.thinking || parsed.thinking;
+  const speech = parsed.speech || (parsed.thinking ? '' : message.content);
+
+  const romajiGlosses = canUseAiTools ? getKnownRomajiGlosses(speech || message.content) : [];
+  const romajiText = canUseAiTools ? (message.romaji || toRomajiText(speech || message.content)) : '';
 
   async function handleToggleTranslate() {
     if (onTranslate) {
@@ -89,16 +100,50 @@ export default function ChatBubble({
 
       <div className="flex max-w-[calc(100%-3.5rem)] flex-col gap-2 sm:max-w-none">
         <article className="brutal-border max-w-full bg-paper px-4 py-3 text-ink shadow-shadow sm:max-w-[34rem]">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start justify-between gap-3 mb-1">
             <p className="font-mono text-[10px] font-black uppercase tracking-[0.18em] opacity-75">
               {persona?.name || 'Kaiwa'}
             </p>
           </div>
 
-          {/* Japanese text with clickable underlined dictionary words */}
-          <p className="mt-2 whitespace-pre-wrap font-jp text-lg font-bold leading-8">
-            <JapaneseText text={message.content} />
-          </p>
+          {/* 1. CONNECTED THINKING UI — Connected Top Panel */}
+          {thinking ? (
+            <div
+              className="-mx-4 -mt-3 mb-3 border-b-2 border-dashed border-ink/15 bg-gray-50/90 p-3 text-xs"
+              data-testid="thinking-block"
+            >
+              <button
+                type="button"
+                onClick={() => setIsThinkingOpen(!isThinkingOpen)}
+                className="flex w-full items-center justify-between gap-1 text-left hover:opacity-80 transition"
+                aria-label="Toggle thinking process"
+              >
+                <div className="flex items-center gap-1.5">
+                  <IoSparklesSharp className="text-[10px] text-mustard" />
+                  <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-ink/50">
+                    Thinking / 思考中
+                  </span>
+                </div>
+                <span className="font-mono text-[8px] font-bold text-ink/40 uppercase">
+                  {isThinkingOpen ? 'Hide ▲' : 'Show ▼'}
+                </span>
+              </button>
+              {isThinkingOpen && (
+                <div className="mt-1.5 max-h-28 overflow-y-auto pr-1">
+                  <p className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-gray-400 italic">
+                    {thinking}
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          {/* 2. CONNECTED SAYING UI (Bold Black Japanese Text) */}
+          <div className="mt-2 font-jp text-lg font-bold leading-8 text-black" data-testid="saying-block">
+            <div className="whitespace-pre-wrap text-black font-black">
+              <JapaneseText text={speech || message.content} />
+            </div>
+          </div>
 
           {/* Romaji conversion box */}
           {showRomaji && (
@@ -172,6 +217,15 @@ export default function ChatBubble({
               <IoGlobeOutline className={cn("text-base text-ink", isTranslatingLocal && "animate-spin")} />
             </button>
           </div>
+
+          {/* Metadata footer: tokens, time, cost */}
+          {(meta?.tokens || meta?.durationMs || message.meta?.tokens || message.meta?.durationMs) && (
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-ink/10 pt-1.5 font-mono text-[9px] font-semibold text-ink/35" data-testid="message-meta">
+              {(meta?.tokens || message.meta?.tokens) ? <span>{meta?.tokens || message.meta?.tokens} tokens</span> : null}
+              {(meta?.durationMs || message.meta?.durationMs) ? <span>{formatDuration(meta?.durationMs || message.meta?.durationMs)}</span> : null}
+              {(meta?.cost || message.meta?.cost) ? <span>${(meta?.cost || message.meta?.cost).toFixed(6)}</span> : null}
+            </div>
+          )}
         </article>
 
         {suggestions.length > 0 && (

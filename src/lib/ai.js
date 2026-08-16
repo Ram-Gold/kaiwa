@@ -290,12 +290,12 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
     const { recent, olderToSummarize } = splitConversationHistory(historyToUse, tokenBudget);
     
     // --- STEP 2: SYSTEM PROMPT & OUTPUT CONTRACT SPECIFICATION ---
-    let activeSystemPrompt = persona.systemPrompt + `\n\n[GLOBAL CONSTRAINTS & CONCISE OUTPUT RULES]:
+    let activeSystemPrompt = persona.systemPrompt + `\n\n[GLOBAL CONSTRAINTS & STREAMLINED THINKING RULES]:
 1. LENGTH & TOKEN MINIMIZATION: Keep your main Japanese reply strictly at or below 2 short sentences maximum. Be concise, direct, and token-efficient.
-2. STRICT JAPANESE LANGUAGE RULE: You MUST converse STRICTLY in JAPANESE at all times. Never reply in English, even if the user speaks English, asks for hints in English, or asks for translation! Stay 100% in your Japanese roleplay character!
-3. CONTENT SAFETY & APPROPRIATENESS: All conversation topics must remain strictly wholesome, respectful, educational, and appropriate for language learners.
-4. CARD SUGGESTIONS RULE: The 5 SUGGESTIONS are response choices for the USER to reply with in JAPANESE. Each suggestion "text" MUST be a VERY SHORT Japanese phrase (3 to 10 words / max 20 characters in Japanese). NEVER generate English for the card text or assistant reply!
-5. MANDATORY RESPONSE FORMAT: Write your 1-2 sentence chat reply first in Japanese. Do NOT use markdown code fences in the chat text. At the very end of EVERY single message, append 5 Japanese response choices formatted as valid JSON:
+2. STRICT JAPANESE LANGUAGE RULE: You MUST converse STRICTLY in JAPANESE at all times. Never reply in English!
+3. STREAMLINED THINKING: If you include internal reasoning or thinking, wrap it in <think>...</think> and keep it strictly under 30 words. Do NOT deliberate, draft, or over-plan suggestions in thinking.
+4. MANDATORY DIALOGUE: You MUST ALWAYS output your 1-2 sentence spoken Japanese dialogue directly to the learner immediately after thinking, followed by the SUGGESTIONS block.
+5. CARD SUGGESTIONS RULE: Output 5 short Japanese reply options (3-10 words / max 20 characters in Japanese) formatted as valid JSON at the very end of the message:
 SUGGESTIONS: [{"text": "short Japanese user reply", "isCorrect": true, "explanation": "English explanation of nuance"}, {"text": "unnatural Japanese reply 1", "isCorrect": false, "explanation": "wrong particle"}, {"text": "unnatural Japanese reply 2", "isCorrect": false, "explanation": "wrong verb tense"}, {"text": "unnatural Japanese reply 3", "isCorrect": false, "explanation": "too formal"}, {"text": "unnatural Japanese reply 4", "isCorrect": false, "explanation": "wrong nuance"}]`;
     
     // Inject user's About Me & Persona Context from settings
@@ -348,6 +348,7 @@ SUGGESTIONS: [{"text": "short Japanese user reply", "isCorrect": true, "explanat
           { role: 'user', content: cleanMessage },
         ],
         temperature: 0.8,
+        max_tokens: 4096,
       };
     } else if (provider === 'openrouter') {
       payload = {
@@ -358,6 +359,7 @@ SUGGESTIONS: [{"text": "short Japanese user reply", "isCorrect": true, "explanat
           { role: 'user', content: cleanMessage },
         ],
         temperature: 0.8,
+        max_tokens: 4096,
       };
     } else if (provider === 'gemini') {
       payload = {
@@ -368,13 +370,14 @@ SUGGESTIONS: [{"text": "short Japanese user reply", "isCorrect": true, "explanat
           { role: 'user', content: cleanMessage },
         ],
         temperature: 0.8,
+        max_tokens: 4096,
       };
     } else if (provider === 'claude') {
       payload = {
         model: 'claude-3-5-haiku-20241022',
         system: activeSystemPrompt,
         messages: [...recent, { role: 'user', content: cleanMessage }],
-        max_tokens: 1024,
+        max_tokens: 4096,
         temperature: 0.8,
       };
     } else {
@@ -424,11 +427,28 @@ SUGGESTIONS: [{"text": "short Japanese user reply", "isCorrect": true, "explanat
   let rawReply = '';
 
   if (provider === 'ollama') {
-    rawReply = data?.message?.content;
+    const thinking = data?.message?.thinking ? `<think>${data.message.thinking}</think>\n\n` : '';
+    const content = data?.message?.content || '';
+    rawReply = `${thinking}${content}`.trim();
   } else if (provider === 'openai' || provider === 'gemini' || provider === 'openrouter') {
-    rawReply = data?.choices?.[0]?.message?.content;
+    const msg = data?.choices?.[0]?.message;
+    const reasoning = msg?.reasoning_content || msg?.reasoning;
+    const content = msg?.content || '';
+    if (reasoning && content) {
+      rawReply = `<think>${reasoning}</think>\n\n${content}`.trim();
+    } else {
+      rawReply = content || reasoning || '';
+    }
   } else if (provider === 'claude') {
-    rawReply = data?.content?.[0]?.text;
+    if (Array.isArray(data?.content)) {
+      const thinkingBlock = data.content.find((b) => b.type === 'thinking');
+      const textBlock = data.content.find((b) => b.type === 'text');
+      const thinkingText = thinkingBlock?.thinking ? `<think>${thinkingBlock.thinking}</think>\n\n` : '';
+      const dialogueText = textBlock?.text || (data.content[0]?.text || '');
+      rawReply = `${thinkingText}${dialogueText}`.trim();
+    } else {
+      rawReply = data?.content?.[0]?.text || '';
+    }
   }
 
   if (!rawReply) {

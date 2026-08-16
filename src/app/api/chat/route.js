@@ -59,7 +59,16 @@ export async function POST(req) {
       url = 'https://api.anthropic.com/v1/messages';
       headers['x-api-key'] = apiKey;
       headers['anthropic-version'] = '2023-06-01';
-      // We don't need 'dangerouslyAllowBrowser' here because this is a server-side request!
+      headers['anthropic-beta'] = 'prompt-caching-2024-07-31';
+      if (typeof payload.system === 'string') {
+        payload.system = [
+          {
+            type: 'text',
+            text: payload.system,
+            cache_control: { type: 'ephemeral' },
+          },
+        ];
+      }
     } else {
       return NextResponse.json(
         { error: `Unsupported provider: ${provider}` },

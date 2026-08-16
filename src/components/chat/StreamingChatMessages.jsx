@@ -95,13 +95,13 @@ export default function StreamingChatMessages({
             <div className="brutal-border grid h-10 w-10 shrink-0 place-items-center font-display text-sm font-black bg-mustard text-ink shadow-nav">
               {persona?.jp || '会'}
             </div>
-            <article className="brutal-border bg-paper px-4 py-3 text-ink shadow-shadow">
+            <article className="rounded-base border border-dashed border-ink/30 bg-paper/60 px-4 py-3 text-ink/70 shadow-sm">
               <div className="flex items-center gap-1.5 py-1">
-                <span className="h-2 w-2 rounded-full bg-ink animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="h-2 w-2 rounded-full bg-ink animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="h-2 w-2 rounded-full bg-ink animate-bounce" style={{ animationDelay: '300ms' }} />
-                <span className="ml-2 font-mono text-xs font-bold text-ink/70">
-                  {persona?.name || 'Kaiwa'} is thinking...
+                <span className="h-2 w-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="h-2 w-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="h-2 w-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                <span className="ml-2 font-mono text-xs font-semibold italic text-gray-500">
+                  {persona?.name || 'Kaiwa'} is thinking (思考中)...
                 </span>
               </div>
             </article>
