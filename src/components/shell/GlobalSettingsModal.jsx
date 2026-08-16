@@ -12,6 +12,7 @@ import DeveloperSettings from '../settings/DeveloperSettings.jsx';
 import { useAuth } from '../../lib/auth/AuthContext.jsx';
 import { saveUserSettings } from '../../lib/firebase/firestore.js';
 import { PERMISSIONS, hasPermission } from '../../lib/auth/rbac.js';
+import { isStreamingEnabled, setStreamingEnabled } from '../../lib/ai/config.js';
 
 const CHAT_NOTCH_STYLES = [
   { id: 'dynamic-island', label: 'Dynamic Island' },
@@ -502,12 +503,26 @@ function RoleplaySettings() {
   const [showCards, setShowCards] = useState(true);
   const [showMessages, setShowMessages] = useState(true);
   const [showPhoneChrome, setShowPhoneChrome] = useState(true);
+  const [streaming, setStreaming] = useState(false);
   const { user } = useAuth();
+
+  useEffect(() => {
+    setStreaming(isStreamingEnabled());
+  }, []);
 
   function updateOption(option, value) {
     window.dispatchEvent(new CustomEvent('kaiwa:conversation-option-change', { detail: { option, value } }));
     if (user) {
       saveUserSettings(user.uid, { display: { [option]: value } }).catch(console.error);
+    }
+  }
+
+  function toggleStreaming() {
+    const nextValue = !streaming;
+    setStreaming(nextValue);
+    setStreamingEnabled(nextValue);
+    if (user) {
+      saveUserSettings(user.uid, { streamingEnabled: nextValue }).catch(console.error);
     }
   }
 
@@ -539,6 +554,12 @@ function RoleplaySettings() {
       </div>
 
       <div className="grid gap-3 mt-5">
+        <RoleplaySettingToggle 
+          active={streaming} 
+          onClick={toggleStreaming} 
+          label="Stream AI responses" 
+          description="Stream Japanese conversation token-by-token across all roles (default: off)." 
+        />
         <RoleplaySettingToggle active={showCards} onClick={toggleCards} label="Suggestion cards" description="Show the held-card phrase fan during practice." />
         <RoleplaySettingToggle active={showMessages} onClick={toggleMessages} label="Messages" description="Show or hide the conversation bubbles inside the phone." />
         <RoleplaySettingToggle active={showPhoneChrome} onClick={togglePhoneChrome} label="Phone chrome" description="Show time, wifi, cellular, battery, and notch." />

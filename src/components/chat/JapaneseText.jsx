@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { IoCloseSharp, IoVolumeHighSharp, IoOpenOutline, IoSparklesSharp } from 'react-icons/io5';
 import { tokenizeJapaneseText } from '../../lib/japaneseText.js';
 import { speakJapanese } from '../../lib/speech.js';

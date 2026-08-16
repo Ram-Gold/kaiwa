@@ -9,11 +9,13 @@ import JapaneseText, { DictionaryPopover } from './JapaneseText.jsx';
 import { speakJapanese } from '../../lib/speech.js';
 import { translateJapaneseToEnglish } from '../../lib/translation.js';
 import { toRomajiText } from '../../lib/japaneseText.js';
-import { sendMessage, evaluateSession, evaluateSessionFallback } from '../../lib/ai.js';
+import { sendMessage, evaluateSession, evaluateSessionFallback, parseModelReply } from '../../lib/ai.js';
 import { loadStoredProvider, loadStoredApiKeys, loadStoredOpenRouterModel } from '../dashboard/AiProviderSettingsCard.jsx';
 import { useAuth } from '../../lib/auth/AuthContext';
 import { saveChatSession } from '../../lib/firebase/firestore.js';
 import { useRouter } from 'next/navigation';
+import { isStreamingEnabled, assembleSystemPrompt, getAIModelConfig } from '../../lib/ai/config.js';
+import { getPersonaById } from '../../prompts/personas.js';
 
 function createMessage(role, content) {
   return { id: `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, role, content };
@@ -207,8 +209,13 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
   const recognitionRef = useRef(null);
   const [showPhoneChrome, setShowPhoneChrome] = useState(true);
   const [notchStyle, setNotchStyle] = useState('dynamic-island');
+  const [streamingEnabled, setStreamingEnabledState] = useState(false);
   const [isTipOpen, setIsTipOpen] = useState(true);
   const [activeDictionaryEntry, setActiveDictionaryEntry] = useState(null);
+
+  useEffect(() => {
+    setStreamingEnabledState(isStreamingEnabled());
+  }, []);
 
   useEffect(() => {
     function handleOptionChange(event) {
@@ -219,6 +226,7 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
       if (option === 'showPhoneChrome') setShowPhoneChrome(Boolean(value));
       if (option === 'readingMode') setReadingMode(value);
       if (option === 'notchStyle') setNotchStyle(value);
+      if (option === 'streamingEnabled') setStreamingEnabledState(Boolean(value));
     }
 
     function handleShowDictionary(event) {
@@ -337,27 +345,124 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
 
     try {
       const historyForApi = newMessages.filter((m) => ['user', 'assistant'].includes(m.role));
-      const reply = await sendMessage(provider, apiKey, personaId || scenario.id || 'sensei', historyForApi, cleanText, openRouterModel);
 
-      setMessages((current) => [...current, createMessage('assistant', reply.text)]);
+      if (streamingEnabled) {
+        const activePersona = getPersonaById(personaId || scenario.id || 'sensei');
+        const systemPrompt = assembleSystemPrompt(activePersona);
+        const modelConfig = getAIModelConfig(provider, openRouterModel);
 
-      if (reply.suggestions && reply.suggestions.length > 0) {
-        const formattedCards = reply.suggestions.map((s, idx) => ({
-          id: Math.random().toString(36).slice(2, 9),
-          phrase: s.text,
-          kana: s.text,
-          romaji: toRomajiText(s.text),
-          tokens: buildPronunciationTokens(s.text),
-          toneIndex: idx,
-          isCorrect: s.isCorrect,
-          explanation: s.explanation,
-        }));
-        turnCardsRef.current = formattedCards;
-        setAvailableCards(formattedCards);
+        let payload;
+        if (provider === 'anthropic' || provider === 'claude') {
+          payload = {
+            model: modelConfig.model,
+            system: systemPrompt,
+            messages: historyForApi.map((m) => ({ role: m.role, content: m.content })),
+            max_tokens: 600,
+            temperature: modelConfig.temperature,
+          };
+        } else {
+          payload = {
+            model: modelConfig.model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              ...historyForApi.map((m) => ({ role: m.role, content: m.content })),
+            ],
+            temperature: modelConfig.temperature,
+            max_tokens: 600,
+          };
+        }
+
+        const asstId = `asst-${Date.now()}`;
+        setMessages((curr) => [...curr, { id: asstId, role: 'assistant', content: '' }]);
+
+        const streamRes = await fetch('/api/chat/stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider, apiKey, payload }),
+        });
+
+        if (!streamRes.ok) {
+          throw new Error(`Streaming failed: ${streamRes.status}`);
+        }
+
+        const reader = streamRes.body?.getReader();
+        const decoder = new TextDecoder();
+        let accum = '';
+        let streamBuffer = '';
+
+        while (reader) {
+          const { value, done } = await reader.read();
+          if (done) break;
+
+          streamBuffer += decoder.decode(value, { stream: true });
+          const lines = streamBuffer.split('\n');
+          streamBuffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const tr = line.trim();
+            if (!tr.startsWith('data:')) continue;
+            try {
+              const parsed = JSON.parse(tr.replace(/^data:\s*/, ''));
+              if (parsed.token) {
+                accum += parsed.token;
+                const cleanDisplay = accum.split(/SUGGESTIONS:/i)[0].trim();
+                setMessages((curr) =>
+                  curr.map((m) => (m.id === asstId ? { ...m, content: cleanDisplay || accum } : m))
+                );
+              }
+            } catch {
+              // Ignore partial JSON
+            }
+          }
+        }
+
+        const finalParsed = parseModelReply(accum);
+        setMessages((curr) =>
+          curr.map((m) => (m.id === asstId ? { ...m, content: finalParsed.text } : m))
+        );
+
+        if (finalParsed.suggestions && finalParsed.suggestions.length > 0) {
+          const formattedCards = finalParsed.suggestions.map((s, idx) => ({
+            id: Math.random().toString(36).slice(2, 9),
+            phrase: s.text,
+            kana: s.text,
+            romaji: toRomajiText(s.text),
+            tokens: buildPronunciationTokens(s.text),
+            toneIndex: idx,
+            isCorrect: s.isCorrect,
+            explanation: s.explanation,
+          }));
+          turnCardsRef.current = formattedCards;
+          setAvailableCards(formattedCards);
+        } else {
+          const fallbackCards = buildFallbackCards(scenario, messages.length);
+          turnCardsRef.current = fallbackCards;
+          setAvailableCards(fallbackCards);
+        }
       } else {
-        const fallbackCards = buildFallbackCards(scenario, messages.length);
-        turnCardsRef.current = fallbackCards;
-        setAvailableCards(fallbackCards);
+        // Default non-streaming batch reply
+        const reply = await sendMessage(provider, apiKey, personaId || scenario.id || 'sensei', historyForApi, cleanText, openRouterModel);
+
+        setMessages((current) => [...current, createMessage('assistant', reply.text)]);
+
+        if (reply.suggestions && reply.suggestions.length > 0) {
+          const formattedCards = reply.suggestions.map((s, idx) => ({
+            id: Math.random().toString(36).slice(2, 9),
+            phrase: s.text,
+            kana: s.text,
+            romaji: toRomajiText(s.text),
+            tokens: buildPronunciationTokens(s.text),
+            toneIndex: idx,
+            isCorrect: s.isCorrect,
+            explanation: s.explanation,
+          }));
+          turnCardsRef.current = formattedCards;
+          setAvailableCards(formattedCards);
+        } else {
+          const fallbackCards = buildFallbackCards(scenario, messages.length);
+          turnCardsRef.current = fallbackCards;
+          setAvailableCards(fallbackCards);
+        }
       }
     } catch (error) {
       setMessages((current) => [
