@@ -6,6 +6,8 @@ import { useMemo, useState, useEffect } from 'react';
 import Badge from '../components/ui/Badge.jsx';
 import Button from '../components/ui/Button.jsx';
 import Card from '../components/ui/Card.jsx';
+import NeubrutalCard from '../components/ui/NeubrutalCard.jsx';
+import CardSkeleton from '../components/ui/CardSkeleton.jsx';
 import { cn } from '../lib/utils.js';
 
 const filters = ['ALL', 'Beginner', 'Food', 'Memes', 'Life'];
@@ -80,7 +82,7 @@ export default function Home() {
             type="button"
             onClick={() => setActiveFilter(filter)}
             className={cn(
-              'brutal-border px-4 py-3 font-mono text-sm font-black uppercase tracking-[0.12em] shadow-nav transition-all hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-none',
+              'brutal-border rounded-xl px-4 py-3 font-mono text-sm font-black uppercase tracking-[0.12em] shadow-nav transition-all hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-none',
               activeFilter === filter ? 'bg-correction text-paper' : 'bg-white text-ink hover:bg-mustard',
             )}
           >
@@ -91,15 +93,13 @@ export default function Home() {
 
       <section className="mt-8 grid gap-5 md:grid-cols-2" aria-label="Lesson cards">
         {isLoading ? (
-          <div className="md:col-span-2 py-12 text-center font-mono text-sm font-bold text-ink/50">
-            Loading lessons from Firestore...
-          </div>
+          <CardSkeleton count={4} />
         ) : visibleLessons.length > 0 ? (
           visibleLessons.map((lesson) => (
             <LessonCard key={lesson.id || lesson.title} lesson={lesson} />
           ))
         ) : (
-          <div className="md:col-span-2 brutal-border bg-white p-8 text-center shadow-nav">
+          <div className="md:col-span-2 brutal-border rounded-2xl bg-white p-8 text-center shadow-nav">
             <h3 className="font-display text-2xl">No lessons found</h3>
             <p className="mt-2 font-mono text-xs font-bold text-ink/60">
               The Firestore `/lessons` collection is currently empty. Add documents to Firestore to display lessons here for everyone!
@@ -132,45 +132,23 @@ function CustomLessonCard() {
 }
 
 function LessonCard({ lesson }) {
-  return (
-    <Card as="article" padding="none" lift="press" className="group min-h-40 overflow-hidden">
-      <Link href={lesson.href} className="block p-5 sm:p-6">
-        <div className="flex min-h-28 flex-col justify-between">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <Badge tone={lesson.tone}>{lesson.category}</Badge>
-            <h3 className="mt-5 font-display text-3xl leading-none">{lesson.title}</h3>
-          </div>
-          <span className="brutal-border bg-paper px-2 py-1 font-mono text-xs font-black shadow-nav">
-            {lesson.minutes}m
-          </span>
-        </div>
-
-        <div className="mt-5">
-          <div className="mb-2 flex items-center justify-between font-mono text-xs font-black uppercase tracking-[0.12em]">
-            <span>Progress</span>
-            <span>{lesson.progress}%</span>
-          </div>
-          <SegmentedProgress value={lesson.progress} segments={8} />
-        </div>
-        </div>
-
-        <div className="mt-4 border-t border-border/45 pt-3 opacity-0 translate-y-2 transition-all duration-300 ease-out group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100">
-          <p className="font-jp text-lg font-bold text-aizome">{lesson.jp}</p>
-        </div>
-      </Link>
-    </Card>
-  );
-}
-
-function SegmentedProgress({ segments, value }) {
-  const filled = Math.round((Math.max(0, Math.min(100, value)) / 100) * segments);
+  const levelLabel = lesson.level || 'N5';
+  const categoryLabel = (lesson.category || 'BEGINNER').toUpperCase();
+  const meaningText = lesson.meaning || lesson.romaji || (lesson.level ? `${levelLabel}` : '');
 
   return (
-    <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${segments}, minmax(0, 1fr))` }}>
-      {Array.from({ length: segments }, (_, index) => (
-        <span key={index} className={cn('h-4 brutal-border shadow-nav', index < filled ? 'bg-moss' : 'bg-paper')} aria-hidden="true" />
-      ))}
-    </div>
+    <NeubrutalCard
+      id={lesson.id || `lesson-${lesson.title}`}
+      href={lesson.href}
+      category={categoryLabel}
+      categoryColor="bg-nbYellow text-black"
+      level={levelLabel}
+      levelColor="bg-nbGreen text-black"
+      title={lesson.title}
+      japaneseText={lesson.jp}
+      romajiOrMeaning={meaningText}
+      progress={lesson.progress ?? 0}
+      showProgress={true}
+    />
   );
 }

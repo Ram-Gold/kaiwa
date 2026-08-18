@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { IoVolumeHighSharp, IoLanguageSharp, IoGlobeOutline, IoCheckmarkSharp, IoSparklesSharp } from 'react-icons/io5';
 import { getKnownRomajiGlosses, toRomajiText } from '../../lib/japaneseText.js';
 import { speakJapanese } from '../../lib/speech.js';
 import { translateJapaneseToEnglish } from '../../lib/translation.js';
-import { parseThinkingAndSpeech } from '../../lib/ai/config.js';
+import { parseThinkingAndSpeech, isStreamingEnabled } from '../../lib/ai/config.js';
 import { formatDuration } from '../../lib/ai/metrics.js';
 import JapaneseText from './JapaneseText.jsx';
 import RoleplayCards from './RoleplayCards.jsx';
@@ -19,7 +19,31 @@ export default function ChatBubble({
   suggestionsDisabled = false,
   translation,
   meta = {},
+  streamingEnabled: propStreamingEnabled,
 }) {
+  const [isStreamActive, setIsStreamActive] = useState(() =>
+    propStreamingEnabled !== undefined ? Boolean(propStreamingEnabled) : isStreamingEnabled()
+  );
+
+  useEffect(() => {
+    if (propStreamingEnabled !== undefined) {
+      setIsStreamActive(Boolean(propStreamingEnabled));
+      return;
+    }
+    function handleStreamingChange(e) {
+      const val = e?.detail?.option === 'streamingEnabled' ? e.detail.value : e?.detail?.enabled;
+      if (val !== undefined) {
+        setIsStreamActive(Boolean(val));
+      }
+    }
+    window.addEventListener('kaiwa:conversation-option-change', handleStreamingChange);
+    window.addEventListener('kaiwa:streaming-toggle', handleStreamingChange);
+    return () => {
+      window.removeEventListener('kaiwa:conversation-option-change', handleStreamingChange);
+      window.removeEventListener('kaiwa:streaming-toggle', handleStreamingChange);
+    };
+  }, [propStreamingEnabled]);
+
   const [showRomaji, setShowRomaji] = useState(false);
   const [showTranslation, setShowTranslation] = useState(Boolean(translation));
   const [currentTranslation, setCurrentTranslation] = useState(translation || '');
@@ -34,8 +58,8 @@ export default function ChatBubble({
 
   const rawText = message.rawContent || message.content || '';
   const parsed = parseThinkingAndSpeech(rawText);
-  const thinking = message.thinking || parsed.thinking;
-  const speech = parsed.speech || (parsed.thinking ? '' : message.content);
+  const thinking = isStreamActive ? (message.thinking || parsed.thinking) : null;
+  const speech = parsed.speech || (parsed.thinking ? (isStreamActive ? '' : rawText) : message.content);
 
   const romajiGlosses = canUseAiTools ? getKnownRomajiGlosses(speech || message.content) : [];
   const romajiText = canUseAiTools ? (message.romaji || toRomajiText(speech || message.content)) : '';
@@ -218,8 +242,8 @@ export default function ChatBubble({
             </button>
           </div>
 
-          {/* Metadata footer: tokens, time, cost */}
-          {(meta?.tokens || meta?.durationMs || message.meta?.tokens || message.meta?.durationMs) && (
+          {/* Metadata footer: tokens, time, cost - only when streaming response is enabled */}
+          {isStreamActive && (meta?.tokens || meta?.durationMs || message.meta?.tokens || message.meta?.durationMs) && (
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-ink/10 pt-1.5 font-mono text-[9px] font-semibold text-ink/35" data-testid="message-meta">
               {(meta?.tokens || message.meta?.tokens) ? <span>{meta?.tokens || message.meta?.tokens} tokens</span> : null}
               {(meta?.durationMs || message.meta?.durationMs) ? <span>{formatDuration(meta?.durationMs || message.meta?.durationMs)}</span> : null}

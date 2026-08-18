@@ -363,4 +363,34 @@ describe('ConversationStage', () => {
 
     delete window.SpeechRecognition;
   });
+
+  it('hides thinking process and token/time/cost metadata when streaming is disabled', async () => {
+    render(<ConversationStage briefing={briefing} />);
+
+    const sayingBlock = await screen.findByTestId('saying-block');
+    expect(sayingBlock).toBeInTheDocument();
+
+    expect(screen.queryByTestId('thinking-block')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('message-meta')).not.toBeInTheDocument();
+  });
+
+  it('shows thinking process and metadata when streaming is toggled on', async () => {
+    render(<ConversationStage briefing={briefing} />);
+
+    const sayingBlock = await screen.findByTestId('saying-block');
+    expect(sayingBlock).toBeInTheDocument();
+
+    // Toggle streaming on
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('kaiwa:conversation-option-change', {
+          detail: { option: 'streamingEnabled', value: true },
+        })
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('message-meta')).toBeInTheDocument();
+    });
+  });
 });

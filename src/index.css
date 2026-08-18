@@ -11,7 +11,7 @@
 @layer base {
   :root {
     /* Neobrutalism layout tokens */
-    --border-radius: 5px;
+    --border-radius: 12px;
     --box-shadow-x: 4px;
     --box-shadow-y: 4px;
     --reverse-box-shadow-x: -4px;
@@ -129,6 +129,28 @@ textarea:focus-visible {
 
   .japanese-text {
     @apply font-jp text-lg font-bold leading-8;
+  }
+
+  /* ── Clean Neubrutal Card styles ──────────────────────── */
+  .nb-card-clean {
+    @apply border-2 border-ink bg-white rounded-xl relative;
+    box-shadow: 4px 4px 0px 0px #1C1C1C;
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .nb-card-clean:hover {
+    transform: translateY(-4px);
+    box-shadow: 6px 6px 0px 0px #1C1C1C;
+  }
+
+  .nb-card-clean:active {
+    transform: translateY(2px) translateX(2px);
+    box-shadow: 2px 2px 0px 0px #1C1C1C;
+  }
+
+  .nb-pill {
+    @apply inline-flex items-center justify-center border-2 border-ink px-3 py-0.5 font-mono text-xs font-black uppercase tracking-[0.14em] rounded-full;
+    box-shadow: 2px 2px 0px 0px #1C1C1C;
   }
 
   .animate-message-in {

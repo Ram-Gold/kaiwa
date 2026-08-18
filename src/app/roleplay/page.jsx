@@ -6,6 +6,8 @@ import { useMemo, useState, useEffect } from 'react';
 import Badge from '../../components/ui/Badge.jsx';
 import Button from '../../components/ui/Button.jsx';
 import Card from '../../components/ui/Card.jsx';
+import NeubrutalCard from '../../components/ui/NeubrutalCard.jsx';
+import CardSkeleton from '../../components/ui/CardSkeleton.jsx';
 import { cn } from '../../lib/utils.js';
 import { getRoleplays } from '../../lib/firebase/firestore.js';
 
@@ -66,7 +68,7 @@ export default function RoleplayPage() {
             type="button"
             onClick={() => setActiveFilter(filter)}
             className={cn(
-              'brutal-border px-4 py-3 font-mono text-sm font-black uppercase tracking-[0.12em] shadow-nav transition-all hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-none',
+              'brutal-border rounded-xl px-4 py-3 font-mono text-sm font-black uppercase tracking-[0.12em] shadow-nav transition-all hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-none',
               activeFilter === filter ? 'bg-correction text-paper' : 'bg-white text-ink hover:bg-mustard',
             )}
           >
@@ -77,15 +79,13 @@ export default function RoleplayPage() {
 
       <section className="mt-8 grid gap-5 md:grid-cols-2" aria-label="Roleplay scenario cards">
         {isLoading ? (
-          <div className="md:col-span-2 py-12 text-center font-mono text-sm font-bold text-ink/50">
-            Loading roleplays from Firestore...
-          </div>
+          <CardSkeleton count={4} />
         ) : visibleScenarios.length > 0 ? (
           visibleScenarios.map((scenario) => (
             <ScenarioCard key={scenario.id || scenario.title} scenario={scenario} />
           ))
         ) : (
-          <div className="md:col-span-2 brutal-border bg-white p-8 text-center shadow-nav">
+          <div className="md:col-span-2 brutal-border rounded-2xl bg-white p-8 text-center shadow-nav">
             <h3 className="font-display text-2xl">No roleplays found</h3>
             <p className="mt-2 font-mono text-xs font-bold text-ink/60">
               The Firestore `/roleplays` collection is currently empty. Add documents to Firestore to display roleplays here!
@@ -94,7 +94,7 @@ export default function RoleplayPage() {
         )}
       </section>
 
-      <section className="mt-8 brutal-border bg-aizome p-5 text-paper shadow-shadow sm:flex sm:items-center sm:justify-between sm:gap-6" aria-label="Completed roleplay review">
+      <section className="mt-8 brutal-border rounded-2xl bg-aizome p-5 text-paper shadow-shadow sm:flex sm:items-center sm:justify-between sm:gap-6" aria-label="Completed roleplay review">
         <div>
           <p className="label-mono text-mustard">Finished a session?</p>
           <h2 className="mt-2 font-display text-3xl leading-none">See your grading & review</h2>
@@ -129,48 +129,30 @@ function CustomRoleplayCard() {
 }
 
 function ScenarioCard({ scenario }) {
+  const levelLabel = scenario.level || scenario.difficulty || 'N5';
+  const categoryLabel = (scenario.category || 'ROLEPLAY').toUpperCase();
+  const meaningText = scenario.meaning || scenario.romaji || (levelLabel ? `${levelLabel}` : '');
+
   return (
-    <Card as="article" padding="none" lift="press" className="group min-h-44 overflow-hidden bg-white">
-      <Link href={scenario.href} className="relative flex min-h-44 h-full flex-col p-5 text-ink">
-        {scenario.bg ? (
-          <img
-            src={scenario.bg}
-            alt=""
-            className="absolute inset-0 h-full w-full scale-100 object-cover opacity-10 transition-[opacity,transform] duration-500 ease-out group-hover:scale-[1.03] group-hover:opacity-30 group-focus-visible:scale-[1.03] group-focus-visible:opacity-30"
-            draggable="false"
-          />
-        ) : (
-          <>
-            <div className="absolute inset-0 notebook-panel opacity-80 transition-opacity duration-500 ease-out group-hover:opacity-100" aria-hidden="true" />
-            <div className="absolute inset-0 bg-paper/70 transition-colors duration-500 ease-out group-hover:bg-paper/35" aria-hidden="true" />
-          </>
-        )}
-
-        <div className="relative flex items-start justify-between gap-4">
-          <Badge tone={scenario.tone}>{scenario.category}</Badge>
-          <span className="brutal-border bg-white px-2 py-1 font-mono text-xs font-black uppercase tracking-[0.12em] shadow-nav">
-            {scenario.minutes}m
+    <NeubrutalCard
+      id={scenario.id || `scenario-${scenario.title}`}
+      href={scenario.href || scenario.startHref}
+      category={categoryLabel}
+      categoryColor="bg-nbYellow text-black"
+      level={levelLabel}
+      levelColor="bg-nbGreen text-black"
+      title={scenario.title}
+      japaneseText={scenario.subtitle || scenario.jpTitle || ''}
+      romajiOrMeaning={meaningText}
+      showProgress={false}
+      footerContent={
+        <div className="space-y-1.5 pt-3 border-t-2 border-slate-100 flex items-center justify-between font-mono text-xs font-bold text-slate-700">
+          <span className="uppercase tracking-wider">JLPT {levelLabel}</span>
+          <span className="text-black font-black group-hover:text-indigo-600 group-hover:translate-x-1 transition-all duration-200 flex items-center gap-1">
+            Start roleplay <span aria-hidden="true">&rarr;</span>
           </span>
         </div>
-
-        <div className="relative flex flex-1 flex-col justify-end py-4 text-left">
-          <div className="min-h-[4.5rem]">
-            <h2 className="font-display text-3xl leading-none transition-transform duration-300 ease-out group-hover:-translate-y-1 group-focus-visible:-translate-y-1 sm:text-4xl">
-              {scenario.title}
-            </h2>
-            <p className="mt-1 h-7 translate-y-1 font-jp text-lg font-bold text-aizome opacity-0 transition-all duration-300 ease-out group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100">
-              {scenario.subtitle}
-            </p>
-          </div>
-        </div>
-
-        <div className="relative flex items-center justify-between gap-3">
-          <span className="font-mono text-xs font-black uppercase tracking-[0.12em]">{scenario.difficulty}</span>
-          <span className="border-2 border-transparent px-3 py-2 font-mono text-xs font-black uppercase tracking-[0.12em] text-correction transition-[background-color,border-color,color,box-shadow,transform] duration-300 ease-out group-hover:translate-x-boxShadowX group-hover:translate-y-boxShadowY group-hover:border-border group-hover:bg-correction group-hover:text-paper group-hover:shadow-nav group-focus-visible:translate-x-boxShadowX group-focus-visible:translate-y-boxShadowY group-focus-visible:border-border group-focus-visible:bg-correction group-focus-visible:text-paper group-focus-visible:shadow-nav">
-            Start →
-          </span>
-        </div>
-      </Link>
-    </Card>
+      }
+    />
   );
 }

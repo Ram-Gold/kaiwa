@@ -3,7 +3,7 @@ import { cva } from 'class-variance-authority';
 import { cn } from '../../lib/utils.js';
 
 const buttonVariants = cva(
-  'brutal-border inline-flex items-center justify-center gap-2 font-mono font-black uppercase tracking-[0.12em] shadow-shadow transition-all duration-150 ease-out disabled:cursor-not-allowed disabled:opacity-50 enabled:hover:translate-x-boxShadowX enabled:hover:translate-y-boxShadowY enabled:hover:shadow-none active:translate-x-boxShadowX active:translate-y-boxShadowY active:shadow-none',
+  'brutal-border rounded-xl inline-flex items-center justify-center gap-2 font-mono font-black uppercase tracking-[0.12em] shadow-shadow transition-all duration-150 ease-out disabled:cursor-not-allowed disabled:opacity-50 enabled:hover:translate-x-boxShadowX enabled:hover:translate-y-boxShadowY enabled:hover:shadow-none active:translate-x-boxShadowX active:translate-y-boxShadowY active:shadow-none',
   {
     variants: {
       variant: {

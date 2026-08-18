@@ -692,7 +692,23 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
 
           <TipButton isOpen={isTipOpen} setIsOpen={setIsTipOpen} theme={theme} />
           <div className="relative z-10">
-            <PhoneFrame scenario={scenario} theme={theme} showMessages={showMessages} showPhoneChrome={showPhoneChrome} notchStyle={notchStyle} readingMode={readingMode} message={message} setMessage={setMessage} isTipOpen={isTipOpen} setIsTipOpen={setIsTipOpen} messages={messages} isLoading={isLoading || isSending} onSubmit={handleMessageSubmit} isSending={isSending} />
+            <PhoneFrame
+              scenario={scenario}
+              theme={theme}
+              showMessages={showMessages}
+              showPhoneChrome={showPhoneChrome}
+              notchStyle={notchStyle}
+              readingMode={readingMode}
+              message={message}
+              setMessage={setMessage}
+              isTipOpen={isTipOpen}
+              setIsTipOpen={setIsTipOpen}
+              messages={messages}
+              isLoading={isLoading || isSending}
+              onSubmit={handleMessageSubmit}
+              isSending={isSending}
+              streamingEnabled={streamingEnabled}
+            />
             {expToast ? <ExpToast text={expToast} /> : null}
           </div>
         </section>
@@ -769,7 +785,7 @@ function ScenarioBackdrop({ scenario, theme }) {
   );
 }
 
-function PhoneFrame({ scenario, theme, showMessages, showPhoneChrome, notchStyle, readingMode, message, setMessage, isTipOpen, setIsTipOpen, messages, isLoading, onSubmit, isSending }) {
+function PhoneFrame({ scenario, theme, showMessages, showPhoneChrome, notchStyle, readingMode, message, setMessage, isTipOpen, setIsTipOpen, messages, isLoading, onSubmit, isSending, streamingEnabled }) {
   return (
     <div className="relative mx-auto max-w-[24.5rem] text-ink">
       <div className="pointer-events-none absolute bottom-[-1.75rem] left-[12%] right-[12%] h-4 rounded-full bg-ink/25 blur-xl" aria-hidden="true" />
@@ -779,7 +795,7 @@ function PhoneFrame({ scenario, theme, showMessages, showPhoneChrome, notchStyle
           {showPhoneChrome ? <PhoneStatusBar notchStyle={notchStyle} /> : null}
           {isTipOpen ? <TipNotification setIsTipOpen={setIsTipOpen} /> : null}
           <div className="relative mx-2 my-1 flex-1 overflow-y-auto overflow-x-hidden p-2 scroll-smooth">
-            {showMessages ? <MessageThread readingMode={readingMode} scenario={scenario} theme={theme} messages={messages} isLoading={isLoading} /> : <HiddenMessages />}
+            {showMessages ? <MessageThread readingMode={readingMode} scenario={scenario} theme={theme} messages={messages} isLoading={isLoading} streamingEnabled={streamingEnabled} /> : <HiddenMessages />}
           </div>
 
           <div className="px-3 pb-12 shrink-0">
@@ -877,7 +893,7 @@ function SystemNoticeMessage({ text }) {
   );
 }
 
-function MessageThread({ readingMode, scenario, theme, messages, isLoading }) {
+function MessageThread({ readingMode, scenario, theme, messages, isLoading, streamingEnabled }) {
   const scrollRef = useRef(null);
 
   useEffect(() => {
@@ -904,17 +920,18 @@ function MessageThread({ readingMode, scenario, theme, messages, isLoading }) {
             theme={theme}
             text={msg.content}
             meta={msg.meta}
+            streamingEnabled={Boolean(streamingEnabled)}
           />
         );
       })}
 
-      {showWaitingDots && <MessageBubble from="ai" theme={theme} thinking />}
+      {showWaitingDots && <MessageBubble from="ai" theme={theme} thinking streamingEnabled={Boolean(streamingEnabled)} />}
       <div ref={scrollRef} />
     </div>
   );
 }
 
-function MessageBubble({ text = '', initialSubtext, from, theme, thinking = false, meta = {} }) {
+function MessageBubble({ text = '', initialSubtext, from, theme, thinking = false, meta = {}, streamingEnabled = false }) {
   const isUser = from === 'user';
   const [showRomaji, setShowRomaji] = useState(false);
   const [showTranslation, setShowTranslation] = useState(false);
@@ -924,9 +941,9 @@ function MessageBubble({ text = '', initialSubtext, from, theme, thinking = fals
 
   // Parse thinking vs speech from AI content
   const parsed = useMemo(() => parseThinkingAndSpeech(text), [text]);
-  const thinkingText = parsed.thinking;
-  const speechText = parsed.speech || (parsed.thinking ? '' : text);
-  const displayText = speechText || (parsed.thinking ? '' : text);
+  const thinkingText = streamingEnabled ? parsed.thinking : null;
+  const speechText = parsed.speech || (parsed.thinking ? (streamingEnabled ? '' : text) : text);
+  const displayText = speechText || (parsed.thinking ? (streamingEnabled ? '' : text) : text);
 
   const romajiText = useMemo(() => (displayText ? toRomajiText(displayText) : ''), [displayText]);
 
@@ -977,16 +994,16 @@ function MessageBubble({ text = '', initialSubtext, from, theme, thinking = fals
               <span className="block font-jp text-base font-black">{text}</span>
             ) : (
               <div>
-                {/* Early thinking placeholder when assistant message is brand new */}
-                {!text && !thinkingText && (
+                {/* Early thinking placeholder when assistant message is brand new and streaming is active */}
+                {streamingEnabled && !text && !thinkingText && (
                   <div className="flex items-center gap-2 py-1 text-gray-500 font-mono text-xs italic">
                     <IoSparklesSharp className="text-mustard text-xs animate-spin" />
                     <span>Thinking... (思考中)</span>
                   </div>
                 )}
 
-                {/* 1. CONNECTED THINKING UI — Connected Top Panel */}
-                {thinkingText ? (
+                {/* 1. CONNECTED THINKING UI — Connected Top Panel (only when streaming is active) */}
+                {streamingEnabled && thinkingText ? (
                   <div className="-mx-4 -mt-3 mb-3 border-b-2 border-dashed border-ink/15 bg-gray-50/90 p-3 text-xs" data-testid="thinking-block">
                     <button
                       type="button"
@@ -1086,8 +1103,8 @@ function MessageBubble({ text = '', initialSubtext, from, theme, thinking = fals
                   </div>
                 ) : null}
 
-                {/* Metadata footer: tokens, time, cost */}
-                {meta && (meta.tokens || meta.durationMs) ? (
+                {/* Metadata footer: tokens, time, cost - only when streaming response is enabled */}
+                {streamingEnabled && meta && (meta.tokens || meta.durationMs) ? (
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-border/20 pt-1.5 font-mono text-[9px] font-semibold text-ink/35" data-testid="message-meta">
                     {meta.tokens ? <span>{meta.tokens} tokens</span> : null}
                     {meta.durationMs ? <span>{formatDuration(meta.durationMs)}</span> : null}

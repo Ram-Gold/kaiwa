@@ -39,16 +39,16 @@ export default function AppSidebar({ onRequestExit }) {
   };
 
   return (
-    <aside className="border-b-2 border-border bg-aizome p-5 text-paper lg:sticky lg:top-0 lg:min-h-screen lg:border-b-0 lg:border-r-2">
+    <aside className="border-b-2 border-border/20 bg-transparent p-5 text-ink lg:sticky lg:top-0 lg:min-h-screen lg:border-b-0 lg:border-r-2 lg:border-border/40 lg:px-6">
       <Link
         href="/"
         className="group flex items-center gap-3"
         onClick={(e) => handleNavClick(e, '/')}
       >
-        <LogoMark className="brutal-border h-16 w-16 rotate-[-7deg] shadow-shadow transition-transform group-hover:rotate-0" />
+        <LogoMark className="brutal-border rounded-2xl h-14 w-14 rotate-[-7deg] shadow-shadow transition-transform group-hover:rotate-0" />
         <div>
-          <p className="font-display text-4xl leading-none">Kaiwa</p>
-          <p className="label-mono mt-1 text-mustard">Study notebook</p>
+          <p className="font-display text-3xl leading-none text-ink">Kaiwa</p>
+          <p className="label-mono mt-1 text-ink/60 font-bold">Study notebook</p>
         </div>
       </Link>
 
@@ -59,12 +59,12 @@ export default function AppSidebar({ onRequestExit }) {
           if (label === 'Settings') {
             return (
               <Fragment key={label}>
-                <div className="my-3 border-t-2 border-paper/20 hidden lg:block" />
+                <div className="my-3 border-t-2 border-border/20 hidden lg:block" />
                 <NavItem
                   as="button"
                   label={label}
                   Icon={null}
-                  className="flex whitespace-nowrap bg-transparent px-4 py-1.5 text-left font-mono text-sm font-black uppercase tracking-[0.12em] text-paper transition-colors hover:text-mustard lg:w-full lg:items-center justify-center lg:justify-start"
+                  className="flex whitespace-nowrap rounded-xl bg-transparent px-4 py-2.5 text-left font-mono text-sm font-black uppercase tracking-[0.12em] text-ink/70 transition-colors hover:text-mustard hover:bg-black/5 lg:w-full lg:items-center justify-center lg:justify-start"
                   onClick={() => {
                     const action = () => window.dispatchEvent(new Event('kaiwa:open-settings'));
                     if (onRequestExit) onRequestExit(action);
@@ -75,7 +75,7 @@ export default function AppSidebar({ onRequestExit }) {
                   as="button"
                   label="Log Out"
                   Icon={null}
-                  className="flex whitespace-nowrap bg-transparent px-4 py-1.5 text-left font-mono text-sm font-black uppercase tracking-[0.12em] text-paper transition-colors hover:text-shu lg:w-full lg:items-center justify-center lg:justify-start"
+                  className="flex whitespace-nowrap rounded-xl bg-transparent px-4 py-2.5 text-left font-mono text-sm font-black uppercase tracking-[0.12em] text-ink/70 transition-colors hover:text-shu hover:bg-black/5 lg:w-full lg:items-center justify-center lg:justify-start"
                   onClick={() => {
                     const action = () => handleLogout();
                     if (onRequestExit) onRequestExit(action);
@@ -95,8 +95,10 @@ export default function AppSidebar({ onRequestExit }) {
               active={isActive}
               onClick={(e) => handleNavClick(e, href)}
               className={cn(
-                'brutal-border flex whitespace-nowrap bg-paper px-4 py-3 font-mono text-sm font-black uppercase tracking-[0.12em] text-ink shadow-nav transition-all hover:translate-x-[3px] hover:translate-y-[3px] hover:bg-mustard hover:shadow-none lg:w-full lg:items-center lg:gap-3',
-                isActive && 'bg-mustard',
+                'flex whitespace-nowrap rounded-xl px-4 py-3 font-mono text-sm font-black uppercase tracking-[0.12em] transition-all lg:w-full lg:items-center lg:gap-3',
+                isActive
+                  ? 'brutal-border bg-mustard text-ink shadow-nav'
+                  : 'border-2 border-transparent text-ink/70 hover:border-border/30 hover:bg-black/5 hover:text-ink',
               )}
               iconClassName="hidden shrink-0 lg:block"
             />

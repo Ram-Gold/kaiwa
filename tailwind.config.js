@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ['./index.html', './src/**/*.{js,jsx,ts,tsx}'],
+  content: ['./src/**/*.{js,jsx,ts,tsx}'],
   theme: {
     extend: {
       /* ── KAIwa original palette (preserved) ───────────────── */
@@ -23,6 +23,10 @@ export default {
         'main-foreground': 'var(--main-foreground)',
         'secondary-background': 'var(--secondary-background)',
         overlay: 'var(--overlay)',
+
+        /* ── Neubrutal Card colors ────────────────────────── */
+        nbYellow: '#F2C14E',
+        nbGreen: '#86EFAC',
       },
 
       borderColor: {

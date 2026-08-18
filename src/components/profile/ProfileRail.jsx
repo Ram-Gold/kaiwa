@@ -49,7 +49,7 @@ export default function ProfileRail({ profile: fallbackProfile }) {
   return (
     <aside
       aria-label="Profile progress and community"
-      className="border-t-2 border-border bg-paper px-4 py-6 sm:px-6 lg:sticky lg:top-0 lg:min-h-screen lg:border-l-2 lg:border-t-0 lg:px-5 lg:py-10"
+      className="border-t-2 border-border bg-paper px-4 py-6 sm:px-6 lg:sticky lg:top-0 lg:min-h-screen lg:border-0 lg:px-5 lg:py-10"
     >
       <div className="grid gap-5">
         <StreakSummary streak={mergedStreak} />
