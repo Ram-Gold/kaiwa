@@ -19,6 +19,13 @@ export async function fetchJlptWordDefinition(term) {
     const wordData = data.words[0];
     const meanings = wordData.meaning ? wordData.meaning.split(';').map(m => m.trim()) : [];
 
+    // Pass through example sentences from the API when available
+    const examples = Array.isArray(wordData.examples)
+      ? wordData.examples
+      : wordData.example
+        ? [wordData.example]
+        : [];
+
     return {
       term: wordData.word,
       reading: wordData.furigana,
@@ -26,6 +33,7 @@ export async function fetchJlptWordDefinition(term) {
       jlpt: wordData.level ? `N${wordData.level}` : null,
       meanings: meanings,
       meaning: wordData.meaning,
+      examples,
     };
   } catch (error) {
     console.error('Error fetching JLPT definition:', error);

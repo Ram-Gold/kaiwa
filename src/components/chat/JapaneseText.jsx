@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { IoCloseSharp, IoVolumeHighSharp, IoOpenOutline, IoSparklesSharp } from 'react-icons/io5';
+import { IoBookmarkOutline, IoCheckmarkSharp, IoCloseSharp, IoVolumeHighSharp, IoOpenOutline, IoSparklesSharp } from 'react-icons/io5';
 import { tokenizeJapaneseText } from '../../lib/japaneseText.js';
 import { speakJapanese } from '../../lib/speech.js';
 import { fetchJlptWordDefinition } from '../../lib/jlptVocabApi.js';
@@ -106,9 +106,10 @@ export default function JapaneseText({ text, readingMode, enableDictionary = tru
   );
 }
 
-export function DictionaryPopover({ entry, onClose }) {
+export function DictionaryPopover({ entry, onClose, onSave = null, isSaved = false, showSaveButton = true }) {
   const [apiData, setApiData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [justSaved, setJustSaved] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -135,6 +136,22 @@ export function DictionaryPopover({ entry, onClose }) {
   const activeRomaji = apiData?.romaji || entry?.romaji || '';
   const activeJlpt = apiData?.jlpt || entry?.jlpt || null;
   const activeMeanings = apiData?.meanings || [];
+  const activeExamples = apiData?.examples || entry?.examples || [];
+
+  const saved = isSaved || justSaved;
+
+  function handleSave() {
+    if (saved || !onSave) return;
+    const wordData = {
+      term: activeTerm,
+      reading: activeReading,
+      meaning: activeMeanings.join('; '),
+      jlpt: activeJlpt,
+      examples: activeExamples,
+    };
+    onSave(wordData);
+    setJustSaved(true);
+  }
 
   return (
     <div className="brutal-border animate-panel-in bg-paper p-4 text-left text-ink shadow-shadow w-[290px] max-h-[420px] overflow-y-auto flex flex-col z-50">
@@ -143,13 +160,42 @@ export function DictionaryPopover({ entry, onClose }) {
         <span className="block font-mono text-xs font-black uppercase tracking-[0.16em] text-shu flex items-center gap-1">
           <IoSparklesSharp className="text-mustard text-xs" /> JLPT Dictionary
         </span>
-        <button
-          type="button"
-          onClick={onClose}
-          className="brutal-border grid h-7 w-7 place-items-center bg-white text-sm hover:bg-mustard transition-colors active:scale-95 shrink-0"
-        >
-          <IoCloseSharp />
-        </button>
+        <div className="flex items-center gap-1.5">
+          {/* Bookmark / Save button */}
+          {showSaveButton && onSave && (
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saved}
+              aria-label={saved ? 'Word saved to dictionary' : 'Save word to dictionary'}
+              title={saved ? 'Saved to dictionary' : 'Save to dictionary'}
+              className={`brutal-border grid h-7 w-7 place-items-center text-sm transition-colors active:scale-95 shrink-0 ${
+                saved
+                  ? 'bg-moss text-paper cursor-default'
+                  : 'bg-white hover:bg-mustard cursor-pointer'
+              }`}
+            >
+              {saved ? (
+                <IoCheckmarkSharp className="text-xs" />
+              ) : (
+                <IoBookmarkOutline className="text-xs" />
+              )}
+            </button>
+          )}
+          {/* Saved indicator (when showSaveButton is false but word is saved) */}
+          {showSaveButton && !onSave && isSaved && (
+            <span className="brutal-border grid h-7 px-1.5 place-items-center bg-moss text-paper text-[9px] font-mono font-black uppercase shrink-0">
+              ✓
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="brutal-border grid h-7 w-7 place-items-center bg-white text-sm hover:bg-mustard transition-colors active:scale-95 shrink-0"
+          >
+            <IoCloseSharp />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1">
@@ -218,6 +264,21 @@ export function DictionaryPopover({ entry, onClose }) {
               </div>
             </div>
           )
+        )}
+
+        {/* Example sentences from JLPT API */}
+        {activeExamples.length > 0 && (
+          <div className="mt-3 border-t-[3px] border-ink pt-2">
+            <span className="label-mono block text-ai text-[10px] mb-1">Examples</span>
+            <div className="space-y-1.5">
+              {activeExamples.map((example, i) => (
+                <div key={`example-${i}`} className="border-[2px] border-ink bg-white p-2 text-xs font-bold shadow-nav">
+                  <span className="font-mono text-[10px] text-ink/50 mr-1.5">#{i + 1}</span>
+                  {example}
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
         {/* Kanji breakdown if local entry has it */}

@@ -12,7 +12,7 @@ import { toRomajiText } from '../../lib/japaneseText.js';
 import { sendMessage, evaluateSession, evaluateSessionFallback, parseModelReply } from '../../lib/ai.js';
 import { loadStoredProvider, loadStoredApiKeys, loadStoredOpenRouterModel } from '../dashboard/AiProviderSettingsCard.jsx';
 import { useAuth } from '../../lib/auth/AuthContext';
-import { saveChatSession } from '../../lib/firebase/firestore.js';
+import { saveChatSession, saveDictionaryWord } from '../../lib/firebase/firestore.js';
 import { useRouter } from 'next/navigation';
 import { isStreamingEnabled, assembleSystemPrompt, getAIModelConfig, parsePartialJsonStream } from '../../lib/ai/config.js';
 import { getPersonaById } from '../../prompts/personas.js';
@@ -228,6 +228,14 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
   const [streamingEnabled, setStreamingEnabledState] = useState(false);
   const [isTipOpen, setIsTipOpen] = useState(true);
   const [activeDictionaryEntry, setActiveDictionaryEntry] = useState(null);
+  const [savedDictionaryTerms, setSavedDictionaryTerms] = useState(new Set());
+
+  // Save a word to the user's personal dictionary from the popover
+  function handleSaveToDictionary(wordData) {
+    if (!user?.uid || !wordData?.term) return;
+    saveDictionaryWord(user.uid, wordData).catch(console.error);
+    setSavedDictionaryTerms((prev) => new Set(prev).add(wordData.term));
+  }
 
   useEffect(() => {
     setStreamingEnabledState(isStreamingEnabled());
@@ -739,14 +747,24 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
 
           {activeDictionaryEntry && (
             <div className="absolute right-full mr-6 top-8 z-50 hidden md:block">
-              <DictionaryPopover entry={activeDictionaryEntry} onClose={() => setActiveDictionaryEntry(null)} />
+              <DictionaryPopover
+                entry={activeDictionaryEntry}
+                onClose={() => setActiveDictionaryEntry(null)}
+                onSave={handleSaveToDictionary}
+                isSaved={savedDictionaryTerms.has(activeDictionaryEntry?.term)}
+              />
             </div>
           )}
 
           {/* Mobile Overlay version */}
           {activeDictionaryEntry && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 md:hidden">
-              <DictionaryPopover entry={activeDictionaryEntry} onClose={() => setActiveDictionaryEntry(null)} />
+              <DictionaryPopover
+                entry={activeDictionaryEntry}
+                onClose={() => setActiveDictionaryEntry(null)}
+                onSave={handleSaveToDictionary}
+                isSaved={savedDictionaryTerms.has(activeDictionaryEntry?.term)}
+              />
             </div>
           )}
 

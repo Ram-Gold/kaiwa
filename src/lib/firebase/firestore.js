@@ -981,3 +981,68 @@ export async function getRoleplayById(roleplayId) {
   }
 }
 
+/* ==========================================================================
+   7. DICTIONARY — Personal Vocabulary
+   ========================================================================== */
+
+/**
+ * Save a word to the user's personal dictionary.
+ * Document ID is the term itself for natural deduplication.
+ *
+ * @param {string} uid User ID
+ * @param {Object} wordData - { term, reading, meaning, jlpt, examples }
+ */
+export async function saveDictionaryWord(uid, wordData) {
+  if (!uid || !wordData?.term) return;
+  const wordRef = doc(db, 'users', uid, 'dictionary', wordData.term);
+  await setDoc(wordRef, {
+    term: wordData.term,
+    reading: wordData.reading || '',
+    meaning: wordData.meaning || '',
+    jlpt: wordData.jlpt || null,
+    examples: wordData.examples || [],
+    source: wordData.source || 'roleplay',
+    savedAt: serverTimestamp(),
+  }, { merge: true });
+}
+
+/**
+ * Delete a word from the user's personal dictionary.
+ *
+ * @param {string} uid User ID
+ * @param {string} term The Japanese term to remove
+ */
+export async function deleteDictionaryWord(uid, term) {
+  if (!uid || !term) return;
+  const wordRef = doc(db, 'users', uid, 'dictionary', term);
+  await deleteDoc(wordRef);
+}
+
+/**
+ * Fetch all words from the user's personal dictionary.
+ * Returns an array sorted by savedAt descending (newest first).
+ *
+ * @param {string} uid User ID
+ * @returns {Promise<Array>} Array of word objects
+ */
+export async function getDictionaryWords(uid) {
+  if (!uid) return [];
+  const dictRef = collection(db, 'users', uid, 'dictionary');
+  const q = query(dictRef, orderBy('savedAt', 'desc'));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+}
+
+/**
+ * Check if a specific term is already saved in the user's dictionary.
+ *
+ * @param {string} uid User ID
+ * @param {string} term The Japanese term to check
+ * @returns {Promise<boolean>}
+ */
+export async function isDictionaryWordSaved(uid, term) {
+  if (!uid || !term) return false;
+  const wordRef = doc(db, 'users', uid, 'dictionary', term);
+  const snap = await getDoc(wordRef);
+  return snap.exists();
+}

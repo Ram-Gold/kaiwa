@@ -6,7 +6,7 @@ import ChatBubble from './ChatBubble.jsx';
 import RoleplayCards from './RoleplayCards.jsx';
 import { DictionaryPopover } from './JapaneseText.jsx';
 import { useAuth } from '../../lib/auth/AuthContext';
-import { saveChatSession } from '../../lib/firebase/firestore';
+import { saveChatSession, saveDictionaryWord } from '../../lib/firebase/firestore';
 
 let messageCounter = 0;
 
@@ -20,6 +20,14 @@ export default function ChatScreen({ provider, apiKey, personaId, onBackToDashbo
   const [translations, setTranslations] = useState({});
   const [translatingIds, setTranslatingIds] = useState({});
   const [activeDictionaryEntry, setActiveDictionaryEntry] = useState(null);
+  const [savedDictionaryTerms, setSavedDictionaryTerms] = useState(new Set());
+
+  // Save a word to the user's personal dictionary from the popover
+  function handleSaveToDictionary(wordData) {
+    if (!user?.uid || !wordData?.term) return;
+    saveDictionaryWord(user.uid, wordData).catch(console.error);
+    setSavedDictionaryTerms((prev) => new Set(prev).add(wordData.term));
+  }
 
   // Grading & Game State
   const [mistakesCount, setMistakesCount] = useState(0);
@@ -213,14 +221,24 @@ export default function ChatScreen({ provider, apiKey, personaId, onBackToDashbo
     <main className="mx-auto max-w-4xl relative">
       {activeDictionaryEntry && (
         <div className="absolute right-full mr-6 top-8 z-50 hidden md:block">
-          <DictionaryPopover entry={activeDictionaryEntry} onClose={() => setActiveDictionaryEntry(null)} />
+          <DictionaryPopover
+            entry={activeDictionaryEntry}
+            onClose={() => setActiveDictionaryEntry(null)}
+            onSave={handleSaveToDictionary}
+            isSaved={savedDictionaryTerms.has(activeDictionaryEntry?.term)}
+          />
         </div>
       )}
 
       {/* Mobile Overlay version */}
       {activeDictionaryEntry && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 md:hidden">
-          <DictionaryPopover entry={activeDictionaryEntry} onClose={() => setActiveDictionaryEntry(null)} />
+          <DictionaryPopover
+            entry={activeDictionaryEntry}
+            onClose={() => setActiveDictionaryEntry(null)}
+            onSave={handleSaveToDictionary}
+            isSaved={savedDictionaryTerms.has(activeDictionaryEntry?.term)}
+          />
         </div>
       )}
 

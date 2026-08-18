@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Fragment, useCallback, useRef } from 'react';
-import { Drama } from 'lucide-react';
+import { BookOpen, Drama } from 'lucide-react';
 import { HistoryIcon } from '../ui/history.jsx';
 import { HomeIcon } from '../ui/home.jsx';
 import { SettingsIcon } from '../ui/settings.jsx';
@@ -16,6 +16,7 @@ import { useAuth } from '../../lib/auth/AuthContext.jsx';
 export const NAV_ITEMS = [
   ['Home', '/', HomeIcon],
   ['Roleplay', '/roleplay', Drama],
+  ['Dictionary', '/dictionary', BookOpen],
   ['Past Practice', '/history', HistoryIcon],
   ['Profile', '/profile', UserIcon],
   ['Settings', '/settings', SettingsIcon],
