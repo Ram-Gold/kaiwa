@@ -281,7 +281,7 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
         apiKey,
         personaId || scenario.id || 'sensei',
         [],
-        "こんにちは！ (Greet the user directly in character in Japanese to begin the conversation, followed by 5 response choices for the user.)",
+        "こんにちは！",
         openRouterModel
       );
       const elapsed = Date.now() - startTime;
@@ -946,15 +946,24 @@ function MessageBubble({ text = '', initialSubtext, from, theme, thinking = fals
   // Resolve speechText cleanly without ever showing internal reasoning or meta-analysis
   const speechText = useMemo(() => {
     if (isUser) return text;
-    if (parsed.dialogue) return parsed.dialogue;
+    let clean = String(text || '').split(/SUGGESTIONS:/i)[0].trim();
+    clean = clean.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    clean = clean.replace(/^Here(?:'s| is) (?:a )?thinking process:[\s\S]*?(?=[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff])/i, '').trim();
 
-    // Fallback: If no parsed dialogue, maybe the content is already the plain string
-    if (!parsed.dialogue && typeof text === 'string' && !text.includes('"dialogue"')) {
-      return text;
+    if (clean.startsWith('{') && clean.includes('"dialogue"')) {
+      try {
+        const parsed = JSON.parse(clean);
+        if (parsed.dialogue) clean = parsed.dialogue;
+      } catch {}
     }
 
-    return text || 'はい！分かりました。';
-  }, [isUser, parsed, text]);
+    const jpIdx = clean.search(/[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]{2,}/);
+    if (jpIdx > 10) {
+      clean = clean.slice(jpIdx).trim();
+    }
+
+    return clean || 'はい！分かりました。';
+  }, [isUser, text]);
 
   const displayText = speechText;
 

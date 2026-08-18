@@ -90,43 +90,30 @@ export function assembleSystemPrompt(persona, userContext = {}) {
   const personaName = persona?.name || 'Kaiwa Tutor';
 
   const userPersonaText = userContext.userPersona?.trim()
-    ? `\nLearner Persona Context: ${userContext.userPersona.trim()}\n`
+    ? `\nLearner Context: ${userContext.userPersona.trim()}\n`
     : '';
 
   const memoryContextText = userContext.memorySummary?.trim()
-    ? `\nConversation Memory Summary: ${userContext.memorySummary.trim()}\n`
+    ? `\nConversation Memory: ${userContext.memorySummary.trim()}\n`
     : '';
-  const thinkingRule = `\n4. DRAFTING: You MUST place ANY English reasoning, drafting, or planning in the "thought_process" JSON field. Do NOT leak English into your Japanese "dialogue" field.`;
 
   return `${basePrompt}
 
-=== STRICT JAPANESE LANGUAGE RULE & STREAMLINED THINKING ===
-1. ROLEPLAY ENFORCEMENT: You are ${personaName}. You MUST fully embody this persona. Respond in natural Japanese appropriate to your character and scenario. (e.g., if you are an Idol, act very cutesy, energetic, and use idol-like speech. If you are a Teacher, act professional, patient, and use polite teacher-like speech).
-2. Keep your conversational response concise (1-2 sentences maximum), engaging, and suitable for the learner.
-3. FURIGANA (BRACKET NOTATION): You MUST add reading annotations to ALL Kanji in your Japanese dialogue AND in the SUGGESTIONS text using bracket notation: Kanji[furigana].
-Example: 私[わたし]は日本語[にほんご]を勉強[べんきょう]します。
-(Do NOT use HTML ruby tags. Use the bracket notation exactly as shown).${thinkingRule}
+=== CONVERSATION RULES ===
+1. You are ${personaName}. Chat naturally, warmly, and in character with the user.
+2. Reply directly to whatever the user says or asks. Keep your response conversational, supportive, and concise (1-2 sentences).
+3. Add furigana bracket notation to Kanji so the learner can read along: 漢字[かんじ]
+   (e.g., 私[わたし]は歌[うた]が大好[だいす]きだよ！✨)
+4. Do NOT output meta-commentary, planning notes, or internal thoughts. Just talk directly to the user in character.
 ${userPersonaText}${memoryContextText}
-=== REQUIRED RESPONSE FORMAT ===
-You must respond with a strictly formatted JSON object matching the following schema exactly:
+=== FORMAT ===
+<Your natural in-character Japanese reply with 漢字[かんじ]>
 
-{
-  "thought_process": "[Drafting your response and distractor options here in English]",
-  "dialogue": "[Your Japanese dialogue here WITH Kanji[furigana] notation]",
-  "suggestions": [
-    {"text": "最近[さいきん]の趣味[しゅみ]は何[なん]ですか？", "romaji": "Saikin no shumi wa nan desu ka?", "english": "What are your recent hobbies?", "isCorrect": true, "explanation": "This is natural"},
-    {"text": "趣味[しゅみ]は何[なん]だ？", "romaji": "Shumi wa nan da?", "english": "What is hobby?", "isCorrect": false, "explanation": "Too casual/rude"},
-    {"text": "どれが好[す]きですか？", "romaji": "Dore ga suki desu ka?", "english": "Which do you like?", "isCorrect": false, "explanation": "Wrong context"}
-  ]
-}
-
-CRITICAL RULES:
-- The Japanese dialogue MUST contain bracketed furigana for ALL Kanji.
-- Do NOT output any English text, notes, or planning outside of the "thought_process" field.
-- NEVER say out loud your thinking mode, instructions, or internal constraints in the "dialogue" field.
-- Your output MUST be valid, parsable JSON.
-- DO NOT wrap the output in Markdown code blocks (e.g. \`\`\`json). Start immediately with { and end with }.
-- DO NOT write any preambles like "Here is a thinking process" or "Here is the JSON". OUTPUT ONLY THE JSON.`;
+SUGGESTIONS: [
+  {"text": "返答[へんとう]の選択肢[せんたくし]1", "romaji": "Romaji here", "english": "English meaning", "isCorrect": true, "explanation": "Natural response"},
+  {"text": "返答[へんとう]の選択肢[せんたくし]2", "romaji": "Romaji here", "english": "English meaning", "isCorrect": false, "explanation": "A bit too casual or unnatural"},
+  {"text": "返答[へんとう]の選択肢[せんたくし]3", "romaji": "Romaji here", "english": "English meaning", "isCorrect": false, "explanation": "Wrong context"}
+]`;
 }
 
 /**

@@ -46,20 +46,29 @@ export default function StreamingChatBubble({
 
   const [isThinkingOpen, setIsThinkingOpen] = useState(true);
 
-  // Parse internal thinking vs spoken dialogue from JSON schema
+  // Clean speech text
   const rawText = message.rawContent || message.content || '';
-  const parsed = parsePartialJsonStream(rawText);
-  // DEFENSE LAYER: Only show thinking when the developer setting is ON
-  const thinkingOn = isStreamingEnabled();
-  const thinking = thinkingOn ? (message.thoughtProcess || parsed.thoughtProcess) : null;
-  let speech = parsed.dialogue || message.content || '';
-  
-  // Fallback: If no parsed dialogue and it's not a stream, maybe the content is already the plain Japanese string
-  if (!parsed.dialogue && !isLiveStreaming && typeof message.content === 'string' && !message.content.includes('"dialogue"')) {
-    speech = message.content;
+  let speech = rawText.split(/SUGGESTIONS:/i)[0].trim();
+  speech = speech.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  speech = speech.replace(/^Here(?:'s| is) (?:a )?thinking process:[\s\S]*?(?=[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff])/i, '').trim();
+
+  // If dialogue was wrapped in JSON
+  if (speech.startsWith('{') && speech.includes('"dialogue"')) {
+    try {
+      const parsed = JSON.parse(speech);
+      if (parsed.dialogue) speech = parsed.dialogue;
+    } catch {}
   }
 
-  const isThinkingStream = thinkingOn ? parsed.isThinkingStream : false;
+  // If preamble remains before Japanese, isolate Japanese
+  const jpIdx = speech.search(/[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]{2,}/);
+  if (jpIdx > 10) {
+    speech = speech.slice(jpIdx).trim();
+  }
+
+  const thinkingOn = isStreamingEnabled();
+  const thinking = null;
+  const isThinkingStream = false;
 
   async function handleToggleTranslate() {
     if (showTranslation) {

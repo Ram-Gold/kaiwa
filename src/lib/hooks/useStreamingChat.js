@@ -152,11 +152,6 @@ export function useStreamingChat({
           temperature: modelConfig.temperature,
           max_tokens: 2048,
         };
-        if (activeProvider === 'openai' || activeProvider === 'openrouter') {
-          payload.response_format = { type: 'json_object' };
-        } else if (activeProvider === 'ollama') {
-          payload.format = 'json';
-        }
       }
 
       let accumulatedRaw = '';
@@ -209,7 +204,13 @@ export function useStreamingChat({
               if (parsedData.token) {
                 setIsThinking(false);
                 accumulatedRaw += parsedData.token;
-                const cleanDisplay = accumulatedRaw.split(/SUGGESTIONS:/i)[0].trim();
+                let cleanDisplay = accumulatedRaw.split(/SUGGESTIONS:/i)[0].trim();
+                cleanDisplay = cleanDisplay.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+                cleanDisplay = cleanDisplay.replace(/^Here(?:'s| is) (?:a )?thinking process:[\s\S]*?(?=[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff])/i, '').trim();
+                const jpIdx = cleanDisplay.search(/[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]{2,}/);
+                if (jpIdx > 10) {
+                  cleanDisplay = cleanDisplay.slice(jpIdx).trim();
+                }
 
                 setMessages((prev) =>
                   prev.map((msg) =>

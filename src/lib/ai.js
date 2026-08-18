@@ -41,37 +41,35 @@ export class AIProviderError extends Error {
 
 export function parseModelReply(rawContent) {
   const content = String(rawContent || '').trim();
+  const suggestions = extractSuggestions(content);
+  let text = stripSuggestions(content).trim();
 
-  let parsedJson = {};
-  try {
-    // Check if the response is wrapped in a markdown code block
-    const cleanedContent = content.replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
-    parsedJson = JSON.parse(cleanedContent);
-  } catch (e) {
-    // Fallback to partial stream parser if JSON is malformed
-    const partial = parsePartialJsonStream(content);
-    parsedJson = {
-      thought_process: partial.thoughtProcess,
-      dialogue: partial.dialogue,
-      suggestions: extractSuggestions(content) // fallback
-    };
+  // Strip XML think tags if present
+  text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+  // Strip English thinking preambles like "Here's a thinking process: ..."
+  text = text.replace(/^Here(?:'s| is) (?:a )?thinking process:[\s\S]*?(?=[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff])/i, '').trim();
+
+  // Fallback: If JSON was returned, extract dialogue field
+  if (text.startsWith('{') && text.includes('"dialogue"')) {
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed.dialogue) {
+        text = parsed.dialogue;
+      }
+    } catch {}
   }
 
-  const suggestions = Array.isArray(parsedJson.suggestions) ? parsedJson.suggestions : extractSuggestions(content);
-  let text = String(parsedJson.dialogue || '').trim();
-
-  // If dialogue is empty, maybe the model returned the Japanese directly without proper JSON keys
-  if (!text) {
-    text = String(parsedJson.text || parsedJson.message || stripSuggestions(content)).trim();
+  // If the model still generated an English preamble before its Japanese speech, slice directly to the Japanese
+  const jpIdx = text.search(/[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]{2,}/);
+  if (jpIdx > 10) {
+    text = text.slice(jpIdx).trim();
   }
-
-  // DEFENSE LAYER: If streaming/thinking is OFF, we don't return the thoughtProcess
-  const isThinkingEnabled = isStreamingEnabled();
 
   return {
     text: text || '返事が空でした。もう一度送ってください。',
     suggestions: parseSuggestionsArray(suggestions),
-    thoughtProcess: isThinkingEnabled ? (parsedJson.thought_process || '') : '',
+    thoughtProcess: '',
   };
 }
 
@@ -358,7 +356,6 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
           { role: 'user', content: cleanMessage },
         ],
         stream: false,
-        format: 'json',
       };
     } else if (provider === 'openai') {
       payload = {
@@ -370,7 +367,6 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
         ],
         temperature: 0.7,
         max_tokens: 600,
-        response_format: { type: 'json_object' },
       };
     } else if (provider === 'openrouter') {
       payload = {
@@ -382,7 +378,6 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
         ],
         temperature: 0.7,
         max_tokens: 600,
-        response_format: { type: 'json_object' },
       };
     } else if (provider === 'gemini') {
       payload = {

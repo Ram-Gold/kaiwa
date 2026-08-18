@@ -3,7 +3,7 @@ import { IoVolumeHighSharp, IoLanguageSharp, IoGlobeOutline, IoCheckmarkSharp, I
 import { getKnownRomajiGlosses, toRomajiText } from '../../lib/japaneseText.js';
 import { speakJapanese } from '../../lib/speech.js';
 import { translateJapaneseToEnglish } from '../../lib/translation.js';
-import { parseThinkingAndSpeech, isStreamingEnabled } from '../../lib/ai/config.js';
+import { isStreamingEnabled } from '../../lib/ai/config.js';
 import { formatDuration } from '../../lib/ai/metrics.js';
 import JapaneseText from './JapaneseText.jsx';
 import RoleplayCards from './RoleplayCards.jsx';
@@ -57,9 +57,25 @@ export default function ChatBubble({
   const [isThinkingOpen, setIsThinkingOpen] = useState(true);
 
   const rawText = message.rawContent || message.content || '';
-  const parsed = parseThinkingAndSpeech(rawText);
-  const thinking = isStreamActive ? (message.thinking || parsed.thinking) : null;
-  const speech = parsed.speech || (parsed.thinking ? (isStreamActive ? '' : rawText) : message.content);
+  let speech = rawText.split(/SUGGESTIONS:/i)[0].trim();
+  speech = speech.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  speech = speech.replace(/^Here(?:'s| is) (?:a )?thinking process:[\s\S]*?(?=[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff])/i, '').trim();
+
+  // If dialogue was wrapped in JSON
+  if (speech.startsWith('{') && speech.includes('"dialogue"')) {
+    try {
+      const parsed = JSON.parse(speech);
+      if (parsed.dialogue) speech = parsed.dialogue;
+    } catch {}
+  }
+
+  // If preamble remains before Japanese, isolate Japanese
+  const jpIdx = speech.search(/[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]{2,}/);
+  if (jpIdx > 10) {
+    speech = speech.slice(jpIdx).trim();
+  }
+
+  const thinking = null;
 
   const romajiGlosses = canUseAiTools ? getKnownRomajiGlosses(speech || message.content) : [];
   const romajiText = canUseAiTools ? (message.romaji || toRomajiText(speech || message.content)) : '';

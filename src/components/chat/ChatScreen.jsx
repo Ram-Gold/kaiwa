@@ -20,7 +20,7 @@ export default function ChatScreen({ provider, apiKey, personaId, onBackToDashbo
   const [translations, setTranslations] = useState({});
   const [translatingIds, setTranslatingIds] = useState({});
   const [activeDictionaryEntry, setActiveDictionaryEntry] = useState(null);
-  
+
   // Grading & Game State
   const [mistakesCount, setMistakesCount] = useState(0);
   const [totalTurns, setTotalTurns] = useState(0);
@@ -143,7 +143,7 @@ export default function ChatScreen({ provider, apiKey, personaId, onBackToDashbo
     if (!user || messages.length <= 1) return;
     try {
       setIsSaving(true);
-      
+
       const accuracy = totalTurns === 0 ? 100 : Math.max(0, Math.round(((totalTurns - mistakesCount) / totalTurns) * 100));
       let grade = 'C';
       if (accuracy >= 90) grade = 'S';

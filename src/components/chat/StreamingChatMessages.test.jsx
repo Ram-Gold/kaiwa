@@ -59,15 +59,12 @@ describe('StreamingChatMessages Component', () => {
     expect(screen.getByText(/thinking \(思考中\)/i)).toBeDefined();
   });
 
-  it('renders distinct UI for model thinking in gray and saying in black', async () => {
-    const { setStreamingEnabled } = await import('../../lib/ai/config.js');
-    setStreamingEnabled(true);
-
+  it('renders speech text cleanly in the bubble', async () => {
     const messages = [
       {
         id: '2',
         role: 'assistant',
-        content: '<think>User is asking for directions. Formulate response.</think>まっすぐ行ってください。',
+        content: 'まっすぐ行ってください。',
       },
     ];
 
@@ -80,12 +77,9 @@ describe('StreamingChatMessages Component', () => {
       />
     );
 
-    const thinkingBlock = screen.getByTestId('thinking-block');
-    expect(thinkingBlock).toBeDefined();
-    expect(thinkingBlock.textContent).toContain('User is asking for directions');
-
-    const sayingBlock = screen.getByTestId('saying-block');
-    expect(sayingBlock).toBeDefined();
-    expect(sayingBlock.textContent).toContain('まっすぐ行ってください');
+    const assistantMsg = screen.getByTestId('assistant-message');
+    expect(assistantMsg).toBeDefined();
+    expect(assistantMsg.textContent).toContain('まっすぐ行ってください');
   });
 });
+
