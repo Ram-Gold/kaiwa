@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 
 import AppSidebar from './AppSidebar.jsx';
 import CompactNavigationMenu from './CompactNavigationMenu.jsx';
+import ExerciseHeaderControls from './ExerciseHeaderControls.jsx';
 import GlobalSettingsModal from './GlobalSettingsModal.jsx';
 import ExitConfirmationModal from './ExitConfirmationModal.jsx';
 import ApiGuard from './ApiGuard.jsx';
@@ -22,7 +23,8 @@ export default function AppShell({ children }) {
   const isExerciseRoute = isBriefing || isChat;
   const isFocusRoute = isBriefing || isChat || isGrading;
   const isProfileRoute = pathname === '/profile' || pathname.startsWith('/profile/');
-  const hasNoRightRail = isFocusRoute || isFriendsRoute;
+  const isSettingsRoute = pathname === '/settings' || pathname.startsWith('/settings/');
+  const hasNoRightRail = isFocusRoute || isFriendsRoute || isSettingsRoute;
 
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
   const [pendingExitAction, setPendingExitAction] = React.useState(null);
@@ -76,15 +78,17 @@ export default function AppShell({ children }) {
           'grid min-h-screen bg-paper text-ink',
           isFocusRoute
             ? 'grid-cols-1'
-            : isFriendsRoute
+            : isFriendsRoute || isSettingsRoute
               ? 'lg:grid-cols-[17rem_minmax(0,1fr)]'
               : 'lg:grid-cols-[17rem_minmax(0,1fr)_18rem]',
         )}
       >
-        {isFocusRoute ? (
-          <CompactNavigationMenu onRequestExit={isExerciseRoute ? handleRequestExit : undefined} />
+        {isExerciseRoute ? (
+          <ExerciseHeaderControls onRequestExit={handleRequestExit} />
+        ) : isFocusRoute ? (
+          <CompactNavigationMenu onRequestExit={undefined} />
         ) : (
-          <AppSidebar onRequestExit={isExerciseRoute ? handleRequestExit : undefined} />
+          <AppSidebar onRequestExit={undefined} />
         )}
         <main className={cn('min-w-0 px-4 py-6 sm:px-6 lg:px-8 lg:py-10', isBriefing && 'lg:px-10', (isChat || isGrading) && 'p-0 sm:p-0 lg:p-0')}>
           {children}

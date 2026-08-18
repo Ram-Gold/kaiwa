@@ -117,6 +117,7 @@ export default function DeveloperSettings() {
   const [simulatedScore, setSimulatedScore] = useState(80);
   const [simulatedScenario, setSimulatedScenario] = useState('Idol Cheki');
   const [debugFlags, setDebugFlags] = useState({
+    showFinishAndGrade: false,
     verboseLogs: false,
     mockAi: false,
     showDebugBanners: true,
@@ -181,6 +182,7 @@ export default function DeveloperSettings() {
       const updated = { ...prev, [key]: !prev[key] };
       if (typeof window !== 'undefined' && window?.localStorage) {
         window.localStorage.setItem?.('kaiwa.dev.debug_flags', JSON.stringify(updated));
+        window.dispatchEvent?.(new CustomEvent('kaiwa:dev-flags-changed', { detail: updated }));
       }
       return updated;
     });
@@ -413,6 +415,11 @@ export default function DeveloperSettings() {
           </button>
 
           {[
+            {
+              key: 'showFinishAndGrade',
+              label: "Show Manual 'Finish & Grade' Button",
+              desc: "Display the floating 'Finish & Grade' button during roleplay sessions. When disabled, sessions complete and grade automatically after 10 turns.",
+            },
             {
               key: 'overrideGradingScore',
               label: 'Edit & Override Grading Score Mode',

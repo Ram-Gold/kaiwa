@@ -95,7 +95,7 @@ describe('Developer Access & Settings', () => {
     expect(screen.getByText('Developer Options')).toBeDefined();
   });
 
-  it('renders Edit & Override Grading Score Mode flag', () => {
+  it('renders Edit & Override Grading Score Mode and Finish & Grade flag', () => {
     vi.mocked(useAuth).mockReturnValue({
       user: { uid: 'dev-uid', email: 'ram@kaiwa.dev' },
       profile: { userType: 'DEVELOPER', tier: 'DEVELOPER' },
@@ -106,6 +106,7 @@ describe('Developer Access & Settings', () => {
 
     render(<DeveloperSettings />);
 
+    expect(screen.getByText("Show Manual 'Finish & Grade' Button")).toBeDefined();
     expect(screen.getByText('Edit & Override Grading Score Mode')).toBeDefined();
     expect(screen.getByText('Verbose AI Prompt & Response Logging')).toBeDefined();
   });

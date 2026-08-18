@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { cn } from '../../lib/utils';
 import { IoCheckmarkCircleSharp, IoCloseCircleSharp } from 'react-icons/io5';
+import JapaneseText from './JapaneseText.jsx';
 
 export default function RoleplayCards({ disabled, onPickSuggestion, suggestions, onMistake }) {
   const [selectedIdx, setSelectedIdx] = useState(null);
@@ -42,7 +43,6 @@ export default function RoleplayCards({ disabled, onPickSuggestion, suggestions,
         const isSelected = selectedIdx === index;
         let cardColor = "bg-mustard text-ink";
         let FeedbackIcon = null;
-
         if (isSelected && !isStringArray) {
           if (suggestion.isCorrect) {
             cardColor = "bg-moss text-white";
@@ -70,12 +70,14 @@ export default function RoleplayCards({ disabled, onPickSuggestion, suggestions,
               disabled={disabled || selectedIdx !== null || isExiting}
               onClick={() => handlePick(suggestion, index)}
               className={cn(
-                "brutal-border w-full px-4 py-3 text-left font-mono text-sm font-black shadow-shadow transition-all hover:translate-x-boxShadowX hover:translate-y-boxShadowY hover:shadow-none disabled:cursor-not-allowed",
+                "brutal-border w-full px-4 py-3 text-left font-jp text-sm font-black shadow-shadow transition-all hover:translate-x-boxShadowX hover:translate-y-boxShadowY hover:shadow-none disabled:cursor-not-allowed",
                 cardColor
               )}
             >
               <div className="flex items-center justify-between gap-2">
-                <span>{text}</span>
+                <span className="font-jp text-base font-bold">
+                  <JapaneseText text={text} enableDictionary={false} />
+                </span>
                 {FeedbackIcon && <FeedbackIcon className="text-xl shrink-0" />}
               </div>
             </button>

@@ -66,7 +66,7 @@ export default function AppSidebar({ onRequestExit }) {
                   Icon={null}
                   className="flex whitespace-nowrap rounded-xl bg-transparent px-4 py-2.5 text-left font-mono text-sm font-black uppercase tracking-[0.12em] text-ink/70 transition-colors hover:text-mustard hover:bg-black/5 lg:w-full lg:items-center justify-center lg:justify-start"
                   onClick={() => {
-                    const action = () => window.dispatchEvent(new Event('kaiwa:open-settings'));
+                    const action = () => router.push('/settings');
                     if (onRequestExit) onRequestExit(action);
                     else action();
                   }}

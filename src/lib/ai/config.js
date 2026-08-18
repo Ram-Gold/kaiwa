@@ -82,8 +82,20 @@ export function setStreamingEnabled(enabled) {
 }
 
 /**
- * Assembles a unified system prompt ensuring strict Japanese pedagogical rules,
- * level constraints, learner bio context, and the JSON suggestions contract.
+ * AI ENGINEERING SPECIFICATION: `assembleSystemPrompt`
+ * ============================================================================
+ * Assembles a structured, context-rich system prompt for local & external LLMs.
+ * 
+ * CORE PEDAGOGICAL & LIFECYCLE CAPABILITIES:
+ * 1. Persona Voice & Tone: Preserves unique character constraints.
+ * 2. Briefing Objectives: Injects scenario goals, tips, and target practice vocabulary.
+ * 3. 10-Turn Roleplay Lifecycle:
+ *    - Turns 1-7: Guides the learner toward achieving the briefing goals.
+ *    - Turns 8-9: Alerts AI to begin wrapping up the roleplay scenario.
+ *    - Turn 10 (Final Turn): Prompts AI to deliver the final concluding goodbye/farewell.
+ * 4. Furigana Notation: Requires bracket notation (漢字[かんじ]) for client-side rendering.
+ * 5. Structured Distractor Contract: Generates 5 suggested reply options with explanations.
+ * ============================================================================
  */
 export function assembleSystemPrompt(persona, userContext = {}) {
   const basePrompt = typeof persona === 'string' ? persona : (persona?.systemPrompt || 'You are a helpful Japanese tutor.');
@@ -97,6 +109,49 @@ export function assembleSystemPrompt(persona, userContext = {}) {
     ? `\nConversation Memory: ${userContext.memorySummary.trim()}\n`
     : '';
 
+  let briefingGoalText = '';
+  if (userContext.briefing) {
+    const b = userContext.briefing;
+    const headsUpList = (b.headsUp || []).map((h) => `- ${h}`).join('\n');
+    const prepList = (b.prep || []).join(', ');
+    briefingGoalText = `
+=== ROLEPLAY SCENARIO & OBJECTIVES ===
+Scenario: ${b.title || ''} (${b.jpTitle || ''}) - Level ${b.level || 'N5'}
+Summary & Goal: ${b.summary || ''}
+Key Tasks & Coaching Tips for Learner:
+${headsUpList || '- Practice polite conversation in character.'}
+Target Practice Phrases: ${prepList || 'General N5 vocabulary'}
+`;
+  }
+
+  let turnProgressionText = '';
+  const currentTurn = Number(userContext.turn) || 1;
+  const maxTurns = Number(userContext.maxTurns) || 10;
+  const remaining = Math.max(0, maxTurns - currentTurn);
+
+  if (currentTurn >= maxTurns) {
+    turnProgressionText = `
+=== TURN PROGRESSION: FINAL TURN (${currentTurn}/${maxTurns}) ===
+This is the FINAL turn (Turn ${maxTurns}). The learner is saying their closing words/farewell.
+1. Deliver your warm in-character final farewell and goodbye to the learner (e.g. またね！, お疲れさまでした！, 応援しています！).
+2. Praise their effort warmly.
+3. Do NOT ask any new questions or introduce new topics since the session ends after your reply.
+`;
+  } else if (currentTurn >= maxTurns - 1) {
+    turnProgressionText = `
+=== TURN PROGRESSION: PENULTIMATE TURN (${currentTurn}/${maxTurns} - 1 turn remaining) ===
+The conversation will conclude in the next turn.
+1. Acknowledge what the learner said and naturally guide the scenario toward its conclusion.
+2. Prompt the learner for their final parting words or closing phrase.
+`;
+  } else {
+    turnProgressionText = `
+=== TURN PROGRESSION: TURN ${currentTurn}/${maxTurns} (${remaining} turns remaining) ===
+1. Guide the learner to achieve the scenario goals and use target phrases within the remaining turns.
+2. Keep the conversation moving forward purposefully toward the scenario objectives.
+`;
+  }
+
   return `${basePrompt}
 
 === CONVERSATION RULES ===
@@ -105,7 +160,7 @@ export function assembleSystemPrompt(persona, userContext = {}) {
 3. Add furigana bracket notation to Kanji so the learner can read along: 漢字[かんじ]
    (e.g., 私[わたし]は歌[うた]が大好[だいす]きだよ！✨)
 4. Do NOT output meta-commentary, planning notes, or internal thoughts. Just talk directly to the user in character.
-${userPersonaText}${memoryContextText}
+${userPersonaText}${memoryContextText}${briefingGoalText}${turnProgressionText}
 === FORMAT ===
 <Your natural in-character Japanese reply with 漢字[かんじ]>
 

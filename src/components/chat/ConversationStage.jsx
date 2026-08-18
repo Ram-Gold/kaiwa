@@ -162,6 +162,8 @@ const KANA_ROMAJI = {
   ー: '-',
 };
 
+const MAX_TURNS = 10;
+
 export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEFING }) {
   const scenario = briefing ?? FALLBACK_BRIEFING;
   const theme = ACCENT_THEME[scenario.accent] ?? ACCENT_THEME.aizome;
@@ -173,6 +175,19 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
   const [isExiting, setIsExiting] = useState(false);
   const [mistakesCount, setMistakesCount] = useState(0);
   const [totalTurns, setTotalTurns] = useState(0);
+  const [isCompleted, setIsCompleted] = useState(false);
+
+  const [showManualFinishAndGrade, setShowManualFinishAndGrade] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const flags = JSON.parse(window.localStorage.getItem('kaiwa.dev.debug_flags') || '{}');
+        return Boolean(flags.showFinishAndGrade);
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  });
 
   const { user } = useAuth();
   const router = useRouter();
@@ -216,6 +231,15 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
 
   useEffect(() => {
     setStreamingEnabledState(isStreamingEnabled());
+  }, []);
+
+  useEffect(() => {
+    function handleDevFlagsChanged(e) {
+      const flags = e?.detail || {};
+      setShowManualFinishAndGrade(Boolean(flags.showFinishAndGrade));
+    }
+    window.addEventListener('kaiwa:dev-flags-changed', handleDevFlagsChanged);
+    return () => window.removeEventListener('kaiwa:dev-flags-changed', handleDevFlagsChanged);
   }, []);
 
   useEffect(() => {
@@ -282,7 +306,8 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
         personaId || scenario.id || 'sensei',
         [],
         "こんにちは！",
-        openRouterModel
+        openRouterModel,
+        { turn: 1, maxTurns: MAX_TURNS, briefing: scenario }
       );
       const elapsed = Date.now() - startTime;
       const tokens = estimateTokenCount(reply.text);
@@ -324,10 +349,15 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
 
   async function handleMessageSubmit(text) {
     const cleanText = text.trim();
-    if (!cleanText || isSending || isLoading) return;
+    if (!cleanText || isSending || isLoading || isCompleted) return;
 
     setIsSending(true);
-    setTotalTurns((prev) => prev + 1);
+    const nextTurn = totalTurns + 1;
+    setTotalTurns(nextTurn);
+    const isFinalTurn = nextTurn >= MAX_TURNS;
+    if (isFinalTurn) {
+      setIsCompleted(true);
+    }
 
     const userMsg = createMessage('user', cleanText);
     const newMessages = [...messages, userMsg];
@@ -350,10 +380,15 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
 
     try {
       const historyForApi = newMessages.filter((m) => ['user', 'assistant'].includes(m.role));
+      const turnContext = {
+        turn: nextTurn,
+        maxTurns: MAX_TURNS,
+        briefing: scenario,
+      };
 
       if (streamingEnabled) {
         const activePersona = getPersonaById(personaId || scenario.id || 'sensei');
-        const systemPrompt = assembleSystemPrompt(activePersona);
+        const systemPrompt = assembleSystemPrompt(activePersona, turnContext);
         const modelConfig = getAIModelConfig(provider, openRouterModel);
 
         let payload;
@@ -430,7 +465,13 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
           curr.map((m) => (m.id === asstId ? { ...m, content: finalParsed.text, meta: { tokens: streamTokens, durationMs: streamElapsed, cost: streamCost } } : m))
         );
 
-        if (finalParsed.suggestions && finalParsed.suggestions.length > 0) {
+        if (isFinalTurn) {
+          setAvailableCards([]);
+          turnCardsRef.current = [];
+          setTimeout(() => {
+            handleSaveSession();
+          }, 2400);
+        } else if (finalParsed.suggestions && finalParsed.suggestions.length > 0) {
           const formattedCards = finalParsed.suggestions.map((s, idx) => ({
             id: Math.random().toString(36).slice(2, 9),
             phrase: s.text,
@@ -451,14 +492,28 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
       } else {
         // Default non-streaming batch reply
         const batchStartTime = Date.now();
-        const reply = await sendMessage(provider, apiKey, personaId || scenario.id || 'sensei', historyForApi, cleanText, openRouterModel);
+        const reply = await sendMessage(
+          provider,
+          apiKey,
+          personaId || scenario.id || 'sensei',
+          historyForApi,
+          cleanText,
+          openRouterModel,
+          turnContext
+        );
         const batchElapsed = Date.now() - batchStartTime;
         const batchTokens = estimateTokenCount(reply.text);
         const batchCost = estimateCost(provider, batchTokens);
 
         setMessages((current) => [...current, createMessage('assistant', reply.text, { tokens: batchTokens, durationMs: batchElapsed, cost: batchCost })]);
 
-        if (reply.suggestions && reply.suggestions.length > 0) {
+        if (isFinalTurn) {
+          setAvailableCards([]);
+          turnCardsRef.current = [];
+          setTimeout(() => {
+            handleSaveSession();
+          }, 2400);
+        } else if (reply.suggestions && reply.suggestions.length > 0) {
           const formattedCards = reply.suggestions.map((s, idx) => ({
             id: Math.random().toString(36).slice(2, 9),
             phrase: s.text,
@@ -677,6 +732,11 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
           )}
           aria-label={`${scenario.title} conversation`}
         >
+          {/* Top-Right Turn Counter (Minimal Split-Flap Badge Outside Phone Frame) */}
+          <div className="absolute -right-20 top-0 z-30 max-sm:-right-2 max-sm:-top-11">
+            <TurnCounterBadge turns={totalTurns} maxTurns={MAX_TURNS} />
+          </div>
+
           {activeDictionaryEntry && (
             <div className="absolute right-full mr-6 top-8 z-50 hidden md:block">
               <DictionaryPopover entry={activeDictionaryEntry} onClose={() => setActiveDictionaryEntry(null)} />
@@ -708,6 +768,10 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
               onSubmit={handleMessageSubmit}
               isSending={isSending}
               streamingEnabled={streamingEnabled}
+              turnsUsed={totalTurns}
+              maxTurns={MAX_TURNS}
+              isCompleted={isCompleted}
+              onSaveSession={handleSaveSession}
             />
             {expToast ? <ExpToast text={expToast} /> : null}
           </div>
@@ -753,22 +817,24 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
         />
       ) : null}
 
-      <div className="fixed bottom-6 left-6 z-20">
-        <button
-          onClick={handleSaveSession}
-          disabled={isGrading}
-          className="brutal-border bg-mustard text-ink px-5 py-3 font-mono text-sm font-black uppercase tracking-[0.1em] shadow-shadow transition-transform hover:-translate-y-1 active:scale-95 flex items-center gap-2 disabled:opacity-70 disabled:cursor-wait"
-        >
-          {isGrading ? (
-            <>
-              <span className="h-3.5 w-3.5 rounded-full border-2 border-ink border-t-transparent animate-spin" />
-              Grading Session…
-            </>
-          ) : (
-            'Finish & Grade'
-          )}
-        </button>
-      </div>
+      {showManualFinishAndGrade ? (
+        <div className="fixed bottom-6 left-6 z-20">
+          <button
+            onClick={handleSaveSession}
+            disabled={isGrading}
+            className="brutal-border bg-mustard text-ink px-5 py-3 font-mono text-sm font-black uppercase tracking-[0.1em] shadow-shadow transition-transform hover:-translate-y-1 active:scale-95 flex items-center gap-2 disabled:opacity-70 disabled:cursor-wait"
+          >
+            {isGrading ? (
+              <>
+                <span className="h-3.5 w-3.5 rounded-full border-2 border-ink border-t-transparent animate-spin" />
+                Grading Session…
+              </>
+            ) : (
+              'Finish & Grade'
+            )}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -785,7 +851,27 @@ function ScenarioBackdrop({ scenario, theme }) {
   );
 }
 
-function PhoneFrame({ scenario, theme, showMessages, showPhoneChrome, notchStyle, readingMode, message, setMessage, isTipOpen, setIsTipOpen, messages, isLoading, onSubmit, isSending, streamingEnabled }) {
+function PhoneFrame({
+  scenario,
+  theme,
+  showMessages,
+  showPhoneChrome,
+  notchStyle,
+  readingMode,
+  message,
+  setMessage,
+  isTipOpen,
+  setIsTipOpen,
+  messages,
+  isLoading,
+  onSubmit,
+  isSending,
+  streamingEnabled,
+  turnsUsed = 0,
+  maxTurns = 10,
+  isCompleted = false,
+  onSaveSession,
+}) {
   return (
     <div className="relative mx-auto max-w-[24.5rem] text-ink">
       <div className="pointer-events-none absolute bottom-[-1.75rem] left-[12%] right-[12%] h-4 rounded-full bg-ink/25 blur-xl" aria-hidden="true" />
@@ -794,15 +880,104 @@ function PhoneFrame({ scenario, theme, showMessages, showPhoneChrome, notchStyle
         <div className="h-[42rem] max-h-[82vh] flex flex-col overflow-hidden rounded-[2.25rem] bg-[#fffefa] shadow-[inset_0_0_0_2px_rgba(255,255,255,0.9),inset_0_0_0_4px_rgba(0,0,0,0.08)]">
           {showPhoneChrome ? <PhoneStatusBar notchStyle={notchStyle} /> : null}
           {isTipOpen ? <TipNotification setIsTipOpen={setIsTipOpen} /> : null}
+
+          {/* Scenario Header Inside Phone */}
+          <div className="flex items-center justify-between border-b-2 border-border bg-paper/80 px-3.5 py-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="h-2 w-2 shrink-0 rounded-full bg-moss animate-pulse" />
+              <span className="font-mono text-[11px] font-black uppercase tracking-wider text-ink truncate">
+                {scenario.title || 'Roleplay'}
+              </span>
+            </div>
+            <span className="font-mono text-[10px] font-black uppercase text-ink/60 bg-paper px-1.5 py-0.5 rounded-xs border border-ink/15">
+              {scenario.level || 'N5'}
+            </span>
+          </div>
+
           <div className="relative mx-2 my-1 flex-1 overflow-y-auto overflow-x-hidden p-2 scroll-smooth">
-            {showMessages ? <MessageThread readingMode={readingMode} scenario={scenario} theme={theme} messages={messages} isLoading={isLoading} streamingEnabled={streamingEnabled} /> : <HiddenMessages />}
+            {showMessages ? (
+              <MessageThread
+                readingMode={readingMode}
+                scenario={scenario}
+                theme={theme}
+                messages={messages}
+                isLoading={isLoading}
+                streamingEnabled={streamingEnabled}
+              />
+            ) : (
+              <HiddenMessages />
+            )}
           </div>
 
           <div className="px-3 pb-12 shrink-0">
-            <Composer message={message} setMessage={setMessage} onSubmit={onSubmit} isSending={isSending} />
+            {isCompleted ? (
+              <div
+                className="mt-4 brutal-border bg-mustard p-3 text-center shadow-nav animate-fade-in flex flex-col items-center gap-1.5"
+                data-testid="roleplay-completed-banner"
+              >
+                <span className="font-mono text-xs font-black uppercase text-ink">
+                  🎉 Roleplay Complete ({maxTurns}/{maxTurns} Turns)
+                </span>
+                <span className="font-jp text-xs font-bold text-ink/75">
+                  お疲れ様でした！ セッションを採点中...
+                </span>
+                <button
+                  type="button"
+                  onClick={onSaveSession}
+                  className="mt-1 brutal-border bg-ink text-paper px-4 py-1.5 font-mono text-xs font-black uppercase shadow-nav hover:bg-paper hover:text-ink transition-colors"
+                >
+                  View Scorecard Now →
+                </button>
+              </div>
+            ) : (
+              <Composer message={message} setMessage={setMessage} onSubmit={onSubmit} isSending={isSending} />
+            )}
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function SplitFlapDigit({ digit }) {
+  const [displayed, setDisplayed] = useState(digit);
+  const [animating, setAnimating] = useState(false);
+
+  useEffect(() => {
+    if (digit !== displayed) {
+      setAnimating(true);
+      const timer = setTimeout(() => {
+        setDisplayed(digit);
+        setAnimating(false);
+      }, 400);
+      return () => clearTimeout(timer);
+    }
+  }, [digit, displayed]);
+
+  return (
+    <span
+      className="relative inline-flex items-center justify-center overflow-hidden font-mono font-black"
+      style={{ perspective: '400px' }}
+    >
+      <span
+        key={displayed}
+        className={cn('inline-block', animating && 'animate-split-flap')}
+      >
+        {displayed}
+      </span>
+    </span>
+  );
+}
+
+function TurnCounterBadge({ turns = 0, maxTurns = 10 }) {
+  return (
+    <div
+      data-testid="turn-counter"
+      className="brutal-border bg-mustard px-3 py-1.5 font-mono text-sm font-black text-ink shadow-nav flex items-center justify-center select-none tracking-tight"
+      aria-label={`${turns}/${maxTurns} turns`}
+    >
+      <SplitFlapDigit digit={turns} />
+      <span className="opacity-80">/{maxTurns}</span>
     </div>
   );
 }
@@ -815,7 +990,7 @@ function TipButton({ isOpen, setIsOpen, theme }) {
       aria-expanded={isOpen}
       onClick={() => setIsOpen((current) => !current)}
       className={cn(
-        'brutal-border absolute -right-20 top-6 z-30 inline-flex items-center gap-2 rounded-full px-3 py-2 font-mono text-xs font-black uppercase tracking-[0.1em] shadow-nav transition-transform hover:-translate-y-0.5 active:scale-95 max-sm:-right-3 max-sm:top-14 max-sm:px-2',
+        'brutal-border absolute -right-20 top-11 z-30 inline-flex items-center gap-2 rounded-full px-3 py-1.5 font-mono text-xs font-black uppercase tracking-[0.1em] shadow-nav transition-transform hover:-translate-y-0.5 active:scale-95 max-sm:-right-3 max-sm:top-14 max-sm:px-2',
         theme.glow,
       )}
     >
@@ -1464,7 +1639,7 @@ function PhraseCard({ card, index, isSelected, isReturnDestination, returnPhase,
       >
         <span data-testid="return-card-face" className="relative block h-full w-full">
           <span data-testid={`phrase-card-text-${index}`} className="flex h-full items-start justify-start text-left font-jp text-2xl font-black leading-8">
-            {card.phrase}
+            <JapaneseText text={card.phrase} enableDictionary={false} />
           </span>
           <span className={cn('absolute bottom-3 right-3 h-6 w-6 brutal-border shadow-nav', theme.glow)} aria-hidden="true" />
         </span>

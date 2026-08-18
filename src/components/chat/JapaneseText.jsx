@@ -3,43 +3,72 @@ import { IoCloseSharp, IoVolumeHighSharp, IoOpenOutline, IoSparklesSharp } from 
 import { tokenizeJapaneseText } from '../../lib/japaneseText.js';
 import { speakJapanese } from '../../lib/speech.js';
 import { fetchJlptWordDefinition } from '../../lib/jlptVocabApi.js';
-export default function JapaneseText({ text, enableDictionary = true, className = '' }) {
-  const tokens = tokenizeJapaneseText(text);
+export default function JapaneseText({ text, readingMode, enableDictionary = true, className = '' }) {
+  const [activeMode, setActiveMode] = useState(() => {
+    if (readingMode) return readingMode;
+    if (typeof window !== 'undefined') {
+      return window.localStorage?.getItem?.('kaiwa.reading_mode') || 'japanese';
+    }
+    return 'japanese';
+  });
+
+  useEffect(() => {
+    if (readingMode) {
+      setActiveMode(readingMode);
+    }
+  }, [readingMode]);
+
+  useEffect(() => {
+    function handleModeChange(event) {
+      const newMode = event.detail?.mode || event.detail?.value || event.detail;
+      if (typeof newMode === 'string') {
+        setActiveMode(newMode);
+      }
+    }
+    function handleOptionChange(event) {
+      if (event.detail?.option === 'readingMode') {
+        setActiveMode(event.detail.value);
+      }
+    }
+
+    window.addEventListener('kaiwa:reading-mode-change', handleModeChange);
+    window.addEventListener('kaiwa:conversation-option-change', handleOptionChange);
+    return () => {
+      window.removeEventListener('kaiwa:reading-mode-change', handleModeChange);
+      window.removeEventListener('kaiwa:conversation-option-change', handleOptionChange);
+    };
+  }, []);
+
+  const tokens = tokenizeJapaneseText(text, activeMode);
 
   return (
-    <span className={`inline leading-relaxed ${className}`}>
+    <span className={`inline align-baseline leading-[2.2] ${className}`}>
       {tokens.map((token, index) => {
         if (token.type === 'ruby') {
-          return (
-            <span
+          return enableDictionary ? (
+            <button
               key={`ruby-${token.kanji}-${index}`}
-              className="inline-block mx-[0.5px] align-bottom"
+              type="button"
+              className="group/ruby inline align-baseline text-left cursor-pointer select-text bg-transparent border-0 p-0 m-0 font-inherit text-inherit focus:outline-none transition-colors hover:bg-mustard/40 px-0.5 rounded-sm"
+              onClick={() => {
+                if (token.entry) {
+                  window.dispatchEvent(new CustomEvent('kaiwa:show-dictionary', { detail: token.entry }));
+                }
+              }}
+              title={`Reading: ${token.furigana}${token.entry?.meaning ? ` (${token.entry.meaning})` : ''}`}
             >
-              {enableDictionary ? (
-                <button
-                  type="button"
-                  className="group/ruby inline-flex flex-col items-center justify-end text-center cursor-pointer select-text bg-transparent border-0 p-0 m-0 font-inherit focus:outline-none"
-                  onClick={() => {
-                    if (token.entry) {
-                      window.dispatchEvent(new CustomEvent('kaiwa:show-dictionary', { detail: token.entry }));
-                    }
-                  }}
-                  title={`Reading: ${token.furigana}${token.entry?.meaning ? ` (${token.entry.meaning})` : ''}`}
-                >
-                  <ruby className="kaiwa-ruby">
-                    <span className="kaiwa-rb group-hover/ruby:text-indigo-600 transition-colors font-bold text-inherit">
-                      {token.kanji}
-                    </span>
-                    <rt className="kaiwa-rt">{token.furigana}</rt>
-                  </ruby>
-                </button>
-              ) : (
-                <ruby className="kaiwa-ruby">
-                  <span className="kaiwa-rb font-bold text-inherit">{token.kanji}</span>
-                  <rt className="kaiwa-rt">{token.furigana}</rt>
-                </ruby>
-              )}
-            </span>
+              <ruby className="kaiwa-ruby">
+                <span className="kaiwa-rb font-bold text-inherit transition-colors">
+                  {token.kanji}
+                </span>
+                <rt className="kaiwa-rt">{token.furigana}</rt>
+              </ruby>
+            </button>
+          ) : (
+            <ruby key={`ruby-${token.kanji}-${index}`} className="kaiwa-ruby">
+              <span className="kaiwa-rb font-bold text-inherit">{token.kanji}</span>
+              <rt className="kaiwa-rt">{token.furigana}</rt>
+            </ruby>
           );
         }
 
@@ -47,12 +76,12 @@ export default function JapaneseText({ text, enableDictionary = true, className 
           return (
             <span
               key={`dict-${token.text}-${index}`}
-              className="inline-block"
+              className="inline align-baseline"
             >
               {enableDictionary ? (
                 <button
                   type="button"
-                  className="underline decoration-border/40 decoration-1 underline-offset-4 font-bold text-inherit transition hover:bg-mustard/40 px-0.5 rounded-sm"
+                  className="inline align-baseline font-bold text-inherit transition-colors hover:bg-mustard/40 px-0.5 rounded-sm cursor-pointer select-text bg-transparent border-0 p-0 m-0 font-inherit focus:outline-none"
                   onClick={() => {
                     window.dispatchEvent(new CustomEvent('kaiwa:show-dictionary', { detail: token.entry }));
                   }}
@@ -61,13 +90,17 @@ export default function JapaneseText({ text, enableDictionary = true, className 
                   {token.text}
                 </button>
               ) : (
-                <span>{token.text}</span>
+                <span className="inline align-baseline">{token.text}</span>
               )}
             </span>
           );
         }
 
-        return <span key={`text-${token.text}-${index}`}>{token.text}</span>;
+        return (
+          <span key={`text-${token.text}-${index}`} className="inline align-baseline">
+            {token.text}
+          </span>
+        );
       })}
     </span>
   );

@@ -52,6 +52,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // App Settings (e.g., categories) — public read, admin-only write
+    match /appSettings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Deny everything else by default
     match /{document=**} {
       allow read, write: if false;

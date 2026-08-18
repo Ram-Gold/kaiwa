@@ -249,7 +249,7 @@ async function summarizeOldMessages(provider, apiKey, messagesToSummarize) {
  * 5. Provider Payload Construction (Ollama / OpenRouter / OpenAI / Gemini / Claude).
  * ============================================================================
  */
-export async function sendMessage(provider, apiKey, personaInput, conversationHistory, userMessage, openRouterModel = null) {
+export async function sendMessage(provider, apiKey, personaInput, conversationHistory, userMessage, openRouterModel = null, userContext = {}) {
   const cleanKey = String(apiKey || '').trim();
   const cleanMessage = String(userMessage || '').trim();
   const persona =
@@ -342,7 +342,8 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
 
     const activeSystemPrompt = assembleSystemPrompt(persona, { 
       userPersona: `${userPersona}\nLearner Bio & Background: ${aboutMe}`.trim(), 
-      memorySummary: summaryText 
+      memorySummary: summaryText,
+      ...userContext,
     });
 
     let payload;

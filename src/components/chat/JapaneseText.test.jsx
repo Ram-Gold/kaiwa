@@ -41,4 +41,27 @@ describe('JapaneseText Component with Furigana Ruby Support', () => {
     expect(container).toHaveTextContent('さいきん');
     expect(container).toHaveTextContent('しゅみ');
   });
+
+  it('renders tokenized romaji above all Japanese text in Romanized mode', () => {
+    const { container } = render(
+      <JapaneseText text="最近[さいきん]の趣味" readingMode="romaji" />
+    );
+
+    const rts = container.querySelectorAll('rt.kaiwa-rt');
+    expect(rts.length).toBeGreaterThan(0);
+    expect(container).toHaveTextContent('saikin');
+  });
+
+  it('renders clean Japanese text without any ruby or rt elements when readingMode is off', () => {
+    const { container } = render(
+      <JapaneseText text="最近[さいきん]の趣味[しゅみ]は何[なん]ですか？" readingMode="off" />
+    );
+
+    const rubies = container.querySelectorAll('ruby.kaiwa-ruby');
+    const rts = container.querySelectorAll('rt.kaiwa-rt');
+    expect(rubies.length).toBe(0);
+    expect(rts.length).toBe(0);
+    expect(container).toHaveTextContent('最近の趣味は何ですか？');
+    expect(container).not.toHaveTextContent('さいきん');
+  });
 });

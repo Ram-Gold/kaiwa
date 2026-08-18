@@ -70,6 +70,21 @@ describe('Japanese Text Tokenizer & Furigana Parser', () => {
     expect(romaji).toContain('saikin');
   });
 
+  it('isolates furigana strictly to kanji characters for okurigana words like 行きます and 食べます', () => {
+    const input = '食べます 行きます 見ました';
+    const tokens = tokenizeJapaneseText(input);
+
+    const rubyTokens = tokens.filter((t) => t.type === 'ruby');
+    expect(rubyTokens.some((t) => t.kanji === '食' && t.furigana === 'た')).toBe(true);
+    expect(rubyTokens.some((t) => t.kanji === '行' && t.furigana === 'い')).toBe(true);
+    expect(rubyTokens.some((t) => t.kanji === '見' && t.furigana === 'み')).toBe(true);
+
+    // Ensure kanji is NOT the entire string with okurigana
+    expect(rubyTokens.some((t) => t.kanji === '食べます')).toBe(false);
+    expect(rubyTokens.some((t) => t.kanji === '行きます')).toBe(false);
+    expect(rubyTokens.some((t) => t.kanji === '見ました')).toBe(false);
+  });
+
   it('extracts known glosses from dictionary-matched and ruby-annotated words', () => {
     const input = '最近[さいきん]の趣味[しゅみ]';
     const glosses = getKnownRomajiGlosses(input);

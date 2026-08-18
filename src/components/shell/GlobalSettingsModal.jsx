@@ -9,6 +9,7 @@ import CreditsSettingsView from '../settings/CreditsSettings.jsx';
 import ProfileSettings from '../settings/ProfileSettings.jsx';
 import SubscriptionSettings from '../settings/SubscriptionSettings.jsx';
 import DeveloperSettings from '../settings/DeveloperSettings.jsx';
+import ConfirmChangesModal from '../settings/ConfirmChangesModal.jsx';
 import { useAuth } from '../../lib/auth/AuthContext.jsx';
 import { saveUserSettings } from '../../lib/firebase/firestore.js';
 import { PERMISSIONS, hasPermission } from '../../lib/auth/rbac.js';
@@ -151,7 +152,7 @@ export default function GlobalSettingsModal({ onClose }) {
   );
 }
 
-function ApiProvidersSettings() {
+export function ApiProvidersSettings() {
   const [provider, setProvider] = useState('ollama');
   const [search, setSearch] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -159,6 +160,7 @@ function ApiProvidersSettings() {
   const [draftKey, setDraftKey] = useState('');
   const [draftModel, setDraftModel] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
 
   useEffect(() => {
     const storage = getLocalStorage();
@@ -196,7 +198,8 @@ function ApiProvidersSettings() {
     return API_PROVIDERS.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
   }, [search, provider]);
 
-  function handleSave() {
+  function executeSave() {
+    setIsConfirmOpen(false);
     const storage = getLocalStorage();
     storage?.setItem?.(PROVIDER_STORAGE_KEY, provider);
     if (provider !== 'ollama' && provider !== 'lmstudio') {
@@ -257,7 +260,7 @@ function ApiProvidersSettings() {
                         setIsDropdownOpen(false);
                       }}
                       className={cn(
-                        'w-full text-left px-3 py-2 font-mono text-sm font-bold transition-colors hover:bg-mustard',
+                        'w-full text-left px-3 py-2 font-mono text-sm font-bold transition-colors hover:bg-mustard cursor-pointer',
                         provider === p.id && 'bg-mustard'
                       )}
                     >
@@ -311,16 +314,25 @@ function ApiProvidersSettings() {
         {successMsg && <p className="font-mono text-sm font-black text-moss">{successMsg}</p>}
 
         <div>
-          <Button type="button" onClick={handleSave} disabled={!isLocal && !draftKey.trim()}>
+          <Button type="button" onClick={() => setIsConfirmOpen(true)} disabled={!isLocal && !draftKey.trim()}>
             Save Provider & Key
           </Button>
         </div>
       </div>
+
+      {/* Confirmation Modal */}
+      <ConfirmChangesModal
+        isOpen={isConfirmOpen}
+        onConfirm={executeSave}
+        onCancel={() => setIsConfirmOpen(false)}
+        title="Confirm Changes"
+        message={`Are you sure you want to save the settings for ${API_PROVIDERS.find(p => p.id === provider)?.name || provider}?`}
+      />
     </div>
   );
 }
 
-function EnginesSettings() {
+export function EnginesSettings() {
   const [tts, setTts] = useState('web');
   const [stt, setStt] = useState('web');
   const [speechRate, setSpeechRate] = useState(1.0);
@@ -443,8 +455,9 @@ function EnginesSettings() {
   );
 }
 
-function PrivacySettings() {
+export function PrivacySettings() {
   const [persona, setPersona] = useState('');
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -459,11 +472,10 @@ function PrivacySettings() {
     }
   }
 
-  function purgeData() {
-    if (window.confirm("Are you sure? This will delete all keys, settings, and progress.")) {
-      getLocalStorage()?.clear?.();
-      window.location.reload();
-    }
+  function handleConfirmPurge() {
+    setIsConfirmOpen(false);
+    getLocalStorage()?.clear?.();
+    window.location.reload();
   }
 
   return (
@@ -489,17 +501,25 @@ function PrivacySettings() {
         <div className="brutal-border bg-white p-4 shadow-nav border-shu border-2">
           <p className="font-mono text-xs font-black uppercase tracking-[0.12em] text-shu">Danger Zone</p>
           <p className="mt-2 text-sm font-bold">Clear all locally stored API keys, learning progress, and logs.</p>
-          <Button type="button" onClick={purgeData} className="mt-3 bg-shu text-white hover:bg-red-700 hover:text-white">
+          <Button type="button" onClick={() => setIsConfirmOpen(true)} className="mt-3 bg-shu text-white hover:bg-red-700 hover:text-white">
             <IoTrashSharp className="inline mr-2" />
             Purge local memory
           </Button>
         </div>
       </div>
+
+      <ConfirmChangesModal
+        isOpen={isConfirmOpen}
+        onConfirm={handleConfirmPurge}
+        onCancel={() => setIsConfirmOpen(false)}
+        title="Confirm Changes"
+        message="Are you sure you want to delete all locally stored API keys, learning progress, and logs?"
+      />
     </div>
   );
 }
 
-function RoleplaySettings() {
+export function RoleplaySettings() {
   const [showCards, setShowCards] = useState(true);
   const [showMessages, setShowMessages] = useState(true);
   const [showPhoneChrome, setShowPhoneChrome] = useState(true);
@@ -568,10 +588,31 @@ function RoleplaySettings() {
   );
 }
 
-function DisplaySettings() {
-  const [readingMode, setReadingMode] = useState('Furigana');
+export function DisplaySettings() {
+  const [showPronunciation, setShowPronunciation] = useState(true);
+  const [readingMode, setReadingMode] = useState('japanese');
+  const [voiceSpeed, setVoiceSpeed] = useState(1.0);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [notchStyle, setNotchStyle] = useState('dynamic-island');
   const { user } = useAuth();
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedMode = window.localStorage?.getItem?.('kaiwa.reading_mode') || 'japanese';
+      if (savedMode === 'off') {
+        setShowPronunciation(false);
+        setReadingMode('japanese');
+      } else {
+        setShowPronunciation(true);
+        setReadingMode(savedMode === 'romaji' ? 'romaji' : 'japanese');
+      }
+
+      const storedSpeed = parseFloat(window.localStorage?.getItem?.('kaiwa.speech.rate') || '1.0');
+      if (!isNaN(storedSpeed)) {
+        setVoiceSpeed(storedSpeed);
+      }
+    }
+  }, []);
 
   function updateOption(option, value) {
     window.dispatchEvent(new CustomEvent('kaiwa:conversation-option-change', { detail: { option, value } }));
@@ -580,9 +621,40 @@ function DisplaySettings() {
     }
   }
 
-  function chooseReadingMode(mode) {
+  function handleTogglePronunciation(nextVal) {
+    setShowPronunciation(nextVal);
+    const targetMode = nextVal ? readingMode : 'off';
+    if (typeof window !== 'undefined') {
+      window.localStorage?.setItem?.('kaiwa.reading_mode', targetMode);
+      window.dispatchEvent(new CustomEvent('kaiwa:reading-mode-change', { detail: { mode: targetMode } }));
+    }
+    updateOption('readingMode', targetMode);
+  }
+
+  function handleSelectReadingMode(mode) {
     setReadingMode(mode);
-    updateOption('readingMode', mode);
+    if (showPronunciation) {
+      if (typeof window !== 'undefined') {
+        window.localStorage?.setItem?.('kaiwa.reading_mode', mode);
+        window.dispatchEvent(new CustomEvent('kaiwa:reading-mode-change', { detail: { mode } }));
+      }
+      updateOption('readingMode', mode);
+    }
+  }
+
+  function handleSelectSpeed(speed) {
+    setVoiceSpeed(speed);
+    if (typeof window !== 'undefined') {
+      window.localStorage?.setItem?.('kaiwa.speech.rate', String(speed));
+    }
+  }
+
+  function handleTestAudio() {
+    setIsPlaying(true);
+    import('../../lib/speech.js').then(({ speakJapanese }) => {
+      speakJapanese('こんにちは！一緒に日本語を練習しましょう！');
+      setTimeout(() => setIsPlaying(false), 2200);
+    });
   }
 
   function chooseNotchStyle(style) {
@@ -593,30 +665,120 @@ function DisplaySettings() {
   return (
     <div>
       <div className="mb-4">
-        <p className="label-mono text-correction">Visual settings</p>
-        <h3 className="mt-2 font-display text-4xl leading-none">Display</h3>
+        <p className="label-mono text-correction">Visual & audio settings</p>
+        <h3 className="mt-2 font-display text-4xl leading-none">Display & Sound</h3>
       </div>
-      <div className="mt-5 grid gap-3 lg:grid-cols-2">
-        <div className="brutal-border bg-white p-3 shadow-nav">
-          <p className="font-mono text-xs font-black uppercase tracking-[0.12em]">Reading mode</p>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            {['Furigana', 'Romaji'].map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => chooseReadingMode(mode)}
+
+      <div className="mt-5 space-y-4">
+        {/* Pronunciation Card */}
+        <div className="brutal-border bg-white p-4 shadow-nav">
+          <div
+            className="flex items-center justify-between cursor-pointer select-none pb-3 border-b-2 border-border/10"
+            onClick={() => handleTogglePronunciation(!showPronunciation)}
+          >
+            <div>
+              <p className="font-mono text-xs font-black uppercase tracking-[0.12em]">Show pronunciation</p>
+              <p className="text-xs font-mono text-ink/50 mt-0.5">Display furigana readings above Japanese text</p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={showPronunciation}
+              aria-label="Toggle pronunciation"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleTogglePronunciation(!showPronunciation);
+              }}
+              className={cn(
+                'border-2 border-border h-7 w-12 p-0.5 rounded-full transition-colors relative shadow-xs shrink-0 cursor-pointer',
+                showPronunciation ? 'bg-mustard' : 'bg-paper'
+              )}
+            >
+              <span
                 className={cn(
-                  'brutal-border px-3 py-2 font-mono text-xs font-black uppercase tracking-[0.12em] shadow-nav transition-all hover:bg-mustard',
-                  readingMode === mode ? 'bg-soft-blue text-ink' : 'bg-paper text-ink',
+                  'block h-5 w-5 rounded-full bg-ink transition-transform duration-200 ease-out shadow-xs',
+                  showPronunciation ? 'translate-x-5' : 'translate-x-0'
+                )}
+              />
+            </button>
+          </div>
+
+          <div className={cn('grid grid-cols-2 gap-3 pt-3 transition-opacity', !showPronunciation && 'opacity-30 pointer-events-none')}>
+            <button
+              type="button"
+              onClick={() => handleSelectReadingMode('romaji')}
+              className={cn(
+                'border-2 p-3 text-center rounded-xl transition-all flex flex-col items-center justify-center gap-1 focus:outline-none cursor-pointer',
+                readingMode === 'romaji' && showPronunciation
+                  ? 'border-border bg-mustard/20 shadow-nav ring-2 ring-ink ring-offset-1 font-bold'
+                  : 'border-border/30 bg-paper/60 text-ink hover:border-border hover:bg-paper'
+              )}
+            >
+              <span className="font-mono text-[11px] text-ink/60 font-semibold tracking-wider">ni hon go</span>
+              <span className="font-jp text-2xl font-black text-ink">日本語</span>
+              <span className="text-xs font-bold text-ink mt-0.5">Romanized</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSelectReadingMode('japanese')}
+              className={cn(
+                'border-2 p-3 text-center rounded-xl transition-all flex flex-col items-center justify-center gap-1 focus:outline-none cursor-pointer',
+                readingMode === 'japanese' && showPronunciation
+                  ? 'border-border bg-mustard/20 shadow-nav ring-2 ring-ink ring-offset-1 font-bold'
+                  : 'border-border/30 bg-paper/60 text-ink hover:border-border hover:bg-paper'
+              )}
+            >
+              <span className="font-jp text-[11px] text-ink/60 font-medium tracking-widest">に ほん ご</span>
+              <span className="font-jp text-2xl font-black text-ink">日本語</span>
+              <span className="text-xs font-bold text-ink mt-0.5">Japanese</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Voice Speed */}
+        <div className="brutal-border bg-white p-4 shadow-nav">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className="font-mono text-xs font-black uppercase tracking-[0.12em]">Voice Speed</p>
+              <p className="text-xs font-mono text-ink/50 mt-0.5">Adjust Japanese speech rate</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleTestAudio}
+              className="border border-border bg-paper hover:bg-mustard text-ink px-2.5 py-1 rounded-md text-xs font-mono font-bold flex items-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer"
+            >
+              <IoVolumeHighSharp className={cn('text-sm', isPlaying && 'text-shu animate-bounce')} />
+              <span>{isPlaying ? 'Speaking...' : 'Test Voice'}</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { rate: 0.75, label: '0.75x', sub: 'Slow · ゆっくり' },
+              { rate: 1.0, label: '1.0x', sub: 'Normal · ふつう' },
+              { rate: 1.25, label: '1.25x', sub: 'Fast · はやい' },
+            ].map((item) => (
+              <button
+                key={item.rate}
+                type="button"
+                onClick={() => handleSelectSpeed(item.rate)}
+                className={cn(
+                  'border-2 py-2 px-1 text-center rounded-lg transition-all flex flex-col items-center justify-center gap-0.5 focus:outline-none cursor-pointer',
+                  voiceSpeed === item.rate
+                    ? 'border-border bg-mustard text-ink shadow-xs ring-2 ring-ink ring-offset-1 font-bold'
+                    : 'border-border/30 bg-paper/60 text-ink/80 hover:border-border hover:bg-paper'
                 )}
               >
-                {mode}
+                <span className="font-mono text-xs font-black">{item.label}</span>
+                <span className="text-[10px] text-ink/60 font-medium">{item.sub}</span>
               </button>
             ))}
           </div>
         </div>
 
-        <div className="brutal-border bg-white p-3 shadow-nav">
+        {/* Phone notch */}
+        <div className="brutal-border bg-white p-4 shadow-nav">
           <p className="font-mono text-xs font-black uppercase tracking-[0.12em]">Phone notch</p>
           <div className="mt-3 grid grid-cols-3 gap-2">
             {CHAT_NOTCH_STYLES.map((style) => (
@@ -625,8 +787,8 @@ function DisplaySettings() {
                 type="button"
                 onClick={() => chooseNotchStyle(style.id)}
                 className={cn(
-                  'brutal-border px-2 py-2 font-mono text-[10px] font-black uppercase leading-4 tracking-[0.08em] shadow-nav transition-all hover:bg-mustard',
-                  notchStyle === style.id ? 'bg-soft-blue text-ink' : 'bg-paper text-ink',
+                  'brutal-border px-2 py-2 font-mono text-[10px] font-black uppercase leading-4 tracking-[0.08em] shadow-nav transition-all hover:bg-mustard cursor-pointer',
+                  notchStyle === style.id ? 'bg-mustard text-ink' : 'bg-paper text-ink',
                 )}
               >
                 {style.label}

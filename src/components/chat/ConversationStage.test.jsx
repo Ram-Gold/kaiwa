@@ -393,4 +393,43 @@ describe('ConversationStage', () => {
       expect(screen.getByTestId('message-meta')).toBeInTheDocument();
     });
   });
+
+  it('renders minimal turn counter with 0/10 by default and hides manual finish button', async () => {
+    render(<ConversationStage briefing={briefing} />);
+
+    expect(screen.getByTestId('turn-counter')).toHaveTextContent('0/10');
+    expect(screen.queryByRole('button', { name: /finish & grade/i })).not.toBeInTheDocument();
+  });
+
+  it('shows manual Finish & Grade button when developer flag is enabled', async () => {
+    render(<ConversationStage briefing={briefing} />);
+
+    expect(screen.queryByRole('button', { name: /finish & grade/i })).not.toBeInTheDocument();
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('kaiwa:dev-flags-changed', {
+          detail: { showFinishAndGrade: true },
+        })
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /finish & grade/i })).toBeInTheDocument();
+    });
+  });
+
+  it('animates turn counter to 1/10 when user submits a message', async () => {
+    render(<ConversationStage briefing={briefing} />);
+
+    expect(screen.getByTestId('turn-counter')).toHaveTextContent('0/10');
+
+    const input = screen.getByLabelText(/message text/i);
+    await userEvent.type(input, 'こんにちは！');
+    await userEvent.click(screen.getByRole('button', { name: /send message/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('turn-counter')).toHaveTextContent('1/10');
+    });
+  });
 });

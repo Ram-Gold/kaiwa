@@ -76,7 +76,7 @@ export default function CompactNavigationMenu({ onRequestExit }) {
                     className="flex items-center justify-start bg-transparent px-4 py-1.5 font-mono text-sm font-black uppercase tracking-[0.12em] text-paper transition-colors hover:text-mustard"
                     onClick={() => {
                       setIsOpen(false);
-                      const action = () => window.dispatchEvent(new Event('kaiwa:open-settings'));
+                      const action = () => router.push('/settings');
                       if (onRequestExit) onRequestExit(action);
                       else action();
                     }}

@@ -466,24 +466,50 @@ textarea:focus-visible {
 
 /* ── Furigana Ruby Typography ───────────────────────────── */
 ruby.kaiwa-ruby {
+  display: inline-ruby;
   ruby-position: over;
   ruby-align: center;
-  display: inline-flex;
-  flex-direction: column-reverse;
-  align-items: center;
-  vertical-align: bottom;
-  line-height: 1;
-  margin: 0 1.5px;
+  vertical-align: baseline;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  margin: 0 1px;
 }
 
-rt.kaiwa-rt {
-  display: block;
-  font-size: 0.6em;
+ruby.kaiwa-ruby rt.kaiwa-rt {
+  display: ruby-text;
+  font-size: 0.52em;
   line-height: 1;
   font-weight: 700;
-  color: #64748b;
+  color: inherit;
+  opacity: 0.9;
   text-align: center;
   user-select: none;
-  font-family: var(--font-japanese), 'Noto Sans JP', sans-serif;
-  margin-bottom: 2px;
+  font-family: inherit;
+  letter-spacing: -0.01em;
+}
+
+/* ── Split-Flap Airport Sign Mechanical Digit Flip ────── */
+@keyframes splitFlap {
+  0% {
+    transform: rotateX(0deg) translateY(0);
+    opacity: 1;
+  }
+  40% {
+    transform: rotateX(-90deg) translateY(-20%);
+    opacity: 0.2;
+  }
+  60% {
+    transform: rotateX(90deg) translateY(20%);
+    opacity: 0.2;
+  }
+  100% {
+    transform: rotateX(0deg) translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-split-flap {
+  animation: splitFlap 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  will-change: transform, opacity;
 }

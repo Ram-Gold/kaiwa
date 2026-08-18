@@ -13,10 +13,19 @@ afterEach(() => {
 });
 
 let mockPathname = '/';
+let mockIsDeveloper = false;
 
 vi.mock('next/navigation', () => ({
   usePathname: () => mockPathname,
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
+}));
+
+vi.mock('../../lib/auth/AuthContext.jsx', () => ({
+  useAuth: () => ({
+    user: { uid: 'test-user', email: 'test@example.com' },
+    isDeveloper: mockIsDeveloper,
+    logout: vi.fn(),
+  }),
 }));
 
 vi.mock('next/link', () => ({
@@ -30,7 +39,7 @@ vi.mock('next/link', () => ({
 import AppShell from './AppShell.jsx';
 
 describe('AppShell', () => {
-  it('collapses the left sidebar and removes the right progress rail on briefing pages', () => {
+  it('renders Exit button and Session Settings button on briefing and chat exercise pages', () => {
     mockPathname = '/briefing/train-station';
 
     render(
@@ -42,11 +51,12 @@ describe('AppShell', () => {
     expect(screen.queryByLabelText(/daily progress rail/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/daily progress menu/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /open navigation menu/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /exit session/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /open session settings/i })).toBeInTheDocument();
     expect(screen.getByText(/Briefing content/i)).toBeInTheDocument();
   });
 
-  it('uses the same focused shell for chat conversation pages', async () => {
+  it('opens Session Settings modal with Furigana reading modes during an exercise', async () => {
     mockPathname = '/chat/sensei';
 
     render(
@@ -56,24 +66,51 @@ describe('AppShell', () => {
     );
 
     expect(screen.queryByLabelText(/daily progress rail/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /open navigation menu/i }));
+    expect(screen.getByRole('button', { name: /exit session/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /open session settings/i })).toBeInTheDocument();
 
-    expect(screen.queryByRole('button', { name: /open conversation options/i })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /^settings$/i }));
+    await userEvent.click(screen.getByRole('button', { name: /open session settings/i }));
 
-    // Confirm exit modal when opening settings during exercise
-    expect(screen.getByRole('dialog', { name: /exit exercise\?/i })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /leave & cancel/i }));
+    expect(screen.getByRole('dialog', { name: /settings/i })).toBeInTheDocument();
+    expect(screen.getByText(/Show Pronunciation/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /japanese/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /romanized/i })).toBeInTheDocument();
 
-    expect(screen.getByRole('dialog', { name: /settings overlay/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^roleplay$/i })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /^display$/i }));
-    expect(screen.getByRole('button', { name: /dynamic island/i })).toBeInTheDocument();
-    expect(screen.getByText(/Conversation content/i)).toBeInTheDocument();
+    // Dev Tools are hidden for non-developers
+    expect(screen.queryByRole('button', { name: /developer options/i })).not.toBeInTheDocument();
+
+    // Click Romanized mode
+    await userEvent.click(screen.getByRole('button', { name: /romanized/i }));
+
+    // Close session settings
+    await userEvent.click(screen.getByRole('button', { name: /close settings/i }));
+    expect(screen.queryByRole('dialog', { name: /settings/i })).not.toBeInTheDocument();
   });
 
-  it('prompts user confirmation when trying to navigate away during an active exercise', async () => {
+  it('shows Developer Options in Settings when user is a developer', async () => {
+    mockPathname = '/chat/sensei';
+    mockIsDeveloper = true;
+
+    render(
+      <AppShell>
+        <main>Conversation content</main>
+      </AppShell>,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /open session settings/i }));
+
+    expect(screen.getByRole('dialog', { name: /settings/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /developer options/i })).toBeInTheDocument();
+
+    // Toggle Developer Options
+    await userEvent.click(screen.getByRole('button', { name: /developer options/i }));
+    expect(screen.getByText(/Token Streaming & Live Thinking/i)).toBeInTheDocument();
+    expect(screen.getByText(/Manual 'Finish & Grade' Button/i)).toBeInTheDocument();
+
+    mockIsDeveloper = false; // Reset
+  });
+
+  it('prompts user confirmation when clicking Exit button during an active exercise', async () => {
     mockPathname = '/chat/sensei';
 
     render(
@@ -82,12 +119,8 @@ describe('AppShell', () => {
       </AppShell>,
     );
 
-    // Open compact nav menu
-    await userEvent.click(screen.getByRole('button', { name: /open navigation menu/i }));
-
-    // Click Home item
-    const homeLink = screen.getByRole('link', { name: /^home$/i });
-    await userEvent.click(homeLink);
+    // Click Exit 'X' button
+    await userEvent.click(screen.getByRole('button', { name: /exit session/i }));
 
     // Exit confirmation modal should appear
     expect(screen.getByRole('dialog', { name: /exit exercise\?/i })).toBeInTheDocument();

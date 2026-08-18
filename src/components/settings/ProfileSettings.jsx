@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { IoPersonSharp, IoAddSharp, IoTrashSharp, IoLinkSharp, IoCheckmarkSharp, IoSparklesSharp, IoLogoGithub, IoCameraSharp } from 'react-icons/io5';
+import { IoPersonSharp, IoAddSharp, IoTrashSharp, IoLinkSharp, IoCheckmarkSharp, IoLogoGithub, IoCameraSharp } from 'react-icons/io5';
 import { cn } from '../../lib/utils.js';
 import { useAuth } from '../../lib/auth/AuthContext';
 import { 
@@ -9,6 +9,7 @@ import {
   updateProfileLink, 
   removeProfileLink 
 } from '../../lib/firebase/firestore';
+import ConfirmChangesModal from './ConfirmChangesModal.jsx';
 
 const STORAGE_KEY = 'kaiwa.user.profile';
 
@@ -44,10 +45,6 @@ function getLocalStorageProfile() {
   }
 }
 
-/**
- * Modular hook for Profile State & Actions.
- * Easily connects to backend API endpoints (e.g. fetchProfile, saveProfile).
- */
 export function useProfileState(onSaveCallback) {
   const { user, profile } = useAuth();
   const [savedProfile, setSavedProfile] = useState(DEFAULT_PROFILE);
@@ -58,7 +55,6 @@ export function useProfileState(onSaveCallback) {
     let isMounted = true;
     async function loadProfile() {
       if (user && profile) {
-        // Fetch links from subcollection
         const userLinks = await getUserLinks(user.uid);
         if (isMounted) {
           const fullProfile = { 
@@ -86,7 +82,6 @@ export function useProfileState(onSaveCallback) {
   }, [user, profile]);
 
   const isDirty = useMemo(() => {
-    // Only compare relevant editable fields
     return draft.name !== savedProfile.name || 
            draft.avatarTone !== savedProfile.avatarTone ||
            draft.avatarUrl !== savedProfile.avatarUrl ||
@@ -114,35 +109,36 @@ export function useProfileState(onSaveCallback) {
     setSaveSuccessMsg('');
   }
 
-  function addLink(title = 'New Link', url = 'https://') {
-    const newLink = { id: `temp_${Date.now()}`, title, url };
+  function addLink() {
+    const newLink = {
+      id: `temp_${Date.now()}`,
+      title: 'New Link',
+      url: 'https://'
+    };
     setDraft((prev) => ({ ...prev, links: [...prev.links, newLink] }));
-    setSaveSuccessMsg('');
   }
 
   function addGithubLink() {
-    const hasGithub = draft.links.some(l => l.title.toLowerCase().includes('github'));
-    if (!hasGithub) {
-      const newLink = { id: `temp_${Date.now()}`, title: 'GitHub', url: 'https://github.com/' };
-      setDraft((prev) => ({ ...prev, links: [...prev.links, newLink] }));
-      setSaveSuccessMsg('');
-    }
+    const githubLink = {
+      id: `temp_${Date.now()}`,
+      title: 'GitHub',
+      url: 'https://github.com/'
+    };
+    setDraft((prev) => ({ ...prev, links: [...prev.links, githubLink] }));
   }
 
   function updateLink(id, field, value) {
     setDraft((prev) => ({
       ...prev,
-      links: prev.links.map((link) => (link.id === id ? { ...link, [field]: value } : link))
+      links: prev.links.map(l => l.id === id ? { ...l, [field]: value } : l)
     }));
-    setSaveSuccessMsg('');
   }
 
   function removeLink(id) {
     setDraft((prev) => ({
       ...prev,
-      links: prev.links.filter((link) => link.id !== id)
+      links: prev.links.filter(l => l.id !== id)
     }));
-    setSaveSuccessMsg('');
   }
 
   function cancelChanges() {
@@ -154,48 +150,41 @@ export function useProfileState(onSaveCallback) {
     setSavedProfile(draft);
     
     if (user) {
-      // Update core profile fields
       await updateProfile(user.uid, {
         displayName: draft.name,
-        bio: draft.aboutMe,
-        photoURL: draft.avatarUrl || null,
+        name: draft.name,
         avatarTone: draft.avatarTone,
+        photoURL: draft.avatarUrl,
+        avatarUrl: draft.avatarUrl,
+        bio: draft.aboutMe,
+        aboutMe: draft.aboutMe,
       });
 
-      // Diff links to sync with subcollection
-      const savedLinks = savedProfile.links || [];
-      const draftLinks = draft.links || [];
+      const currentLinks = await getUserLinks(user.uid);
+      const currentMap = new Map(currentLinks.map(l => [l.id, l]));
 
-      // 1. Remove deleted links
-      const draftIds = new Set(draftLinks.map(l => l.id));
-      const removedLinks = savedLinks.filter(l => !draftIds.has(l.id));
-      for (const link of removedLinks) {
-        if (link.id && !link.id.startsWith('temp_')) {
-          await removeProfileLink(user.uid, link.id);
-        }
-      }
-
-      // 2. Add or Update links
-      for (const link of draftLinks) {
-        if (link.id && link.id.startsWith('temp_')) {
-          // New link
-          await addProfileLink(user.uid, { title: link.title, url: link.url, order: 0 });
-        } else {
-          // Existing link, check if changed
-          const orig = savedLinks.find(l => l.id === link.id);
-          if (orig && (orig.title !== link.title || orig.url !== link.url)) {
+      for (const link of draft.links) {
+        if (link.id.startsWith('temp_')) {
+          await addProfileLink(user.uid, { title: link.title, url: link.url });
+        } else if (currentMap.has(link.id)) {
+          const original = currentMap.get(link.id);
+          if (original.title !== link.title || original.url !== link.url) {
             await updateProfileLink(user.uid, link.id, { title: link.title, url: link.url });
           }
         }
       }
+
+      for (const original of currentLinks) {
+        if (!draft.links.some(l => l.id === original.id)) {
+          await removeProfileLink(user.uid, original.id);
+        }
+      }
       
-      // Refresh the draft with freshly fetched links to replace temp IDs
       const freshLinks = await getUserLinks(user.uid);
       setDraft((prev) => ({ ...prev, links: freshLinks }));
       setSavedProfile((prev) => ({ ...prev, links: freshLinks }));
     }
 
-    // Always keep local storage updated as fallback
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
       window.dispatchEvent(new Event('kaiwa:profile-updated'));
@@ -227,6 +216,7 @@ export function useProfileState(onSaveCallback) {
 }
 
 export default function ProfileSettings({ onSaveProfile }) {
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const {
     draft,
     isDirty,
@@ -245,6 +235,11 @@ export default function ProfileSettings({ onSaveProfile }) {
 
   const selectedToneObj = AVATAR_TONES.find(t => t.id === (draft.avatarTone || 'mustard')) || AVATAR_TONES[0];
   const userInitials = (draft.name || 'Ram').charAt(0).toUpperCase();
+
+  function handleConfirmSave() {
+    setIsConfirmOpen(false);
+    saveChanges();
+  }
 
   return (
     <div className="animate-panel-in space-y-5 relative pb-12">
@@ -299,7 +294,7 @@ export default function ProfileSettings({ onSaveProfile }) {
                     type="button"
                     onClick={() => setAvatarTone(tone.id)}
                     className={cn(
-                      'brutal-border px-2.5 py-1 font-mono text-[10px] font-black uppercase shadow-nav transition-all hover:scale-105',
+                      'brutal-border px-2.5 py-1 font-mono text-[10px] font-black uppercase shadow-nav transition-all hover:scale-105 cursor-pointer',
                       tone.bgClass,
                       (draft.avatarTone || 'mustard') === tone.id && 'ring-2 ring-ink ring-offset-2'
                     )}
@@ -341,11 +336,11 @@ export default function ProfileSettings({ onSaveProfile }) {
         />
       </div>
 
-      {/* 3. About Me Card */}
+      {/* 3. Bio / About Me */}
       <div className="brutal-border bg-white p-4 shadow-nav space-y-3">
         <div className="flex items-center justify-between border-b border-ink/10 pb-2">
-          <label className="font-mono text-xs font-black uppercase tracking-[0.14em] text-ink flex items-center gap-1.5">
-            <IoSparklesSharp className="text-mustard" /> About Me (AI Learner Context)
+          <label className="font-mono text-xs font-black uppercase tracking-[0.14em] text-ink">
+            About Me / Bio
           </label>
           <span className="font-mono text-[10px] font-bold text-ink/50">{draft.aboutMe?.length || 0} chars</span>
         </div>
@@ -361,7 +356,7 @@ export default function ProfileSettings({ onSaveProfile }) {
         </p>
       </div>
 
-      {/* 4. Links & GitHub Card */}
+      {/* 4. Profile Links */}
       <div className="brutal-border bg-white p-4 shadow-nav space-y-3">
         <div className="flex items-center justify-between border-b border-ink/10 pb-2">
           <label className="font-mono text-xs font-black uppercase tracking-[0.14em] text-ink flex items-center gap-1.5">
@@ -370,15 +365,15 @@ export default function ProfileSettings({ onSaveProfile }) {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => addGithubLink()}
-              className="brutal-border bg-aizome px-2.5 py-1 font-mono text-[10px] font-black uppercase text-paper shadow-nav hover:bg-mustard hover:text-ink transition-all inline-flex items-center gap-1"
+              onClick={addGithubLink}
+              className="brutal-border bg-aizome px-2.5 py-1 font-mono text-[10px] font-black uppercase text-paper shadow-nav hover:bg-mustard hover:text-ink transition-all inline-flex items-center gap-1 cursor-pointer"
             >
               <IoLogoGithub className="text-sm" /> Add GitHub
             </button>
             <button
               type="button"
-              onClick={() => addLink()}
-              className="brutal-border bg-mustard px-2.5 py-1 font-mono text-[10px] font-black uppercase text-ink shadow-nav hover:bg-paper transition-all inline-flex items-center gap-1"
+              onClick={addLink}
+              className="brutal-border bg-mustard px-2.5 py-1 font-mono text-[10px] font-black uppercase text-ink shadow-nav hover:bg-paper transition-all inline-flex items-center gap-1 cursor-pointer"
             >
               <IoAddSharp className="text-sm" /> Add Link
             </button>
@@ -406,7 +401,7 @@ export default function ProfileSettings({ onSaveProfile }) {
                 type="button"
                 onClick={() => removeLink(link.id)}
                 aria-label="Remove link"
-                className="brutal-border grid h-7 w-7 place-items-center bg-white text-shu hover:bg-shu hover:text-white transition-colors shrink-0"
+                className="brutal-border grid h-7 w-7 place-items-center bg-white text-shu hover:bg-shu hover:text-white transition-colors shrink-0 cursor-pointer"
               >
                 <IoTrashSharp className="text-xs" />
               </button>
@@ -418,7 +413,7 @@ export default function ProfileSettings({ onSaveProfile }) {
         </div>
       </div>
 
-      {/* Floating Action Bar (Shows when dirty) */}
+      {/* Floating Action Bar */}
       {isDirty && (
         <div className="animate-panel-in brutal-border bg-ink p-3 text-paper shadow-shadow flex items-center justify-between gap-3 flex-wrap sticky bottom-0 z-30">
           <div className="flex items-center gap-2">
@@ -429,20 +424,29 @@ export default function ProfileSettings({ onSaveProfile }) {
             <button
               type="button"
               onClick={cancelChanges}
-              className="brutal-border bg-white px-3 py-1.5 font-mono text-xs font-black uppercase text-ink shadow-nav hover:bg-paper transition-all"
+              className="brutal-border bg-white px-3 py-1.5 font-mono text-xs font-black uppercase text-ink shadow-nav hover:bg-paper transition-all cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="button"
-              onClick={saveChanges}
-              className="brutal-border bg-mustard px-4 py-1.5 font-mono text-xs font-black uppercase text-ink shadow-nav hover:bg-paper transition-all"
+              onClick={() => setIsConfirmOpen(true)}
+              className="brutal-border bg-mustard px-4 py-1.5 font-mono text-xs font-black uppercase text-ink shadow-nav hover:bg-paper transition-all cursor-pointer"
             >
               Save Changes
             </button>
           </div>
         </div>
       )}
+
+      {/* User Confirmation Modal */}
+      <ConfirmChangesModal
+        isOpen={isConfirmOpen}
+        onConfirm={handleConfirmSave}
+        onCancel={() => setIsConfirmOpen(false)}
+        title="Confirm Changes"
+        message="Are you sure you want to save these profile changes?"
+      />
     </div>
   );
 }

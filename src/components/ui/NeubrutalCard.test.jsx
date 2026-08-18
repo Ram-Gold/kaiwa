@@ -29,7 +29,9 @@ describe('NeubrutalCard Component', () => {
     expect(screen.getByText('BEGINNER')).toBeInTheDocument();
     expect(screen.getByText('N5')).toBeInTheDocument();
     expect(screen.getByText('Basic Verbs')).toBeInTheDocument();
-    expect(screen.getByText(/行きます/)).toBeInTheDocument();
+    expect(screen.getByText('行')).toBeInTheDocument();
+    expect(screen.getByText('い')).toBeInTheDocument();
+    expect(screen.getByText('きます')).toBeInTheDocument();
     expect(screen.getByText(/\(To go \/ Ikimasu\)/)).toBeInTheDocument();
     expect(screen.getByText('80%')).toBeInTheDocument();
     expect(screen.getByText(/Hover or tap card to test hover mechanics/i)).toBeInTheDocument();
