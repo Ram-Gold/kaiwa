@@ -1,19 +1,11 @@
 import FlameIcon from '../icons/FlameIcon.jsx';
 import ZapIcon from '../icons/ZapIcon.jsx';
-import Badge from '../ui/Badge.jsx';
-import Card from '../ui/Card.jsx';
+import DailyQueue from './DailyQueue.jsx';
 import { cn } from '../../lib/utils.js';
 import { useAuth } from '../../lib/auth/AuthContext.jsx';
 import { getStreakStatus } from '../../lib/firebase/firestore.js';
 
-const TASKS = [
-  ['Review 5 phrases', '5 XP', true],
-  ['Finish 1 lesson', '20 XP', false],
-  ['Complete roleplay', '30 XP', false],
-  ['Practice 10 minutes', '15 XP', false],
-];
-
-export default function ProgressRail({ compact = false }) {
+export default function ProgressRail({ compact = false, queueVariant }) {
   const { profile } = useAuth();
   const streakInfo = getStreakStatus(profile?.stats);
   const currentStreak = streakInfo.currentStreak;
@@ -29,7 +21,7 @@ export default function ProgressRail({ compact = false }) {
     >
       <div className="grid gap-5">
         <MiniStatsBar currentStreak={currentStreak} xp={xp} />
-        <TaskCard />
+        <DailyQueue variant={queueVariant} />
       </div>
     </aside>
   );
@@ -58,33 +50,4 @@ export function MiniStat({ icon: Icon, label, tone, value }) {
   );
 }
 
-function TaskCard() {
-  const completed = TASKS.filter(([, , done]) => done).length;
-
-  return (
-    <Card padding="md" className="bg-white rounded-2xl">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="label-mono text-correction">Tasks</p>
-          <h2 className="mt-2 font-display text-3xl">Daily queue</h2>
-        </div>
-        <Badge tone="moss" className="rounded-lg">{completed} / {TASKS.length}</Badge>
-      </div>
-      <div className="mt-5 space-y-4">
-        {TASKS.map(([task, xp, done]) => (
-          <label key={task} className="grid cursor-pointer grid-cols-[2rem_1fr] gap-x-3 gap-y-2">
-            <span className={cn('brutal-border rounded-lg row-span-2 grid h-8 w-8 place-items-center bg-white font-mono text-xs font-black shadow-nav', done && 'bg-moss text-paper')} aria-hidden="true">
-              {done ? '✓' : '⚡'}
-            </span>
-            <span className="min-w-0 font-bold leading-5">{task}</span>
-            <span className="brutal-border rounded-lg h-4 overflow-hidden bg-paper shadow-nav">
-              <span className={cn('block h-full rounded-sm', done ? 'w-full bg-moss' : 'w-1/3 bg-mustard')} />
-            </span>
-            <span className="sr-only">{xp}</span>
-          </label>
-        ))}
-      </div>
-    </Card>
-  );
-}
 

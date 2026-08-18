@@ -79,8 +79,8 @@ export default function AppShell({ children }) {
           isFocusRoute
             ? 'grid-cols-1'
             : isFriendsRoute || isSettingsRoute
-              ? 'lg:grid-cols-[17rem_minmax(0,1fr)]'
-              : 'lg:grid-cols-[17rem_minmax(0,1fr)_18rem]',
+              ? 'lg:grid-cols-[16.5rem_minmax(0,1fr)]'
+              : 'lg:grid-cols-[16.5rem_minmax(0,1fr)_20.5rem] xl:grid-cols-[17rem_minmax(0,1fr)_21.5rem]',
         )}
       >
         {isExerciseRoute ? (

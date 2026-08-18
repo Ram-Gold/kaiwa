@@ -2,7 +2,7 @@ import React from 'react';
 import { cva } from 'class-variance-authority';
 import { cn } from '../../lib/utils.js';
 
-const cardVariants = cva('brutal-border rounded-2xl shadow-shadow', {
+const cardVariants = cva('brutal-border rounded-[28px] shadow-shadow [corner-smoothing:100%] [-webkit-corner-smoothing:100%]', {
   variants: {
     surface: {
       paper: 'bg-paper text-ink',

@@ -142,18 +142,27 @@ textarea:focus-visible {
     @apply font-jp text-lg font-bold leading-8;
   }
 
-  /* ── Clean Neubrutal Card styles ──────────────────────── */
+  /* ── Clean Neubrutal Superellipse / Squircle Card styles ── */
+  .superellipse,
+  .squircle,
   .nb-card-clean {
-    @apply border-2 border-ink bg-white rounded-xl relative;
+    @apply border-2 border-ink bg-white relative;
+    border-radius: 28px;
+    -webkit-corner-smoothing: 100%;
+    corner-smoothing: 100%;
     box-shadow: 4px 4px 0px 0px #1C1C1C;
     transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
+  .superellipse:hover,
+  .squircle:hover,
   .nb-card-clean:hover {
     transform: translateY(-4px);
     box-shadow: 6px 6px 0px 0px #1C1C1C;
   }
 
+  .superellipse:active,
+  .squircle:active,
   .nb-card-clean:active {
     transform: translateY(2px) translateX(2px);
     box-shadow: 2px 2px 0px 0px #1C1C1C;

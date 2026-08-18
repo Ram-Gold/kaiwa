@@ -107,7 +107,7 @@ export default function SettingsPage() {
           </nav>
         </aside>
 
-        <main className="flex-1 bg-white brutal-border rounded-2xl p-6 md:p-8 shadow-nav min-h-[500px]">
+        <main className="flex-1 bg-white brutal-border rounded-[28px] [corner-smoothing:100%] [-webkit-corner-smoothing:100%] p-6 md:p-8 shadow-nav min-h-[500px]">
           <ActiveComponent />
         </main>
       </div>
