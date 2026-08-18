@@ -61,21 +61,25 @@ export default function AppSidebar({ onRequestExit }) {
               <Fragment key={label}>
                 <div className="my-3 border-t-2 border-border/20 hidden lg:block" />
                 <NavItem
-                  as="button"
+                  key={label}
+                  href={href}
                   label={label}
-                  Icon={null}
-                  className="flex whitespace-nowrap rounded-xl bg-transparent px-4 py-2.5 text-left font-mono text-sm font-black uppercase tracking-[0.12em] text-ink/70 transition-colors hover:text-mustard hover:bg-black/5 lg:w-full lg:items-center justify-center lg:justify-start"
-                  onClick={() => {
-                    const action = () => router.push('/settings');
-                    if (onRequestExit) onRequestExit(action);
-                    else action();
-                  }}
+                  Icon={Icon}
+                  active={isActive}
+                  onClick={(e) => handleNavClick(e, href)}
+                  className={cn(
+                    'flex whitespace-nowrap rounded-xl px-4 py-3 font-mono text-sm font-black uppercase tracking-[0.12em] transition-all lg:w-full lg:items-center lg:gap-3',
+                    isActive
+                      ? 'brutal-border bg-mustard text-ink shadow-nav'
+                      : 'border-2 border-transparent text-ink/70 hover:border-border/30 hover:bg-black/5 hover:text-ink',
+                  )}
+                  iconClassName="hidden shrink-0 lg:block"
                 />
                 <NavItem
                   as="button"
                   label="Log Out"
                   Icon={null}
-                  className="flex whitespace-nowrap rounded-xl bg-transparent px-4 py-2.5 text-left font-mono text-sm font-black uppercase tracking-[0.12em] text-ink/70 transition-colors hover:text-shu hover:bg-black/5 lg:w-full lg:items-center justify-center lg:justify-start"
+                  className="flex whitespace-nowrap rounded-xl px-4 py-3 font-mono text-sm font-black uppercase tracking-[0.12em] text-ink/70 border-2 border-transparent hover:border-border/30 hover:bg-black/5 hover:text-shu transition-all lg:w-full lg:items-center justify-center lg:justify-start"
                   onClick={() => {
                     const action = () => handleLogout();
                     if (onRequestExit) onRequestExit(action);

@@ -84,8 +84,10 @@ export default function RoleplayPage() {
             type="button"
             onClick={() => setActiveFilter(filter)}
             className={cn(
-              'brutal-border rounded-xl px-4 py-3 font-mono text-sm font-black uppercase tracking-[0.12em] shadow-nav transition-all hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-none',
-              activeFilter === filter ? 'bg-correction text-paper' : 'bg-white text-ink hover:bg-mustard',
+              'brutal-border rounded-xl px-4 py-3 font-mono text-sm font-black uppercase tracking-[0.12em] transition-all duration-150',
+              activeFilter === filter
+                ? 'bg-correction text-paper translate-x-[2px] translate-y-[2px] shadow-none'
+                : 'bg-white text-ink shadow-nav hover:-translate-y-1 hover:shadow-[5px_5px_0px_0px_#1C1C1C] hover:bg-mustard',
             )}
           >
             {filter}

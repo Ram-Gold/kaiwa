@@ -70,16 +70,13 @@ export default function CompactNavigationMenu({ onRequestExit }) {
                 <Fragment key={label}>
                   <div className="my-2 border-t-2 border-paper/20" />
                   <NavItem
-                    as="button"
+                    key={label}
+                    active={isActive}
+                    href={href}
                     label={label}
-                    Icon={null}
-                    className="flex items-center justify-start bg-transparent px-4 py-1.5 font-mono text-sm font-black uppercase tracking-[0.12em] text-paper transition-colors hover:text-mustard"
-                    onClick={() => {
-                      setIsOpen(false);
-                      const action = () => router.push('/settings');
-                      if (onRequestExit) onRequestExit(action);
-                      else action();
-                    }}
+                    Icon={Icon}
+                    className="brutal-border flex items-center gap-3 bg-paper px-4 py-3 font-mono text-sm font-black uppercase tracking-[0.12em] text-ink shadow-nav transition-all hover:translate-x-[3px] hover:translate-y-[3px] hover:bg-mustard hover:shadow-none"
+                    onClick={(e) => handleNavClick(e, href)}
                   />
                   <NavItem
                     as="button"

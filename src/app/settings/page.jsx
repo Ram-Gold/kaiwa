@@ -93,11 +93,11 @@ export default function SettingsPage() {
                 key={category.id}
                 onClick={() => setActiveTab(category.id)}
                 className={cn(
-                  'w-full flex items-center gap-3 px-4 py-3 rounded-xl font-mono text-sm font-bold transition-all brutal-border shadow-xs',
+                  'flex w-full items-center gap-3 rounded-xl px-4 py-3 font-mono text-sm font-black uppercase tracking-[0.12em] transition-all duration-150 text-left brutal-border',
                   activeTab === category.id 
-                    ? 'bg-mustard border-ink' 
-                    : 'bg-white border-transparent hover:border-ink hover:bg-mustard/20',
-                  category.id === 'dev' && 'border-l-[6px] border-l-correction'
+                    ? 'bg-mustard text-ink translate-x-[2px] translate-y-[2px] shadow-none' 
+                    : 'bg-white text-ink shadow-nav hover:-translate-y-1 hover:shadow-[5px_5px_0px_0px_#1C1C1C] hover:bg-mustard',
+                  category.id === 'dev' && (activeTab === category.id ? 'border-l-[6px] border-l-correction' : 'hover:border-l-correction')
                 )}
               >
                 <category.icon className="text-xl shrink-0" />

@@ -114,8 +114,10 @@ export default function GlobalSettingsModal({ onClose }) {
                 aria-current={category === item ? 'page' : undefined}
                 onClick={() => setCategory(item)}
                 className={cn(
-                  'brutal-border bg-white px-3 py-3 text-left font-mono text-xs font-black uppercase tracking-[0.12em] shadow-nav transition-all hover:bg-mustard shrink-0',
-                  category === item && 'bg-mustard',
+                  'brutal-border px-3 py-3 text-left font-mono text-xs font-black uppercase tracking-[0.12em] transition-all duration-150 shrink-0',
+                  category === item
+                    ? 'bg-mustard translate-x-[2px] translate-y-[2px] shadow-none'
+                    : 'bg-white shadow-nav hover:-translate-y-1 hover:shadow-[5px_5px_0px_0px_#1C1C1C] hover:bg-mustard',
                   item === 'Developer Options' && 'border-l-4 border-l-correction'
                 )}
               >
