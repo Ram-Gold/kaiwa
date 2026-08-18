@@ -5,7 +5,7 @@ import { IoVolumeHighSharp, IoLanguageSharp, IoGlobeOutline, IoSparklesSharp } f
 import JapaneseText from './JapaneseText.jsx';
 import { speakJapanese } from '../../lib/speech.js';
 import { translateJapaneseToEnglish } from '../../lib/translation.js';
-import { parseThinkingAndSpeech } from '../../lib/ai/config.js';
+import { parsePartialJsonStream, isStreamingEnabled } from '../../lib/ai/config.js';
 import { formatDuration } from '../../lib/ai/metrics.js';
 import { cn } from '../../lib/utils.js';
 
@@ -46,12 +46,20 @@ export default function StreamingChatBubble({
 
   const [isThinkingOpen, setIsThinkingOpen] = useState(true);
 
-  // Parse internal thinking vs spoken dialogue
+  // Parse internal thinking vs spoken dialogue from JSON schema
   const rawText = message.rawContent || message.content || '';
-  const parsed = parseThinkingAndSpeech(rawText);
-  const thinking = message.thinking || parsed.thinking;
-  const speech = parsed.speech || (parsed.thinking ? '' : message.content);
-  const isThinkingStream = parsed.isThinkingStream;
+  const parsed = parsePartialJsonStream(rawText);
+  // DEFENSE LAYER: Only show thinking when the developer setting is ON
+  const thinkingOn = isStreamingEnabled();
+  const thinking = thinkingOn ? (message.thoughtProcess || parsed.thoughtProcess) : null;
+  let speech = parsed.dialogue || message.content || '';
+  
+  // Fallback: If no parsed dialogue and it's not a stream, maybe the content is already the plain Japanese string
+  if (!parsed.dialogue && !isLiveStreaming && typeof message.content === 'string' && !message.content.includes('"dialogue"')) {
+    speech = message.content;
+  }
+
+  const isThinkingStream = thinkingOn ? parsed.isThinkingStream : false;
 
   async function handleToggleTranslate() {
     if (showTranslation) {
@@ -232,7 +240,9 @@ export default function StreamingChatBubble({
                 onClick={() => onPickSuggestion && onPickSuggestion(opt.text)}
                 className="brutal-border w-full text-left bg-white p-2.5 shadow-nav transition-all hover:bg-mustard active:scale-[0.99] flex flex-col gap-0.5"
               >
-                <span className="font-jp text-sm font-bold text-ink">{opt.text}</span>
+                <span className="font-jp text-sm font-bold text-ink">
+                  <JapaneseText text={opt.text} enableDictionary={false} />
+                </span>
                 {opt.english && (
                   <span className="text-xs font-medium text-ink/70">{opt.english}</span>
                 )}

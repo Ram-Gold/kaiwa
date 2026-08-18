@@ -3,35 +3,73 @@ import { IoCloseSharp, IoVolumeHighSharp, IoOpenOutline, IoSparklesSharp } from 
 import { tokenizeJapaneseText } from '../../lib/japaneseText.js';
 import { speakJapanese } from '../../lib/speech.js';
 import { fetchJlptWordDefinition } from '../../lib/jlptVocabApi.js';
-export default function JapaneseText({ text }) {
+export default function JapaneseText({ text, enableDictionary = true, className = '' }) {
   const tokens = tokenizeJapaneseText(text);
 
   return (
-    <>
+    <span className={`inline leading-relaxed ${className}`}>
       {tokens.map((token, index) => {
-        if (token.type !== 'dictionary') {
-          return <span key={`${token.text}-${index}`}>{token.text}</span>;
+        if (token.type === 'ruby') {
+          return (
+            <span
+              key={`ruby-${token.kanji}-${index}`}
+              className="inline-block mx-[0.5px] align-bottom"
+            >
+              {enableDictionary ? (
+                <button
+                  type="button"
+                  className="group/ruby inline-flex flex-col items-center justify-end text-center cursor-pointer select-text bg-transparent border-0 p-0 m-0 font-inherit focus:outline-none"
+                  onClick={() => {
+                    if (token.entry) {
+                      window.dispatchEvent(new CustomEvent('kaiwa:show-dictionary', { detail: token.entry }));
+                    }
+                  }}
+                  title={`Reading: ${token.furigana}${token.entry?.meaning ? ` (${token.entry.meaning})` : ''}`}
+                >
+                  <ruby className="kaiwa-ruby">
+                    <span className="kaiwa-rb group-hover/ruby:text-indigo-600 transition-colors font-bold text-inherit">
+                      {token.kanji}
+                    </span>
+                    <rt className="kaiwa-rt">{token.furigana}</rt>
+                  </ruby>
+                </button>
+              ) : (
+                <ruby className="kaiwa-ruby">
+                  <span className="kaiwa-rb font-bold text-inherit">{token.kanji}</span>
+                  <rt className="kaiwa-rt">{token.furigana}</rt>
+                </ruby>
+              )}
+            </span>
+          );
         }
 
-        return (
-          <span
-            key={`${token.entry.term}-${index}`}
-            className="inline-block"
-          >
-            <button
-              type="button"
-              className="underline decoration-border decoration-2 underline-offset-4 font-black text-ink transition hover:bg-mustard/40 px-0.5 rounded-sm"
-              onClick={() => {
-                window.dispatchEvent(new CustomEvent('kaiwa:show-dictionary', { detail: token.entry }));
-              }}
-              title="Click for dictionary meaning"
+        if (token.type === 'dictionary') {
+          return (
+            <span
+              key={`dict-${token.text}-${index}`}
+              className="inline-block"
             >
-              {token.text}
-            </button>
-          </span>
-        );
+              {enableDictionary ? (
+                <button
+                  type="button"
+                  className="underline decoration-border/40 decoration-1 underline-offset-4 font-bold text-inherit transition hover:bg-mustard/40 px-0.5 rounded-sm"
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent('kaiwa:show-dictionary', { detail: token.entry }));
+                  }}
+                  title={`Dictionary: ${token.entry?.meaning || token.text}`}
+                >
+                  {token.text}
+                </button>
+              ) : (
+                <span>{token.text}</span>
+              )}
+            </span>
+          );
+        }
+
+        return <span key={`text-${token.text}-${index}`}>{token.text}</span>;
       })}
-    </>
+    </span>
   );
 }
 
@@ -72,9 +110,9 @@ export function DictionaryPopover({ entry, onClose }) {
         <span className="block font-mono text-xs font-black uppercase tracking-[0.16em] text-shu flex items-center gap-1">
           <IoSparklesSharp className="text-mustard text-xs" /> JLPT Dictionary
         </span>
-        <button 
-          type="button" 
-          onClick={onClose} 
+        <button
+          type="button"
+          onClick={onClose}
           className="brutal-border grid h-7 w-7 place-items-center bg-white text-sm hover:bg-mustard transition-colors active:scale-95 shrink-0"
         >
           <IoCloseSharp />

@@ -1,3 +1,5 @@
+import { extractCleanJapaneseText } from './japaneseText.js';
+
 export function speakJapanese(text) {
   if (!('speechSynthesis' in window)) {
     return false;
@@ -10,7 +12,8 @@ export function speakJapanese(text) {
 
   window.speechSynthesis.cancel();
 
-  const utterance = new SpeechSynthesisUtterance(text);
+  const cleanText = extractCleanJapaneseText(text);
+  const utterance = new SpeechSynthesisUtterance(cleanText);
   utterance.lang = 'ja-JP';
 
   const storedRate = parseFloat(window.localStorage?.getItem?.('kaiwa.speech.rate') || '1.0');
@@ -20,3 +23,4 @@ export function speakJapanese(text) {
 
   return true;
 }
+

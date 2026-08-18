@@ -9,20 +9,23 @@ import Card from '../../components/ui/Card.jsx';
 import NeubrutalCard from '../../components/ui/NeubrutalCard.jsx';
 import CardSkeleton from '../../components/ui/CardSkeleton.jsx';
 import { cn } from '../../lib/utils.js';
-import { getRoleplays } from '../../lib/firebase/firestore.js';
-
-const filters = ['ALL', 'Beginner', 'Fun', 'Expert', 'Intermediate'];
+import { getRoleplays, getCategories } from '../../lib/firebase/firestore.js';
 
 export default function RoleplayPage() {
   const [activeFilter, setActiveFilter] = useState('ALL');
   const [scenarios, setScenarios] = useState([]);
+  const [globalCategories, setGlobalCategories] = useState(['Beginner', 'Food', 'Memes', 'Life']);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
     async function loadData() {
       try {
-        const firestoreRoleplays = await getRoleplays();
+        const [firestoreRoleplays, categoriesArray] = await Promise.all([
+          getRoleplays(),
+          getCategories()
+        ]);
+        
         if (isMounted) {
           const mappedScenarios = firestoreRoleplays.map(r => ({
             ...r,
@@ -32,6 +35,7 @@ export default function RoleplayPage() {
             tone: r.accent,
           }));
           setScenarios(mappedScenarios);
+          setGlobalCategories(categoriesArray);
         }
       } catch (err) {
         console.error('Failed to fetch roleplays from Firestore:', err);
@@ -43,6 +47,18 @@ export default function RoleplayPage() {
     loadData();
     return () => { isMounted = false; };
   }, []);
+
+  const filters = useMemo(() => {
+    const dynamicCategories = Array.from(
+      new Set(scenarios.map((s) => s.category).filter(Boolean))
+    );
+    const preferredOrder = globalCategories;
+    const sorted = [
+      ...preferredOrder.filter((cat) => dynamicCategories.includes(cat)),
+      ...dynamicCategories.filter((cat) => !preferredOrder.includes(cat)),
+    ];
+    return ['ALL', ...(sorted.length > 0 ? sorted : preferredOrder)];
+  }, [scenarios, globalCategories]);
 
   const visibleScenarios = useMemo(() => {
     if (activeFilter === 'ALL') return scenarios;

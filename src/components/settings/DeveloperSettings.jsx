@@ -17,6 +17,7 @@ import {
 import { useAuth } from '../../lib/auth/AuthContext.jsx';
 import { ROLES, PERMISSIONS, getUserRole, ROLE_PERMISSIONS } from '../../lib/auth/rbac.js';
 import { PROVIDER_STORAGE_KEY } from '../dashboard/AiProviderSettingsCard.jsx';
+import { isStreamingEnabled, setStreamingEnabled } from '../../lib/ai/config.js';
 import Button from '../ui/Button.jsx';
 import { cn } from '../../lib/utils.js';
 
@@ -142,6 +143,7 @@ export default function DeveloperSettings() {
 
       const prov = window.localStorage.getItem?.(PROVIDER_STORAGE_KEY) || 'ollama';
       setActiveProvider(prov);
+      setStreamingActive(isStreamingEnabled());
 
       const savedFlags = window.localStorage.getItem?.('kaiwa.dev.debug_flags');
       if (savedFlags) {
@@ -153,6 +155,16 @@ export default function DeveloperSettings() {
       }
     }
   }, []);
+
+  const [streamingActive, setStreamingActive] = useState(false);
+
+  function handleToggleStreaming() {
+    const next = !streamingActive;
+    setStreamingActive(next);
+    setStreamingEnabled(next);
+    setActionStatus(`AI Token Streaming & Live Thinking ${next ? 'ENABLED' : 'DISABLED'}`);
+    setTimeout(() => setActionStatus(''), 3000);
+  }
 
   function handleSimulateRole(role) {
     setSimulatedRole(role);
@@ -377,6 +389,29 @@ export default function DeveloperSettings() {
         </div>
 
         <div className="space-y-3">
+          {/* Direct AI Streaming & Thinking Toggle */}
+          <button
+            type="button"
+            onClick={handleToggleStreaming}
+            className={cn(
+              'brutal-border w-full flex items-center justify-between gap-4 p-3 text-left shadow-nav transition-all hover:bg-mustard/40',
+              streamingActive ? 'bg-mustard/30' : 'bg-paper'
+            )}
+          >
+            <div>
+              <span className="block font-mono text-xs font-black uppercase">Token-by-Token Streaming & Live Thinking</span>
+              <span className="mt-0.5 block font-mono text-[11px] font-bold text-ink/65">
+                Enable live SSE token streaming and expandable AI reasoning block in conversation bubbles.
+              </span>
+            </div>
+            <span className={cn(
+              'grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 border-border text-xs font-bold',
+              streamingActive ? 'bg-moss text-white border-moss' : 'bg-white text-ink/40'
+            )}>
+              {streamingActive ? '✓' : ''}
+            </span>
+          </button>
+
           {[
             {
               key: 'overrideGradingScore',

@@ -22,18 +22,28 @@
     --base-font-weight: 500;
 
     /* Semantic colors – mapped to KAIwa palette */
-    --background: #FAF7F0;          /* paper */
+    --background: #FAF7F0;
+    /* paper */
     --secondary-background: #FFFFFF;
-    --foreground: #1C1C1C;          /* ink */
-    --main-foreground: #1C1C1C;     /* ink */
+    --foreground: #1C1C1C;
+    /* ink */
+    --main-foreground: #1C1C1C;
+    /* ink */
 
-    --main: #F2C14E;                /* mustard */
-    --correction: #D6432B;          /* red correction mark */
-    --aizome: #2F4858;              /* ai/chat indigo */
-    --moss: #4A7A63;                /* saved/success */
-    --soft-blue: #9FD3C7;           /* calm info */
-    --blush: #F7B7A3;               /* sparing warmth */
-    --border: #1C1C1C;              /* ink */
+    --main: #F2C14E;
+    /* mustard */
+    --correction: #D6432B;
+    /* red correction mark */
+    --aizome: #2F4858;
+    /* ai/chat indigo */
+    --moss: #4A7A63;
+    /* saved/success */
+    --soft-blue: #9FD3C7;
+    /* calm info */
+    --blush: #F7B7A3;
+    /* sparing warmth */
+    --border: #1C1C1C;
+    /* ink */
     --ring: #1C1C1C;
     --overlay: rgba(28, 28, 28, 0.8);
 
@@ -100,6 +110,7 @@ textarea:focus-visible {
 }
 
 @layer components {
+
   /* ── Neobrutalism utility classes ──────────────────────── */
   .brutal-border {
     @apply border-2;
@@ -259,6 +270,7 @@ textarea:focus-visible {
 }
 
 @keyframes card-return-settle {
+
   0%,
   84% {
     translate: 0 0;
@@ -299,6 +311,7 @@ textarea:focus-visible {
     translate: 0 16rem;
     scale: 0.9;
   }
+
   to {
     opacity: 1;
     translate: 0 0;
@@ -312,6 +325,7 @@ textarea:focus-visible {
     translate: 0 0;
     scale: 1;
   }
+
   to {
     opacity: 0;
     translate: 0 16rem;
@@ -324,6 +338,7 @@ textarea:focus-visible {
 }
 
 @keyframes typing-dot {
+
   0%,
   60%,
   100% {
@@ -338,6 +353,7 @@ textarea:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   *,
   *::before,
   *::after {
@@ -394,7 +410,9 @@ textarea:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .proto-picker[data-ready] .proto-picker-highlight { transition: none; }
+  .proto-picker[data-ready] .proto-picker-highlight {
+    transition: none;
+  }
 }
 
 .proto-picker-item {
@@ -446,3 +464,26 @@ textarea:focus-visible {
   top: 24px;
 }
 
+/* ── Furigana Ruby Typography ───────────────────────────── */
+ruby.kaiwa-ruby {
+  ruby-position: over;
+  ruby-align: center;
+  display: inline-flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  vertical-align: bottom;
+  line-height: 1;
+  margin: 0 1.5px;
+}
+
+rt.kaiwa-rt {
+  display: block;
+  font-size: 0.6em;
+  line-height: 1;
+  font-weight: 700;
+  color: #64748b;
+  text-align: center;
+  user-select: none;
+  font-family: var(--font-japanese), 'Noto Sans JP', sans-serif;
+  margin-bottom: 2px;
+}

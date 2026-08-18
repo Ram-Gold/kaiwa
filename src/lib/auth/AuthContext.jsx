@@ -8,10 +8,11 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../firebase/client';
 import { DEFAULT_PROFILE } from '../../components/settings/ProfileSettings';
 import { getUserRole, hasPermission, hasRole, isDeveloper } from './rbac';
+import { getStreakStatus } from '../firebase/firestore';
 
 const AuthContext = createContext({
   user: null,
@@ -37,7 +38,14 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    let unsubscribeDoc = null;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
+      if (unsubscribeDoc) {
+        unsubscribeDoc();
+        unsubscribeDoc = null;
+      }
+
       setUser(currentUser);
       if (currentUser) {
         try {
@@ -52,20 +60,7 @@ export function AuthProvider({ children }) {
 
           const adminRole = isRamAdmin ? 'DEVELOPER' : 'FREE';
 
-          if (userDoc.exists()) {
-            const data = userDoc.data();
-            const updatedProfile = {
-              ...data,
-              userType: isRamAdmin ? 'DEVELOPER' : (data.userType || 'FREE'),
-              tier: isRamAdmin ? 'DEVELOPER' : (data.tier || 'FREE'),
-            };
-
-            if (isRamAdmin && (data.userType !== 'DEVELOPER' || data.tier !== 'DEVELOPER')) {
-              await setDoc(userRef, { userType: 'DEVELOPER', tier: 'DEVELOPER' }, { merge: true });
-            }
-
-            setProfile(updatedProfile);
-          } else {
+          if (!userDoc.exists()) {
             // Create initial profile for new users
             const initialProfile = {
               uid: currentUser.uid,
@@ -81,6 +76,8 @@ export function AuthProvider({ children }) {
                 currentStreak: 0,
                 longestStreak: 0,
                 totalPractices: 0,
+                lastPracticeDate: null,
+                lastPracticedAt: null,
               },
               settings: {
                 theme: 'light',
@@ -104,11 +101,39 @@ export function AuthProvider({ children }) {
               updatedAt: serverTimestamp(),
             };
             await setDoc(userRef, initialProfile);
-            setProfile(initialProfile);
+          } else if (isRamAdmin) {
+            const data = userDoc.data();
+            if (data.userType !== 'DEVELOPER' || data.tier !== 'DEVELOPER') {
+              await setDoc(userRef, { userType: 'DEVELOPER', tier: 'DEVELOPER' }, { merge: true });
+            }
           }
+
+          // Real-time snapshot listener for user profile & streak changes
+          unsubscribeDoc = onSnapshot(userRef, (docSnap) => {
+            if (docSnap.exists()) {
+              const data = docSnap.data();
+              const streakInfo = getStreakStatus(data.stats);
+              const effectiveProfile = {
+                ...data,
+                userType: isRamAdmin ? 'DEVELOPER' : (data.userType || 'FREE'),
+                tier: isRamAdmin ? 'DEVELOPER' : (data.tier || 'FREE'),
+                stats: {
+                  ...(data.stats || {}),
+                  currentStreak: streakInfo.currentStreak,
+                  longestStreak: streakInfo.longestStreak,
+                  isActiveToday: streakInfo.isActiveToday,
+                  isExpiringSoon: streakInfo.isExpiringSoon,
+                  isBroken: streakInfo.isBroken,
+                  streakMessage: streakInfo.message,
+                },
+              };
+              setProfile(effectiveProfile);
+            }
+          }, (err) => {
+            console.error('User doc snapshot error:', err);
+          });
         } catch (error) {
           console.error('Error fetching or creating user profile:', error);
-          // Fallback if offline so the app still loads
           setProfile(null);
         }
       } else {
@@ -117,7 +142,10 @@ export function AuthProvider({ children }) {
       setLoading(false);
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeDoc) unsubscribeDoc();
+    };
   }, []);
 
   /**

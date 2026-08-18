@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { getPersonaById } from '../../prompts/personas.js';
-import { assembleSystemPrompt, getAIModelConfig } from '../ai/config.js';
+import { assembleSystemPrompt, getAIModelConfig, isStreamingEnabled } from '../ai/config.js';
 import { parseModelReply } from '../ai.js';
 
 /**
@@ -152,6 +152,11 @@ export function useStreamingChat({
           temperature: modelConfig.temperature,
           max_tokens: 2048,
         };
+        if (activeProvider === 'openai' || activeProvider === 'openrouter') {
+          payload.response_format = { type: 'json_object' };
+        } else if (activeProvider === 'ollama') {
+          payload.format = 'json';
+        }
       }
 
       let accumulatedRaw = '';
@@ -164,6 +169,7 @@ export function useStreamingChat({
             provider: activeProvider,
             apiKey: activeApiKey,
             payload,
+            thinkingEnabled: isStreamingEnabled(),
           }),
           signal: controller.signal,
         });

@@ -14,7 +14,7 @@ import { loadStoredProvider, loadStoredApiKeys, loadStoredOpenRouterModel } from
 import { useAuth } from '../../lib/auth/AuthContext';
 import { saveChatSession } from '../../lib/firebase/firestore.js';
 import { useRouter } from 'next/navigation';
-import { isStreamingEnabled, assembleSystemPrompt, getAIModelConfig, parseThinkingAndSpeech } from '../../lib/ai/config.js';
+import { isStreamingEnabled, assembleSystemPrompt, getAIModelConfig, parsePartialJsonStream } from '../../lib/ai/config.js';
 import { getPersonaById } from '../../prompts/personas.js';
 import { estimateTokenCount, estimateCost, formatDuration } from '../../lib/ai/metrics.js';
 
@@ -384,7 +384,7 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
         const streamRes = await fetch('/api/chat/stream', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ provider, apiKey, payload }),
+          body: JSON.stringify({ provider, apiKey, payload, thinkingEnabled: streamingEnabled }),
         });
 
         if (!streamRes.ok) {
@@ -754,8 +754,8 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
       ) : null}
 
       <div className="fixed bottom-6 left-6 z-20">
-        <button 
-          onClick={handleSaveSession} 
+        <button
+          onClick={handleSaveSession}
           disabled={isGrading}
           className="brutal-border bg-mustard text-ink px-5 py-3 font-mono text-sm font-black uppercase tracking-[0.1em] shadow-shadow transition-transform hover:-translate-y-1 active:scale-95 flex items-center gap-2 disabled:opacity-70 disabled:cursor-wait"
         >
@@ -916,7 +916,7 @@ function MessageThread({ readingMode, scenario, theme, messages, isLoading, stre
         return (
           <MessageBubble
             key={msg.id}
-            from={msg.role === 'assistant' ? 'ai' : 'user'}
+          from={msg.role === 'assistant' ? 'ai' : 'user'}
             theme={theme}
             text={msg.content}
             meta={msg.meta}
@@ -940,10 +940,23 @@ function MessageBubble({ text = '', initialSubtext, from, theme, thinking = fals
   const [isPlaying, setIsPlaying] = useState(false);
 
   // Parse thinking vs speech from AI content
-  const parsed = useMemo(() => parseThinkingAndSpeech(text), [text]);
-  const thinkingText = streamingEnabled ? parsed.thinking : null;
-  const speechText = parsed.speech || (parsed.thinking ? (streamingEnabled ? '' : text) : text);
-  const displayText = speechText || (parsed.thinking ? (streamingEnabled ? '' : text) : text);
+  const parsed = useMemo(() => parsePartialJsonStream(text), [text]);
+  const thinkingText = streamingEnabled ? parsed.thoughtProcess : null;
+
+  // Resolve speechText cleanly without ever showing internal reasoning or meta-analysis
+  const speechText = useMemo(() => {
+    if (isUser) return text;
+    if (parsed.dialogue) return parsed.dialogue;
+
+    // Fallback: If no parsed dialogue, maybe the content is already the plain string
+    if (!parsed.dialogue && typeof text === 'string' && !text.includes('"dialogue"')) {
+      return text;
+    }
+
+    return text || 'はい！分かりました。';
+  }, [isUser, parsed, text]);
+
+  const displayText = speechText;
 
   const romajiText = useMemo(() => (displayText ? toRomajiText(displayText) : ''), [displayText]);
 

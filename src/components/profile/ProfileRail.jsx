@@ -8,6 +8,7 @@ import { cn } from '../../lib/utils.js';
 
 import { useAuth } from '../../lib/auth/AuthContext.jsx';
 import { getFriends } from '../../lib/firebase/firestore.js';
+import { MiniStatsBar } from '../shell/ProgressRail.jsx';
 
 export default function ProfileRail({ profile: fallbackProfile }) {
   const { user, profile: authProfile } = useAuth();
@@ -27,7 +28,9 @@ export default function ProfileRail({ profile: fallbackProfile }) {
   const mergedStreak = {
     current: authProfile?.stats?.currentStreak ?? fallbackProfile.streak?.current ?? 0,
     best: authProfile?.stats?.longestStreak ?? fallbackProfile.streak?.best ?? 0,
-    days: authProfile?.stats?.days ?? fallbackProfile.streak?.days ?? []
+    isActiveToday: authProfile?.stats?.isActiveToday ?? false,
+    isExpiringSoon: authProfile?.stats?.isExpiringSoon ?? false,
+    streakMessage: authProfile?.stats?.streakMessage ?? '',
   };
 
   const mergedCommunity = friends 
@@ -46,13 +49,15 @@ export default function ProfileRail({ profile: fallbackProfile }) {
       } 
     : fallbackProfile.community;
 
+  const xp = authProfile?.stats?.xp ?? fallbackProfile.stats?.xp ?? 0;
+
   return (
     <aside
       aria-label="Profile progress and community"
       className="border-t-2 border-border bg-paper px-4 py-6 sm:px-6 lg:sticky lg:top-0 lg:min-h-screen lg:border-0 lg:px-5 lg:py-10"
     >
       <div className="grid gap-5">
-        <StreakSummary streak={mergedStreak} />
+        <MiniStatsBar currentStreak={mergedStreak.current} xp={xp} />
         <FriendsSection />
         <ConnectionsCard community={mergedCommunity} />
       </div>
@@ -93,39 +98,6 @@ function FriendsSection() {
 
       {showInviteModal && <InviteFriendsModal onClose={() => setShowInviteModal(false)} />}
     </div>
-  );
-}
-
-
-
-function StreakSummary({ streak }) {
-  return (
-    <Card padding="md" className="min-h-48 bg-white">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="label-mono text-correction">Streak</p>
-          <p className="mt-3 font-display text-5xl leading-none">{streak.current}</p>
-          <p className="mt-2 font-mono text-xs font-black uppercase tracking-[0.13em] text-ink/65">days active</p>
-        </div>
-        <Badge tone="mustard" className="shrink-0">Best {streak.best}</Badge>
-      </div>
-
-      <div className="mt-5 grid grid-cols-7 gap-1.5" aria-label="Last seven days streak calendar">
-        {streak.days.map((day) => (
-          <div key={day.label} className="text-center">
-            <div
-              className={cn(
-                'brutal-border mx-auto grid h-7 w-7 place-items-center font-mono text-[10px] font-black shadow-nav',
-                day.active ? 'bg-moss text-paper' : 'bg-paper text-ink/45',
-              )}
-            >
-              {day.active ? '✓' : '·'}
-            </div>
-            <p className="mt-1 font-mono text-[8px] font-black uppercase">{day.label}</p>
-          </div>
-        ))}
-      </div>
-    </Card>
   );
 }
 

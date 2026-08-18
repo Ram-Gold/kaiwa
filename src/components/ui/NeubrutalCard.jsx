@@ -2,6 +2,7 @@ import React from 'react';
 import Link from 'next/link';
 import { ArrowRight, Pointer } from 'lucide-react';
 import { cn } from '../../lib/utils.js';
+import JapaneseText from '../chat/JapaneseText.jsx';
 
 export default function NeubrutalCard({
   id = 'mainDemoCard',
@@ -57,16 +58,16 @@ export default function NeubrutalCard({
               {/* Arrow stays visible, moves right on hover */}
               <ArrowRight className="arrow-reveal w-5 h-5 text-black group-hover:translate-x-1.5 transition-transform duration-200 shrink-0 stroke-[2.5]" />
             </div>
-            {/* Fixed height container ensures ZERO layout shift */}
-            <div className="h-5 flex items-center">
-              <p className="subtext-reveal text-slate-500 font-medium text-sm tracking-wide group-hover:text-indigo-600/80 transition-colors">
-                {japaneseText}{' '}
+            {/* Height container with space for ruby furigana text */}
+            <div className="min-h-[1.75rem] flex items-baseline">
+              <div className="subtext-reveal text-slate-600 font-semibold text-sm tracking-wide group-hover:text-indigo-600 transition-colors flex items-baseline flex-wrap gap-x-1">
+                <JapaneseText text={japaneseText} enableDictionary={false} />
                 {romajiOrMeaning && (
-                  <span className="text-xs font-mono text-slate-400 ml-1 font-bold">
+                  <span className="text-xs font-mono text-slate-400 font-bold">
                     ({romajiOrMeaning})
                   </span>
                 )}
-              </p>
+              </div>
             </div>
           </div>
 

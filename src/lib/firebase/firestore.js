@@ -207,12 +207,183 @@ export async function getAllUsers(currentUid) {
     .filter(u => u.uid !== currentUid);
 }
 
+/**
+ * Fetch global categories for filtering lessons and roleplays
+ */
+export async function getCategories() {
+  try {
+    const catDoc = await getDoc(doc(db, 'appSettings', 'categories'));
+    if (catDoc.exists()) {
+      return catDoc.data().order || ['Beginner', 'Food', 'Memes', 'Life'];
+    }
+  } catch (err) {
+    console.error('Failed to fetch categories:', err);
+  }
+  return ['Beginner', 'Food', 'Memes', 'Life'];
+}
+
 /* ==========================================================================
-   3. HISTORY & GAMIFICATION
+   3. HISTORY & GAMIFICATION & 24HR STREAK
    ========================================================================== */
 
 /**
- * Record completed practice session and update user practice count & XP
+ * Calculates updated 24-hour streak stats given previous stats and current time.
+ * 
+ * Rules:
+ * - If last practice was TODAY (same calendar date):
+ *     currentStreak is maintained (already active for today).
+ * - If last practice was YESTERDAY (exactly 1 calendar day ago):
+ *     currentStreak is incremented by 1.
+ *     longestStreak = Math.max(longestStreak, currentStreak).
+ * - If last practice was older than yesterday (or first practice ever):
+ *     currentStreak is set to 1.
+ *     longestStreak = Math.max(longestStreak || 0, 1).
+ */
+export function calculateUpdatedStreak(previousStats = {}, now = new Date()) {
+  const currentStreak = Number(previousStats?.currentStreak) || 0;
+  const longestStreak = Number(previousStats?.longestStreak) || 0;
+  const lastPracticeDate = previousStats?.lastPracticeDate;
+
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const todayStr = `${year}-${month}-${day}`;
+
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yYear = yesterday.getFullYear();
+  const yMonth = String(yesterday.getMonth() + 1).padStart(2, '0');
+  const yDay = String(yesterday.getDate()).padStart(2, '0');
+  const yesterdayStr = `${yYear}-${yMonth}-${yDay}`;
+
+  let newCurrentStreak = currentStreak;
+  let isNewDay = false;
+
+  if (!lastPracticeDate) {
+    newCurrentStreak = 1;
+    isNewDay = true;
+  } else if (lastPracticeDate === todayStr) {
+    newCurrentStreak = Math.max(currentStreak, 1);
+    isNewDay = false;
+  } else if (lastPracticeDate === yesterdayStr) {
+    newCurrentStreak = currentStreak + 1;
+    isNewDay = true;
+  } else {
+    // Missed at least one day
+    newCurrentStreak = 1;
+    isNewDay = true;
+  }
+
+  const newLongestStreak = Math.max(longestStreak, newCurrentStreak);
+
+  return {
+    currentStreak: newCurrentStreak,
+    longestStreak: newLongestStreak,
+    lastPracticeDate: todayStr,
+    lastPracticedAt: now.getTime(),
+    isNewDay,
+  };
+}
+
+/**
+ * Checks whether an existing streak is currently valid, active for today, expiring soon, or broken.
+ */
+export function getStreakStatus(stats = {}, now = new Date()) {
+  const currentStreak = Number(stats?.currentStreak) || 0;
+  const longestStreak = Number(stats?.longestStreak) || 0;
+  const lastPracticeDate = stats?.lastPracticeDate;
+
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const todayStr = `${year}-${month}-${day}`;
+
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yYear = yesterday.getFullYear();
+  const yMonth = String(yesterday.getMonth() + 1).padStart(2, '0');
+  const yDay = String(yesterday.getDate()).padStart(2, '0');
+  const yesterdayStr = `${yYear}-${yMonth}-${yDay}`;
+
+  if (!lastPracticeDate || currentStreak === 0) {
+    return {
+      currentStreak: 0,
+      longestStreak,
+      isActiveToday: false,
+      isExpiringSoon: false,
+      isBroken: true,
+      message: 'Practice now to start your streak!',
+    };
+  }
+
+  if (lastPracticeDate === todayStr) {
+    return {
+      currentStreak,
+      longestStreak,
+      isActiveToday: true,
+      isExpiringSoon: false,
+      isBroken: false,
+      message: 'Streak saved for today!',
+    };
+  }
+
+  if (lastPracticeDate === yesterdayStr) {
+    return {
+      currentStreak,
+      longestStreak,
+      isActiveToday: false,
+      isExpiringSoon: true,
+      isBroken: false,
+      message: '24h window active • Practice today to keep it!',
+    };
+  }
+
+  return {
+    currentStreak: 0,
+    longestStreak,
+    isActiveToday: false,
+    isExpiringSoon: false,
+    isBroken: true,
+    message: 'Streak expired. Practice to start a new one!',
+  };
+}
+
+/**
+ * Update user streak and XP directly in Firestore.
+ */
+export async function recordUserActivityStreak(uid, xpEarned = 10) {
+  if (!uid) return null;
+  try {
+    const userRef = doc(db, 'users', uid);
+    const userSnap = await getDoc(userRef);
+    const userData = userSnap.exists() ? userSnap.data() : {};
+    const currentStats = userData.stats || {};
+    const streakResult = calculateUpdatedStreak(currentStats);
+
+    const updatedStats = {
+      ...currentStats,
+      totalPractices: (currentStats.totalPractices || 0) + 1,
+      xp: (currentStats.xp || 0) + xpEarned,
+      currentStreak: streakResult.currentStreak,
+      longestStreak: streakResult.longestStreak,
+      lastPracticeDate: streakResult.lastPracticeDate,
+      lastPracticedAt: streakResult.lastPracticedAt,
+    };
+
+    await setDoc(userRef, {
+      stats: updatedStats,
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+
+    return updatedStats;
+  } catch (err) {
+    console.error('Failed to record activity streak in Firestore:', err);
+    return null;
+  }
+}
+
+/**
+ * Record completed practice session and update user practice count, 24h streak, & XP
  */
 export async function logPracticeSession(uid, sessionData) {
   if (!uid) return;
@@ -224,16 +395,30 @@ export async function logPracticeSession(uid, sessionData) {
     timestamp: serverTimestamp(),
   });
 
-  // Increment totalPractices & XP if provided
-  const xpEarned = sessionData.score ? Math.round(sessionData.score / 2) : 10;
-  const userRef = doc(db, 'users', uid);
-  await setDoc(userRef, {
-    stats: {
-      totalPractices: increment(1),
-      xp: increment(xpEarned),
-    },
-    updatedAt: serverTimestamp(),
-  }, { merge: true });
+  const xpEarned = sessionData.score ? Math.round(sessionData.score / 2) : (sessionData.xp || 10);
+  
+  try {
+    const userRef = doc(db, 'users', uid);
+    const userSnap = await getDoc(userRef);
+    const userData = userSnap.exists() ? userSnap.data() : {};
+    const currentStats = userData.stats || {};
+    const streakResult = calculateUpdatedStreak(currentStats);
+
+    await setDoc(userRef, {
+      stats: {
+        ...currentStats,
+        totalPractices: (currentStats.totalPractices || 0) + 1,
+        xp: (currentStats.xp || 0) + xpEarned,
+        currentStreak: streakResult.currentStreak,
+        longestStreak: streakResult.longestStreak,
+        lastPracticeDate: streakResult.lastPracticeDate,
+        lastPracticedAt: streakResult.lastPracticedAt,
+      },
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+  } catch (err) {
+    console.error('Failed to update streak stats in Firestore:', err);
+  }
 
   return docId;
 }
@@ -553,6 +738,22 @@ export async function seedLessonsToFirestore() {
  * Fetch all lessons directly from Firestore.
  * If empty or blocked by permissions, seeds or falls back to default lessons.
  */
+export async function seedDatabase(userId = null) {
+  try {
+    console.log('Seeding initial data...');
+
+    // Seed categories
+    await setDoc(doc(db, 'appSettings', 'categories'), {
+      order: ['Beginner', 'Food', 'Memes', 'Life']
+    });
+
+    await seedLessonsToFirestore();
+    // (Other seed functions would go here)
+  } catch (err) {
+    console.error('Seeding failed:', err);
+  }
+}
+
 export async function getLessons() {
   try {
     const lessonsRef = collection(db, 'lessons');
@@ -633,7 +834,7 @@ const DEFAULT_ROLEPLAYS_SEED = [
     id: 'idol-cheki',
     title: 'Idol Cheki',
     jpTitle: 'ライブ後の一言',
-    category: 'Fun',
+    category: 'Memes',
     kind: 'roleplay',
     level: 'N4',
     minutes: 6,
@@ -652,7 +853,7 @@ const DEFAULT_ROLEPLAYS_SEED = [
     id: 'colleague-hiroen',
     title: 'Colleague Hiroen',
     jpTitle: '同僚と雑談',
-    category: 'Intermediate',
+    category: 'Life',
     kind: 'roleplay',
     level: 'N3',
     minutes: 12,
@@ -671,7 +872,7 @@ const DEFAULT_ROLEPLAYS_SEED = [
     id: 'convenience-store',
     title: 'Convenience Store',
     jpTitle: 'コンビニ会話',
-    category: 'Beginner',
+    category: 'Food',
     kind: 'roleplay',
     level: 'N5',
     minutes: 7,
@@ -689,7 +890,7 @@ const DEFAULT_ROLEPLAYS_SEED = [
     id: 'job-interview',
     title: 'Job Interview',
     jpTitle: '面接の練習',
-    category: 'Expert',
+    category: 'Life',
     kind: 'roleplay',
     level: 'N2',
     minutes: 15,

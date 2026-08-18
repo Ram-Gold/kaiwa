@@ -9,11 +9,8 @@ import Card from '../components/ui/Card.jsx';
 import NeubrutalCard from '../components/ui/NeubrutalCard.jsx';
 import CardSkeleton from '../components/ui/CardSkeleton.jsx';
 import { cn } from '../lib/utils.js';
-
-const filters = ['ALL', 'Beginner', 'Food', 'Memes', 'Life'];
-
 import { useAuth } from '../lib/auth/AuthContext.jsx';
-import { getUserModuleProgress, getLessons } from '../lib/firebase/firestore.js';
+import { getUserModuleProgress, getLessons, getCategories } from '../lib/firebase/firestore.js';
 
 const staticLessons = [
   { id: 'introduction', title: 'Introduction', jp: 'はじめまして', category: 'Beginner', minutes: 8, tone: 'moss', href: '/briefing/introduction' },
@@ -30,15 +27,17 @@ export default function Home() {
   const { user } = useAuth();
   const [activeFilter, setActiveFilter] = useState('ALL');
   const [lessons, setLessons] = useState([]);
+  const [globalCategories, setGlobalCategories] = useState(['Beginner', 'Food', 'Memes', 'Life']);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
     async function loadData() {
       try {
-        const [firestoreLessons, progressMap] = await Promise.all([
+        const [firestoreLessons, progressMap, categoriesArray] = await Promise.all([
           getLessons(),
-          user?.uid ? getUserModuleProgress(user.uid) : Promise.resolve({})
+          user?.uid ? getUserModuleProgress(user.uid) : Promise.resolve({}),
+          getCategories()
         ]);
 
         if (isMounted) {
@@ -47,6 +46,7 @@ export default function Home() {
             progress: progressMap[lesson.id]?.progress || 0
           }));
           setLessons(merged);
+          setGlobalCategories(categoriesArray);
         }
       } catch (err) {
         console.error('Failed to fetch lessons from Firestore:', err);
@@ -58,6 +58,18 @@ export default function Home() {
     loadData();
     return () => { isMounted = false; };
   }, [user?.uid]);
+
+  const filters = useMemo(() => {
+    const dynamicCategories = Array.from(
+      new Set(lessons.map((l) => l.category).filter(Boolean))
+    );
+    const preferredOrder = globalCategories;
+    const sorted = [
+      ...preferredOrder.filter((cat) => dynamicCategories.includes(cat)),
+      ...dynamicCategories.filter((cat) => !preferredOrder.includes(cat)),
+    ];
+    return ['ALL', ...(sorted.length > 0 ? sorted : preferredOrder)];
+  }, [lessons, globalCategories]);
 
   const visibleLessons = useMemo(() => {
     if (activeFilter === 'ALL') return lessons;

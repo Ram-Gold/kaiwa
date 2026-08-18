@@ -13,7 +13,7 @@ import { NextResponse } from 'next/server';
 export async function POST(req) {
   try {
     const body = await req.json();
-    const { provider, apiKey, payload } = body;
+    const { provider, apiKey, payload, thinkingEnabled = false } = body;
 
     if (!provider || !payload) {
       return NextResponse.json(
@@ -122,9 +122,6 @@ export async function POST(req) {
     const textEncoder = new TextEncoder();
     const textDecoder = new TextDecoder();
 
-    let isClaudeThinking = false;
-    let isOpenAiThinking = false;
-
     const transformStream = new TransformStream({
       start() {
         this.buffer = '';
@@ -144,24 +141,12 @@ export async function POST(req) {
               const dataStr = trimmed.replace(/^data:\s*/, '');
               try {
                 const data = JSON.parse(dataStr);
-                if (data.type === 'content_block_start' && data.content_block?.type === 'thinking') {
-                  isClaudeThinking = true;
-                  controller.enqueue(
-                    textEncoder.encode(`data: ${JSON.stringify({ token: '<think>' })}\n\n`)
-                  );
-                } else if (data.type === 'content_block_stop' && isClaudeThinking) {
-                  isClaudeThinking = false;
-                  controller.enqueue(
-                    textEncoder.encode(`data: ${JSON.stringify({ token: '</think>\n\n' })}\n\n`)
-                  );
-                } else if (data.type === 'content_block_delta') {
-                  if (data.delta?.type === 'thinking_delta' || data.delta?.thinking) {
+                if (data.type === 'content_block_delta') {
+                  // Forward both extended thinking and standard text as tokens
+                  const token = data.delta?.thinking || data.delta?.text || '';
+                  if (token) {
                     controller.enqueue(
-                      textEncoder.encode(`data: ${JSON.stringify({ token: data.delta?.thinking || data.delta?.text || '' })}\n\n`)
-                    );
-                  } else if (data.delta?.text) {
-                    controller.enqueue(
-                      textEncoder.encode(`data: ${JSON.stringify({ token: data.delta.text })}\n\n`)
+                      textEncoder.encode(`data: ${JSON.stringify({ token })}\n\n`)
                     );
                   }
                 }
@@ -174,7 +159,9 @@ export async function POST(req) {
           else if (normProvider === 'ollama') {
             try {
               const data = JSON.parse(trimmed);
-              const token = data.message?.thinking ? `<think>${data.message.thinking}</think>` : data.message?.content;
+              // Ollama might separate thinking, but we enforce JSON format so it should output JSON text.
+              // We'll still forward any thinking tokens just in case it leaks.
+              const token = data.message?.thinking || data.message?.content || data.response;
               if (token) {
                 controller.enqueue(
                   textEncoder.encode(`data: ${JSON.stringify({ token })}\n\n`)
@@ -194,33 +181,13 @@ export async function POST(req) {
               try {
                 const data = JSON.parse(dataStr);
                 const delta = data.choices?.[0]?.delta;
-                const reasoning = delta?.reasoning_content || delta?.reasoning;
-                const content = delta?.content;
-
-                if (reasoning) {
-                  if (!isOpenAiThinking) {
-                    isOpenAiThinking = true;
-                    controller.enqueue(
-                      textEncoder.encode(`data: ${JSON.stringify({ token: `<think>${reasoning}` })}\n\n`)
-                    );
-                  } else {
-                    controller.enqueue(
-                      textEncoder.encode(`data: ${JSON.stringify({ token: reasoning })}\n\n`)
-                    );
-                  }
-                }
-
-                if (content) {
-                  if (isOpenAiThinking) {
-                    isOpenAiThinking = false;
-                    controller.enqueue(
-                      textEncoder.encode(`data: ${JSON.stringify({ token: `</think>\n\n${content}` })}\n\n`)
-                    );
-                  } else {
-                    controller.enqueue(
-                      textEncoder.encode(`data: ${JSON.stringify({ token: content })}\n\n`)
-                    );
-                  }
+                
+                // Some OpenRouter models support <think> reasoning_content, but with JSON mode we primarily expect text.
+                const token = delta?.reasoning_content || delta?.reasoning || delta?.content;
+                if (token) {
+                  controller.enqueue(
+                    textEncoder.encode(`data: ${JSON.stringify({ token })}\n\n`)
+                  );
                 }
               } catch {
                 // Ignore partial JSON
@@ -230,9 +197,6 @@ export async function POST(req) {
         }
       },
       flush(controller) {
-        if (isClaudeThinking || isOpenAiThinking) {
-          controller.enqueue(textEncoder.encode(`data: ${JSON.stringify({ token: '</think>\n\n' })}\n\n`));
-        }
         controller.enqueue(textEncoder.encode(`data: ${JSON.stringify({ done: true })}\n\n`));
       },
     });

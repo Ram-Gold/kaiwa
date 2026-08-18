@@ -59,7 +59,10 @@ describe('StreamingChatMessages Component', () => {
     expect(screen.getByText(/thinking \(思考中\)/i)).toBeDefined();
   });
 
-  it('renders distinct UI for model thinking in gray and saying in black', () => {
+  it('renders distinct UI for model thinking in gray and saying in black', async () => {
+    const { setStreamingEnabled } = await import('../../lib/ai/config.js');
+    setStreamingEnabled(true);
+
     const messages = [
       {
         id: '2',

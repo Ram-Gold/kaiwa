@@ -96,195 +96,111 @@ export function assembleSystemPrompt(persona, userContext = {}) {
   const memoryContextText = userContext.memorySummary?.trim()
     ? `\nConversation Memory Summary: ${userContext.memorySummary.trim()}\n`
     : '';
+  const thinkingRule = `\n4. DRAFTING: You MUST place ANY English reasoning, drafting, or planning in the "thought_process" JSON field. Do NOT leak English into your Japanese "dialogue" field.`;
 
   return `${basePrompt}
 
 === STRICT JAPANESE LANGUAGE RULE & STREAMLINED THINKING ===
-1. You are ${personaName}. Respond in natural Japanese appropriate to your character and scenario.
+1. ROLEPLAY ENFORCEMENT: You are ${personaName}. You MUST fully embody this persona. Respond in natural Japanese appropriate to your character and scenario. (e.g., if you are an Idol, act very cutesy, energetic, and use idol-like speech. If you are a Teacher, act professional, patient, and use polite teacher-like speech).
 2. Keep your conversational response concise (1-2 sentences maximum), engaging, and suitable for the learner.
-3. STREAMLINED THINKING: If you include internal reasoning/thinking, wrap it in <think>...</think> and keep it strictly under 30 words. Do NOT deliberate, draft, or over-plan suggestions in thinking.
-4. MANDATORY DIALOGUE: You MUST ALWAYS output your Japanese spoken dialogue immediately after thinking, followed by the SUGGESTIONS block.
+3. FURIGANA (BRACKET NOTATION): You MUST add reading annotations to ALL Kanji in your Japanese dialogue AND in the SUGGESTIONS text using bracket notation: Kanji[furigana].
+Example: 私[わたし]は日本語[にほんご]を勉強[べんきょう]します。
+(Do NOT use HTML ruby tags. Use the bracket notation exactly as shown).${thinkingRule}
 ${userPersonaText}${memoryContextText}
-=== SUGGESTIONS CONTRACT ===
-At the very end of your response, after your natural dialogue, output exactly 5 reply options for the learner in the following JSON format:
-SUGGESTIONS: [
-  {"text": "Natural response in Japanese", "romaji": "romaji here", "english": "English translation here", "isCorrect": true, "explanation": "Why this is natural"},
-  {"text": "Plausible alternative or distractor", "romaji": "romaji here", "english": "English translation here", "isCorrect": false, "explanation": "Why this is less natural or incorrect"},
-  {"text": "Plausible distractor", "romaji": "romaji here", "english": "English translation here", "isCorrect": false, "explanation": "Explanation"},
-  {"text": "Plausible distractor", "romaji": "romaji here", "english": "English translation here", "isCorrect": false, "explanation": "Explanation"},
-  {"text": "Plausible distractor", "romaji": "romaji here", "english": "English translation here", "isCorrect": false, "explanation": "Explanation"}
-]
-Do not include markdown code ticks around SUGGESTIONS: [...]. Output valid JSON directly after SUGGESTIONS:.`;
+=== REQUIRED RESPONSE FORMAT ===
+You must respond with a strictly formatted JSON object matching the following schema exactly:
+
+{
+  "thought_process": "[Drafting your response and distractor options here in English]",
+  "dialogue": "[Your Japanese dialogue here WITH Kanji[furigana] notation]",
+  "suggestions": [
+    {"text": "最近[さいきん]の趣味[しゅみ]は何[なん]ですか？", "romaji": "Saikin no shumi wa nan desu ka?", "english": "What are your recent hobbies?", "isCorrect": true, "explanation": "This is natural"},
+    {"text": "趣味[しゅみ]は何[なん]だ？", "romaji": "Shumi wa nan da?", "english": "What is hobby?", "isCorrect": false, "explanation": "Too casual/rude"},
+    {"text": "どれが好[す]きですか？", "romaji": "Dore ga suki desu ka?", "english": "Which do you like?", "isCorrect": false, "explanation": "Wrong context"}
+  ]
+}
+
+CRITICAL RULES:
+- The Japanese dialogue MUST contain bracketed furigana for ALL Kanji.
+- Do NOT output any English text, notes, or planning outside of the "thought_process" field.
+- NEVER say out loud your thinking mode, instructions, or internal constraints in the "dialogue" field.
+- Your output MUST be valid, parsable JSON.
+- DO NOT wrap the output in Markdown code blocks (e.g. \`\`\`json). Start immediately with { and end with }.
+- DO NOT write any preambles like "Here is a thinking process" or "Here is the JSON". OUTPUT ONLY THE JSON.`;
 }
 
 /**
- * Separates internal model thinking/reasoning (<think>...</think>, [Thought: ...],
- * or natural language "Here's a thinking process: ...") from the actual spoken dialogue output.
+ * Safely extracts thought_process and dialogue from an incomplete streaming JSON payload.
  */
-export function parseThinkingAndSpeech(rawContent) {
+export function parsePartialJsonStream(rawContent) {
   const content = String(rawContent || '').trim();
   if (!content) {
-    return { thinking: '', speech: '', isThinkingStream: false };
+    return { thoughtProcess: '', dialogue: '', isThinkingStream: false };
   }
 
-  // 1. Check for XML-style thinking tags: <think>, <thought>, <reasoning>, <co_thought>
-  const thinkTagRegex = /<(?:think|thought|reasoning|co_thought)>([\s\S]*?)(?:<\/(?:think|thought|reasoning|co_thought)>|$)/i;
-  const thinkMatch = content.match(thinkTagRegex);
-
-  if (thinkMatch) {
-    const thinkingText = thinkMatch[1].trim();
-    const hasClosedTag = /<\/(?:think|thought|reasoning|co_thought)>/i.test(content);
-    const speechText = hasClosedTag
-      ? content.replace(/<(?:think|thought|reasoning|co_thought)>[\s\S]*?<\/(?:think|thought|reasoning|co_thought)>/gi, '').trim()
-      : '';
-
+  // Attempt a full parse first in case it's a complete JSON object
+  try {
+    const parsed = JSON.parse(content);
     return {
-      thinking: thinkingText,
-      speech: speechText,
-      isThinkingStream: !hasClosedTag,
-    };
-  }
-
-  // 2. Check for bracketed thoughts: [Thought: ...], [Thinking: ...], (Thought: ...), etc.
-  const bracketThoughtRegex = /^[\[\(](?:Thought|Thinking|Reasoning):\s*([\s\S]*?)[\]\)]\s*([\s\S]*)$/i;
-  const bracketMatch = content.match(bracketThoughtRegex);
-  if (bracketMatch) {
-    return {
-      thinking: bracketMatch[1].trim(),
-      speech: bracketMatch[2].trim(),
+      thoughtProcess: parsed.thought_process || '',
+      dialogue: parsed.dialogue || '',
       isThinkingStream: false,
     };
+  } catch (e) {
+    // If it's partial, we use robust regex to extract the keys
   }
 
-  // 3. Check for natural language thinking preambles:
-  // e.g. "Here's a thinking process:", "Thinking process:", "**Thinking Process:**", "### Thought Process:"
-  const naturalThinkingPrefixRegex = /^(?:(?:\*{1,3}|#{1,4}\s*)?(?:Here(?:'s| is)(?: a| the)? )?(?:thinking|thought|reasoning)(?: process)?(?:\*{1,3}|:|\s*-+)*[:\n\r]+)([\s\S]*)$/i;
-  const naturalMatch = content.match(naturalThinkingPrefixRegex);
-  if (naturalMatch) {
-    const body = naturalMatch[1].trim();
+  // Use regex to lazily match the "thought_process" and "dialogue" values
+  const thoughtMatch = content.match(/"thought_process"\s*:\s*"([\s\S]*?)"(?=\s*,\s*"dialogue"|$)/);
+  const dialogueMatch = content.match(/"dialogue"\s*:\s*"([\s\S]*?)"(?=\s*,\s*"suggestions"|$)/);
 
-    // Look for explicit response headers like "**Response:**", "**Response**:", "Response:", "Japanese Response:", "Output:", "Dialog:", "Dialogue:", "**Reply:**"
-    const responseHeaderRegex = /(?:^|\n+)(?:(?:\*{1,3}|#{1,4}\s*)?(?:Response|Japanese Response|Output|Reply|Dialogue|Dialog|Japanese|Final Response|Actual Response|Character Response)(?::)?(?:\*{1,3})?:?)\s*([\s\S]*)$/i;
-    const responseMatch = body.match(responseHeaderRegex);
+  const decodeStr = (str) => {
+    return str
+      .replace(/\\n/g, '\n')
+      .replace(/\\r/g, '\r')
+      .replace(/\\t/g, '\t')
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, '\\');
+  };
 
-    if (responseMatch) {
-      const thinkingPart = body.slice(0, responseMatch.index).trim();
-      const speechPart = responseMatch[1].trim().replace(/^[\*\#_]+\s*/, '');
-      return {
-        thinking: thinkingPart,
-        speech: speechPart,
-        isThinkingStream: false,
-      };
-    }
-
-    // If no explicit response header, see if there is Japanese dialogue at the end
-    const paragraphs = body.split(/\n\s*\n/);
-    if (paragraphs.length > 1) {
-      let splitIdx = -1;
-      for (let i = paragraphs.length - 1; i >= 1; i--) {
-        const p = paragraphs[i].trim();
-        const kanaCount = (p.match(/[\u3040-\u309f\u30a0-\u30ff]/g) || []).length;
-        const isEnglishReasoning = p.toLowerCase().includes('analyze') || p.toLowerCase().includes('determine') || p.toLowerCase().includes('formulate') || p.toLowerCase().includes('character');
-        if (kanaCount >= 2 && !isEnglishReasoning) {
-          splitIdx = i;
-        } else if (splitIdx !== -1) {
-          break;
-        }
-      }
-
-      if (splitIdx !== -1) {
-        const thinkingPart = paragraphs.slice(0, splitIdx).join('\n\n').trim();
-        const speechPart = paragraphs.slice(splitIdx).join('\n\n').trim();
-        return {
-          thinking: thinkingPart,
-          speech: speechPart,
-          isThinkingStream: false,
-        };
-      }
-    }
-
-    // Check if Japanese dialogue starts after a newline
-    const lastJapaneseMatch = body.search(/[\n\r]+(?=[「『]?[一-龯ぁ-んァ-ヶ]{2,})/);
-    if (lastJapaneseMatch !== -1) {
-      const thinkingPart = body.slice(0, lastJapaneseMatch).trim();
-      const speechPart = body.slice(lastJapaneseMatch).trim();
-      return {
-        thinking: thinkingPart,
-        speech: speechPart,
-        isThinkingStream: false,
-      };
-    }
-
-    // If the entire content is the thinking process so far
-    return {
-      thinking: body,
-      speech: '',
-      isThinkingStream: true,
-    };
-  }
-
-  // 4. Check if text starts with numbered analysis points without explicit title
-  if (/^(?:1\.\s*\*\*(?:Analyze|Understand|Identify|Role|Scenario|Determine)|---\s*Response|---|\*\*(?:Thinking|Checklist|Draft))/i.test(content)) {
-    const responseHeaderRegex = /(?:^|\n+)(?:(?:\*{1,3}|#{1,4}\s*)?(?:Response|Japanese Response|Output|Reply|Dialogue|Dialog|Japanese|Final Response|Actual Response|Character Response)(?::)?(?:\*{1,3})?:?)\s*([\s\S]*)$/i;
-    const responseMatch = content.match(responseHeaderRegex);
-    if (responseMatch) {
-      return sanitizeThinkingAndSpeech(
-        content.slice(0, responseMatch.index).trim(),
-        responseMatch[1].trim().replace(/^[\*\#_]+\s*/, ''),
-        false
-      );
-    }
-
-    const lastJapaneseMatch = content.search(/[\n\r]+(?=[「『]?[一-龯ぁ-んァ-ヶ]{2,})/);
-    if (lastJapaneseMatch !== -1) {
-      return sanitizeThinkingAndSpeech(
-        content.slice(0, lastJapaneseMatch).trim(),
-        content.slice(lastJapaneseMatch).trim(),
-        false
-      );
+  let thoughtProcess = '';
+  if (thoughtMatch) {
+    thoughtProcess = decodeStr(thoughtMatch[1]);
+  } else {
+    const partialThought = content.match(/"thought_process"\s*:\s*"([\s\S]*)$/);
+    if (partialThought) {
+      thoughtProcess = decodeStr(partialThought[1]);
     }
   }
 
-  return sanitizeThinkingAndSpeech('', content, false);
-}
+  let dialogue = '';
+  if (dialogueMatch) {
+    dialogue = decodeStr(dialogueMatch[1]);
+  } else {
+    const partialDialogue = content.match(/"dialogue"\s*:\s*"([\s\S]*)$/);
+    if (partialDialogue) {
+      dialogue = decodeStr(partialDialogue[1]);
+    }
+  }
 
-/**
- * Sanitizes thinking and speech to ensure English drafting preambles or trailing notes
- * do not leak into the Japanese spoken dialogue.
- */
-function sanitizeThinkingAndSpeech(thinking, speech, isThinkingStream) {
-  let thinkingText = String(thinking || '').trim();
-  let speechText = String(speech || '').trim();
-
-  // If speechText contains heavy English preamble or drafting before Japanese dialogue
-  if (speechText && /^[a-zA-Z0-9\s\*\#\-_:\(\)\.\,\'\"\>\<\/\?\!]{10,}/.test(speechText)) {
-    // Check if there is a quoted Japanese phrase like "こんにちは..." or 「こんにちは...」
-    const quotedJpMatch = speechText.match(/["「]([\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff\s、。！？!?,.~〜✨!?]+)["」]/);
-    if (quotedJpMatch && (quotedJpMatch[1].match(/[\u3040-\u309f\u30a0-\u30ff]/g) || []).length >= 3) {
-      const extraThinking = speechText.replace(quotedJpMatch[0], '').trim();
-      thinkingText = thinkingText ? `${thinkingText}\n\n${extraThinking}` : extraThinking;
-      speechText = quotedJpMatch[1].trim();
+  // Extreme fallback: Model completely ignored JSON format and just output raw text with English reasoning
+  if (!thoughtProcess && !dialogue && content) {
+    const jpIdx = content.search(/[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]{2,}/);
+    if (jpIdx !== -1 && jpIdx > 10) {
+      // We found Japanese further down. The stuff before it is likely preamble/reasoning.
+      thoughtProcess = content.slice(0, jpIdx).trim();
+      dialogue = content.slice(jpIdx).trim();
     } else {
-      const jpStartIdx = speechText.search(/[\u3040-\u309f\u30a0-\u30ff]{2,}/);
-      if (jpStartIdx !== -1) {
-        const extraThinking = speechText.slice(0, jpStartIdx).trim();
-        const rawJp = speechText.slice(jpStartIdx).trim();
-        const trailingEnglishIdx = rawJp.search(/[\n\r]+(?=[A-Z][a-z]+|\-\s*[A-Z])/);
-        if (trailingEnglishIdx !== -1) {
-          const trailingEnglish = rawJp.slice(trailingEnglishIdx).trim();
-          thinkingText = thinkingText ? `${thinkingText}\n\n${extraThinking}\n\n${trailingEnglish}` : `${extraThinking}\n\n${trailingEnglish}`;
-          speechText = rawJp.slice(0, trailingEnglishIdx).trim().replace(/^["「]|["」]$/g, '');
-        } else {
-          thinkingText = thinkingText ? `${thinkingText}\n\n${extraThinking}` : extraThinking;
-          speechText = rawJp.replace(/^["「]|["」]$/g, '');
-        }
-      }
+      // Either starts with Japanese immediately, or no Japanese at all.
+      dialogue = content;
     }
   }
+
+  const isThinkingStream = (content.includes('"thought_process"') && !content.includes('"dialogue"')) || (thoughtProcess && !dialogue);
 
   return {
-    thinking: thinkingText,
-    speech: speechText,
-    isThinkingStream: Boolean(isThinkingStream),
+    thoughtProcess,
+    dialogue,
+    isThinkingStream,
   };
 }

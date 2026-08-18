@@ -1,5 +1,6 @@
 import { getPersonaById } from '../prompts/personas.js';
 import { splitConversationHistory } from './contextManagement.js';
+import { isStreamingEnabled, parsePartialJsonStream, assembleSystemPrompt } from './ai/config.js';
 
 /**
  * ============================================================================
@@ -40,12 +41,37 @@ export class AIProviderError extends Error {
 
 export function parseModelReply(rawContent) {
   const content = String(rawContent || '').trim();
-  const suggestions = extractSuggestions(content);
-  const text = stripSuggestions(content).trim();
+
+  let parsedJson = {};
+  try {
+    // Check if the response is wrapped in a markdown code block
+    const cleanedContent = content.replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
+    parsedJson = JSON.parse(cleanedContent);
+  } catch (e) {
+    // Fallback to partial stream parser if JSON is malformed
+    const partial = parsePartialJsonStream(content);
+    parsedJson = {
+      thought_process: partial.thoughtProcess,
+      dialogue: partial.dialogue,
+      suggestions: extractSuggestions(content) // fallback
+    };
+  }
+
+  const suggestions = Array.isArray(parsedJson.suggestions) ? parsedJson.suggestions : extractSuggestions(content);
+  let text = String(parsedJson.dialogue || '').trim();
+
+  // If dialogue is empty, maybe the model returned the Japanese directly without proper JSON keys
+  if (!text) {
+    text = String(parsedJson.text || parsedJson.message || stripSuggestions(content)).trim();
+  }
+
+  // DEFENSE LAYER: If streaming/thinking is OFF, we don't return the thoughtProcess
+  const isThinkingEnabled = isStreamingEnabled();
 
   return {
     text: text || '返事が空でした。もう一度送ってください。',
-    suggestions,
+    suggestions: parseSuggestionsArray(suggestions),
+    thoughtProcess: isThinkingEnabled ? (parsedJson.thought_process || '') : '',
   };
 }
 
@@ -93,6 +119,28 @@ function stripSuggestions(content) {
     .trim();
 }
 
+function parseSuggestionsArray(suggestions) {
+  if (!Array.isArray(suggestions)) {
+    return [];
+  }
+
+  return suggestions
+    .filter((suggestion) => typeof suggestion === 'object' && suggestion !== null)
+    .map((suggestion) => {
+      let text = String(suggestion.text || suggestion.phrase || suggestion.japanese || suggestion.option || '').trim();
+      // Truncate if model erroneously output a long paragraph into a response card
+      if (text.length > 35) {
+        const firstSentence = text.split(/(?<=[。！？!?])\s*/)[0];
+        text = firstSentence.length <= 35 ? firstSentence : firstSentence.slice(0, 32) + '…';
+      }
+      const isCorrect = suggestion.isCorrect !== undefined ? Boolean(suggestion.isCorrect) : (suggestion.correct !== undefined ? Boolean(suggestion.correct) : true);
+      const explanation = String(suggestion.explanation || suggestion.reason || '').trim();
+      return { text, isCorrect, explanation };
+    })
+    .filter((suggestion) => suggestion.text.length > 0)
+    .slice(0, 5);
+}
+
 function parseSuggestions(rawValue) {
   try {
     const cleaned = String(rawValue || '')
@@ -103,25 +151,7 @@ function parseSuggestions(rawValue) {
     const parsed = JSON.parse(cleaned);
     const suggestions = Array.isArray(parsed) ? parsed : (parsed?.SUGGESTIONS || parsed?.suggestions || parsed?.choices || parsed?.options);
 
-    if (!Array.isArray(suggestions)) {
-      return [];
-    }
-
-    return suggestions
-      .filter((suggestion) => typeof suggestion === 'object' && suggestion !== null)
-      .map((suggestion) => {
-        let text = String(suggestion.text || suggestion.phrase || suggestion.japanese || suggestion.option || '').trim();
-        // Truncate if model erroneously output a long paragraph into a response card
-        if (text.length > 35) {
-          const firstSentence = text.split(/(?<=[。！？!?])\s*/)[0];
-          text = firstSentence.length <= 35 ? firstSentence : firstSentence.slice(0, 32) + '…';
-        }
-        const isCorrect = suggestion.isCorrect !== undefined ? Boolean(suggestion.isCorrect) : (suggestion.correct !== undefined ? Boolean(suggestion.correct) : true);
-        const explanation = String(suggestion.explanation || suggestion.reason || '').trim();
-        return { text, isCorrect, explanation };
-      })
-      .filter((suggestion) => suggestion.text.length > 0)
-      .slice(0, 5);
+    return parseSuggestionsArray(suggestions);
   } catch {
     return [];
   }
@@ -290,42 +320,32 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
     const { recent, olderToSummarize } = splitConversationHistory(historyToUse, tokenBudget);
     
     // --- STEP 2: SYSTEM PROMPT & OUTPUT CONTRACT SPECIFICATION ---
-    let activeSystemPrompt = persona.systemPrompt + `\n\n[GLOBAL CONSTRAINTS & STREAMLINED THINKING RULES]:
-1. LENGTH & TOKEN MINIMIZATION: Keep your main Japanese reply strictly at or below 2 short sentences maximum. Be concise, direct, and token-efficient.
-2. STRICT JAPANESE LANGUAGE RULE: You MUST converse STRICTLY in JAPANESE at all times. Never reply in English!
-3. STREAMLINED THINKING: If you include internal reasoning or thinking, wrap it in <think>...</think> and keep it strictly under 30 words. Do NOT deliberate, draft, or over-plan suggestions in thinking.
-4. MANDATORY DIALOGUE: You MUST ALWAYS output your 1-2 sentence spoken Japanese dialogue directly to the learner immediately after thinking, followed by the SUGGESTIONS block.
-5. CARD SUGGESTIONS RULE: Output 5 short Japanese reply options (3-10 words / max 20 characters in Japanese) formatted as valid JSON at the very end of the message:
-SUGGESTIONS: [{"text": "short Japanese user reply", "isCorrect": true, "explanation": "English explanation of nuance"}, {"text": "unnatural Japanese reply 1", "isCorrect": false, "explanation": "wrong particle"}, {"text": "unnatural Japanese reply 2", "isCorrect": false, "explanation": "wrong verb tense"}, {"text": "unnatural Japanese reply 3", "isCorrect": false, "explanation": "too formal"}, {"text": "unnatural Japanese reply 4", "isCorrect": false, "explanation": "wrong nuance"}]`;
+    const useThinking = isStreamingEnabled();
     
     // Inject user's About Me & Persona Context from settings
+    let userPersona = '';
+    let aboutMe = '';
     if (typeof window !== 'undefined') {
       try {
-        const userPersona = window.localStorage.getItem('kaiwa.user.persona') || '';
+        userPersona = window.localStorage.getItem('kaiwa.user.persona') || '';
         const rawProfile = window.localStorage.getItem('kaiwa.user.profile');
-        let aboutMe = '';
         if (rawProfile) {
           const parsed = JSON.parse(rawProfile);
           aboutMe = parsed.aboutMe || '';
         }
-        const contextParts = [];
-        if (userPersona.trim()) contextParts.push(`Learner Persona Context: ${userPersona.trim()}`);
-        if (aboutMe.trim()) contextParts.push(`Learner Bio & Background: ${aboutMe.trim()}`);
-        if (contextParts.length > 0) {
-          activeSystemPrompt += `\n\n[Learner Profile & Context]:\n${contextParts.join('\n')}`;
-        }
-      } catch (e) {
-        // Ignore parsing errors
-      }
+      } catch (e) {}
     }
-    
+
+    let summaryText = '';
     // Summarize older history if necessary to prevent context window bloat
     if (olderToSummarize.length > 0) {
-      const summaryText = await summarizeOldMessages(provider, cleanKey, olderToSummarize);
-      if (summaryText) {
-        activeSystemPrompt += `\n\n[Earlier conversation summary]:\n${summaryText}`;
-      }
+      summaryText = await summarizeOldMessages(provider, cleanKey, olderToSummarize);
     }
+
+    const activeSystemPrompt = assembleSystemPrompt(persona, { 
+      userPersona: `${userPersona}\nLearner Bio & Background: ${aboutMe}`.trim(), 
+      memorySummary: summaryText 
+    });
 
     let payload;
 
@@ -338,6 +358,7 @@ SUGGESTIONS: [{"text": "short Japanese user reply", "isCorrect": true, "explanat
           { role: 'user', content: cleanMessage },
         ],
         stream: false,
+        format: 'json',
       };
     } else if (provider === 'openai') {
       payload = {
@@ -347,8 +368,9 @@ SUGGESTIONS: [{"text": "short Japanese user reply", "isCorrect": true, "explanat
           ...recent,
           { role: 'user', content: cleanMessage },
         ],
-        temperature: 0.8,
-        max_tokens: 4096,
+        temperature: 0.7,
+        max_tokens: 600,
+        response_format: { type: 'json_object' },
       };
     } else if (provider === 'openrouter') {
       payload = {
@@ -358,8 +380,9 @@ SUGGESTIONS: [{"text": "short Japanese user reply", "isCorrect": true, "explanat
           ...recent,
           { role: 'user', content: cleanMessage },
         ],
-        temperature: 0.8,
-        max_tokens: 4096,
+        temperature: 0.7,
+        max_tokens: 600,
+        response_format: { type: 'json_object' },
       };
     } else if (provider === 'gemini') {
       payload = {
@@ -369,24 +392,24 @@ SUGGESTIONS: [{"text": "short Japanese user reply", "isCorrect": true, "explanat
           ...recent,
           { role: 'user', content: cleanMessage },
         ],
-        temperature: 0.8,
-        max_tokens: 4096,
+        temperature: 0.7,
+        max_tokens: 600,
       };
     } else if (provider === 'claude') {
       payload = {
         model: 'claude-3-5-haiku-20241022',
         system: activeSystemPrompt,
         messages: [...recent, { role: 'user', content: cleanMessage }],
-        max_tokens: 4096,
-        temperature: 0.8,
+        max_tokens: 600,
+        temperature: 0.7,
       };
     } else {
       throw new AIProviderError('unsupported_provider', `Unsupported AI provider: ${provider}`);
     }
 
     let attempts = 0;
-    const maxRetries = 15;
-    let delayMs = 2500;
+    const maxRetries = 3;
+    let delayMs = 1000;
 
     while (attempts < maxRetries) {
       attempts++;
@@ -404,19 +427,24 @@ SUGGESTIONS: [{"text": "short Japanese user reply", "isCorrect": true, "explanat
 
       if (response.status === 429) {
         console.warn(`[KAIwa AI] Rate limited (HTTP 429). Retrying attempt ${attempts}/${maxRetries} in ${delayMs}ms...`);
-        await new Promise((r) => setTimeout(r, delayMs));
-        delayMs = Math.min(delayMs * 1.5, 10000);
-        continue;
+        if (attempts < maxRetries) {
+          await new Promise((r) => setTimeout(r, delayMs));
+          delayMs = Math.min(delayMs * 1.5, 10000);
+          continue;
+        }
       }
       break;
     }
   } catch (err) {
     if (err instanceof AIProviderError) throw err;
     const name = PROVIDER_DISPLAY_NAMES[provider] || provider;
-    const networkMsg = provider === 'ollama'
-      ? 'Ollama connection failed. Make sure Ollama is running locally on port 11434.'
-      : `${name} connection failed. Check your network or API key.`;
-    throw new AIProviderError('network', networkMsg, err);
+    if (typeof window !== 'undefined' && !window.navigator.onLine) {
+      throw new AIProviderError('offline', 'You are currently offline / disconnected from the internet. Please check your network connection.', err);
+    }
+    if (err instanceof TypeError && String(err.message).toLowerCase().includes('failed to fetch')) {
+      throw new AIProviderError('disconnected', `Network connection failed. Could not reach the server or ${name}.`, err);
+    }
+    throw new AIProviderError('system_error', `Error sending message: ${err.message || 'Unknown error'}`, err);
   }
 
   if (!response.ok) {
@@ -426,26 +454,38 @@ SUGGESTIONS: [{"text": "short Japanese user reply", "isCorrect": true, "explanat
   const data = await response.json();
   let rawReply = '';
 
+  const thinkingOn = isStreamingEnabled();
+
   if (provider === 'ollama') {
-    const thinking = data?.message?.thinking ? `<think>${data.message.thinking}</think>\n\n` : '';
+    const thinking = (thinkingOn && data?.message?.thinking) ? `<think>${data.message.thinking}</think>\n\n` : '';
     const content = data?.message?.content || '';
     rawReply = `${thinking}${content}`.trim();
   } else if (provider === 'openai' || provider === 'gemini' || provider === 'openrouter') {
     const msg = data?.choices?.[0]?.message;
-    const reasoning = msg?.reasoning_content || msg?.reasoning;
     const content = msg?.content || '';
-    if (reasoning && content) {
-      rawReply = `<think>${reasoning}</think>\n\n${content}`.trim();
+    if (thinkingOn) {
+      const reasoning = msg?.reasoning_content || msg?.reasoning;
+      if (reasoning && content) {
+        rawReply = `<think>${reasoning}</think>\n\n${content}`.trim();
+      } else {
+        rawReply = content || reasoning || '';
+      }
     } else {
-      rawReply = content || reasoning || '';
+      // Thinking OFF: discard reasoning entirely, use only content
+      rawReply = content;
     }
   } else if (provider === 'claude') {
     if (Array.isArray(data?.content)) {
-      const thinkingBlock = data.content.find((b) => b.type === 'thinking');
       const textBlock = data.content.find((b) => b.type === 'text');
-      const thinkingText = thinkingBlock?.thinking ? `<think>${thinkingBlock.thinking}</think>\n\n` : '';
-      const dialogueText = textBlock?.text || (data.content[0]?.text || '');
-      rawReply = `${thinkingText}${dialogueText}`.trim();
+      if (thinkingOn) {
+        const thinkingBlock = data.content.find((b) => b.type === 'thinking');
+        const thinkingText = thinkingBlock?.thinking ? `<think>${thinkingBlock.thinking}</think>\n\n` : '';
+        const dialogueText = textBlock?.text || (data.content[0]?.text || '');
+        rawReply = `${thinkingText}${dialogueText}`.trim();
+      } else {
+        // Thinking OFF: only use the text block
+        rawReply = textBlock?.text || data.content[0]?.text || '';
+      }
     } else {
       rawReply = data?.content?.[0]?.text || '';
     }
@@ -596,31 +636,52 @@ const PROVIDER_DISPLAY_NAMES = {
 async function buildHttpError(response, provider) {
   const name = PROVIDER_DISPLAY_NAMES[provider] || provider;
 
-  if (response.status === 401 || response.status === 403) {
-    return new AIProviderError(
-      'invalid_key',
-      `${name} API rejected the key. Please check your ${name} key.`,
-    );
+  let detail = '';
+  try {
+    const data = await response.json();
+    detail = data?.error?.message || data?.error || data?.message || '';
+  } catch {
+    detail = '';
   }
 
   if (response.status === 429) {
     return new AIProviderError(
       'rate_limit',
-      `${name} API rate limited this key. Wait a moment, then try again.`,
+      `[Rate Limit Exceeded (HTTP 429)]: You have hit the rate limit for ${name}. Please wait a moment before sending another message.${detail ? ` (${detail})` : ''}`,
     );
   }
 
-  let detail = '';
-  try {
-    const data = await response.json();
-    detail = data?.error?.message || data?.error || '';
-  } catch {
-    detail = '';
+  if (response.status === 401 || response.status === 403) {
+    return new AIProviderError(
+      'invalid_key',
+      `[Authentication Error (HTTP ${response.status})]: ${name} rejected your API key. Please check or re-enter your API key in Settings.${detail ? ` (${detail})` : ''}`,
+    );
+  }
+
+  if (response.status === 402) {
+    return new AIProviderError(
+      'insufficient_balance',
+      `[Insufficient Balance / Credits (HTTP 402)]: Your ${name} account has run out of credits or quota.${detail ? ` (${detail})` : ''}`,
+    );
+  }
+
+  if (response.status === 404) {
+    return new AIProviderError(
+      'model_not_found',
+      `[Model Not Found (HTTP 404)]: The selected model was not found on ${name}.${detail ? ` (${detail})` : ''}`,
+    );
+  }
+
+  if (response.status >= 500) {
+    return new AIProviderError(
+      'service_unavailable',
+      `[${name} Service Outage (HTTP ${response.status})]: ${name} is currently experiencing server errors or high load. Please try again in a few minutes.`,
+    );
   }
 
   return new AIProviderError(
     'api_error',
-    `${name} request failed with status ${response.status}${detail ? `: ${detail}` : ''}`,
+    `[${name} Error (HTTP ${response.status})]: ${detail || response.statusText || 'Request failed.'}`,
   );
 }
 
