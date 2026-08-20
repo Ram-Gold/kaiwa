@@ -29,7 +29,7 @@ describe('AI Config & System Prompt Engine', () => {
     expect(prompt).toContain('You are Ken-sensei, a patient Japanese teacher.');
     expect(prompt).toContain('CONVERSATION RULES');
     expect(prompt).toContain('Learner Context: Exchange student in Tokyo');
-    expect(prompt).toContain('"suggestions": [');
+    expect(prompt).toContain('<suggestions>');
   });
 
   it('handles default streaming preference as false', () => {

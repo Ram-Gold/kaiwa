@@ -1,6 +1,6 @@
 import { getPersonaById } from '../prompts/personas.js';
 import { splitConversationHistory } from './contextManagement.js';
-import { isStreamingEnabled, parsePartialJsonStream, assembleSystemPrompt } from './ai/config.js';
+import { isStreamingEnabled, assembleSystemPrompt } from './ai/config.js';
 
 /**
  * ============================================================================
@@ -42,22 +42,12 @@ export class AIProviderError extends Error {
 export function parseModelReply(rawContent) {
   const content = String(rawContent || '').trim();
   const suggestions = extractSuggestions(content);
-  
-  // Use the robust JSON parser to extract the dialogue
-  const parsed = parsePartialJsonStream(content);
-  let text = parsed.dialogue;
-
-  // Fallback: If model completely failed JSON format, use raw text minus suggestions
-  if (!text) {
-    text = stripSuggestions(content).trim();
-    // Strip XML think tags if present as a last resort
-    text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-  }
+  const text = stripSuggestions(content).trim();
 
   return {
     text: text || '返事が空でした。もう一度送ってください。',
-    suggestions: parseSuggestionsArray(suggestions),
-    thoughtProcess: parsed.thoughtProcess || '',
+    suggestions: suggestions,
+    thoughtProcess: '',
   };
 }
 
@@ -96,35 +86,20 @@ export function extractSuggestions(content) {
 }
 
 function stripSuggestions(content) {
-  return String(content || '')
-    .replace(/SUGGESTIONS:[\s\S]*$/gi, '')
-    .replace(/```(?:json)?[\s\S]*$/gi, '')
-    .replace(/\{\s*"SUGGESTIONS"[\s\S]*$/gi, '')
-    .replace(/\[\s*\{\s*"text"[\s\S]*$/gi, '')
-    .replace(/```(?:json)?/gi, '')
-    .trim();
-}
-
-function parseSuggestionsArray(suggestions) {
-  if (!Array.isArray(suggestions)) {
-    return [];
+  let cleanText = String(content || '');
+  
+  const dialogueMatch = cleanText.match(/<dialogue>([\s\S]*?)(?:<\/dialogue>|$)/i);
+  if (dialogueMatch) {
+    cleanText = dialogueMatch[1];
+  } else {
+    cleanText = ''; // STRICT MODE: If there's no <dialogue> tag, consider it empty text
   }
+  
 
-  return suggestions
-    .filter((suggestion) => typeof suggestion === 'object' && suggestion !== null)
-    .map((suggestion) => {
-      let text = String(suggestion.text || suggestion.phrase || suggestion.japanese || suggestion.option || '').trim();
-      // Truncate if model erroneously output a long paragraph into a response card
-      if (text.length > 35) {
-        const firstSentence = text.split(/(?<=[。！？!?])\s*/)[0];
-        text = firstSentence.length <= 35 ? firstSentence : firstSentence.slice(0, 32) + '…';
-      }
-      const isCorrect = suggestion.isCorrect !== undefined ? Boolean(suggestion.isCorrect) : (suggestion.correct !== undefined ? Boolean(suggestion.correct) : true);
-      const explanation = String(suggestion.explanation || suggestion.reason || '').trim();
-      return { text, isCorrect, explanation };
-    })
-    .filter((suggestion) => suggestion.text.length > 0)
-    .slice(0, 5);
+
+  return cleanText
+    .replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '')
+    .trim();
 }
 
 function parseSuggestions(rawValue) {
@@ -137,7 +112,25 @@ function parseSuggestions(rawValue) {
     const parsed = JSON.parse(cleaned);
     const suggestions = Array.isArray(parsed) ? parsed : (parsed?.SUGGESTIONS || parsed?.suggestions || parsed?.choices || parsed?.options);
 
-    return parseSuggestionsArray(suggestions);
+    if (!Array.isArray(suggestions)) {
+      return [];
+    }
+
+    return suggestions
+      .filter((suggestion) => typeof suggestion === 'object' && suggestion !== null)
+      .map((suggestion) => {
+        let text = String(suggestion.text || suggestion.phrase || suggestion.japanese || suggestion.option || '').trim();
+        // Truncate if model erroneously output a long paragraph into a response card
+        if (text.length > 35) {
+          const firstSentence = text.split(/(?<=[。！？!?])\s*/)[0];
+          text = firstSentence.length <= 35 ? firstSentence : firstSentence.slice(0, 32) + '…';
+        }
+        const isCorrect = suggestion.isCorrect !== undefined ? Boolean(suggestion.isCorrect) : (suggestion.correct !== undefined ? Boolean(suggestion.correct) : true);
+        const explanation = String(suggestion.explanation || suggestion.reason || '').trim();
+        return { text, isCorrect, explanation };
+      })
+      .filter((suggestion) => suggestion.text.length > 0)
+      .slice(0, 5);
   } catch {
     return [];
   }
@@ -356,7 +349,6 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
         ],
         temperature: 0.7,
         max_tokens: 600,
-        response_format: { type: 'json_object' },
       };
     } else if (provider === 'openrouter') {
       payload = {
@@ -368,7 +360,6 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
         ],
         temperature: 0.7,
         max_tokens: 600,
-        response_format: { type: 'json_object' },
       };
     } else if (provider === 'gemini') {
       payload = {

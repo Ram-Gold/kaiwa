@@ -14,7 +14,7 @@ import { loadStoredProvider, loadStoredApiKeys, loadStoredOpenRouterModel } from
 import { useAuth } from '../../lib/auth/AuthContext';
 import { saveChatSession, saveDictionaryWord } from '../../lib/firebase/firestore.js';
 import { useRouter } from 'next/navigation';
-import { isStreamingEnabled, assembleSystemPrompt, getAIModelConfig, parsePartialJsonStream } from '../../lib/ai/config.js';
+import { isStreamingEnabled, assembleSystemPrompt, getAIModelConfig } from '../../lib/ai/config.js';
 import { getPersonaById } from '../../prompts/personas.js';
 import { estimateTokenCount, estimateCost, formatDuration } from '../../lib/ai/metrics.js';
 
@@ -407,7 +407,6 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
             messages: historyForApi.map((m) => ({ role: m.role, content: m.content })),
             max_tokens: 2048,
             temperature: modelConfig.temperature,
-            response_format: { type: 'json_object' },
           };
         } else {
           payload = {
@@ -418,7 +417,6 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
             ],
             temperature: modelConfig.temperature,
             max_tokens: 2048,
-            response_format: { type: 'json_object' },
           };
         }
 
@@ -456,10 +454,26 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
               const parsed = JSON.parse(tr.replace(/^data:\s*/, ''));
               if (parsed.token) {
                 accum += parsed.token;
-                const partialParsed = parsePartialJsonStream(accum);
+                let cleanText = accum;
+                
+                const dialogueMatch = cleanText.match(/<dialogue>([\s\S]*?)(?:<\/dialogue>|$)/i);
+                if (dialogueMatch) {
+                  cleanText = dialogueMatch[1];
+                } else if (cleanText.includes('<thoughts>') || cleanText.includes('THOUGHTS:')) {
+                  cleanText = ''; // Still thinking...
+                } else {
+                  // Fallback: strip <thoughts> and <suggestions> if <dialogue> is missing
+                  cleanText = cleanText
+                    .replace(/<thoughts>[\s\S]*?(?:<\/thoughts>|$)/gi, '')
+                    .replace(/<suggestions>[\s\S]*$/gi, '')
+                    .replace(/THOUGHTS:[\s\S]*?DIALOGUE:/gi, '')
+                    .replace(/SUGGESTIONS:[\s\S]*$/gi, '');
+                }
+                
+                cleanText = cleanText.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim();
                 
                 setMessages((curr) =>
-                  curr.map((m) => (m.id === asstId ? { ...m, content: partialParsed.dialogue } : m))
+                  curr.map((m) => (m.id === asstId ? { ...m, content: cleanText } : m))
                 );
               }
             } catch {
@@ -1136,8 +1150,7 @@ function MessageBubble({ text = '', initialSubtext, from, theme, thinking = fals
   const [isPlaying, setIsPlaying] = useState(false);
 
   // Parse thinking vs speech from AI content
-  const parsed = useMemo(() => parsePartialJsonStream(text), [text]);
-  const thinkingText = streamingEnabled ? parsed.thoughtProcess : null;
+  const thinkingText = null;
 
   // Resolve speechText cleanly without ever showing internal reasoning or meta-analysis
   const speechText = useMemo(() => {

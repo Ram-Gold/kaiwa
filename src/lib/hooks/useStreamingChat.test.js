@@ -19,8 +19,10 @@ describe('useStreamingChat Hook', () => {
 
   it('handles streaming tokens and accumulates assistant response', async () => {
     const ssePayload = [
+      'data: {"token":"<dialogue>"}\n\n',
       'data: {"token":"こんにちは、"}\n\n',
       'data: {"token":"元気ですか？"}\n\n',
+      'data: {"token":"</dialogue>"}\n\n',
       'data: {"done":true}\n\n',
     ].join('');
 
@@ -60,6 +62,7 @@ describe('useStreamingChat Hook', () => {
 
     const stream = new ReadableStream({
       start(controller) {
+        controller.enqueue(encoder.encode('data: {"token":"<dialogue>"}\n\n'));
         controller.enqueue(encoder.encode('data: {"token":"初めま"}\n\n'));
       },
       cancel() {

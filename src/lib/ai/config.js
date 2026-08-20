@@ -156,96 +156,35 @@ The conversation will conclude in the next turn.
 
 === CONVERSATION RULES ===
 1. You are ${personaName}. Chat naturally, warmly, and in character with the user.
-2. Reply directly to whatever the user says or asks. Keep your response conversational, supportive, and concise (1-2 sentences).
-3. Add furigana bracket notation ONLY to Kanji so the learner can read along: 漢字[かんじ]. Do NOT add furigana to Hiragana or Katakana.
+2. STRICT JAPANESE LANGUAGE RULE: The DIALOGUE section MUST be STRICTLY in JAPANESE at all times. NEVER reply in English in the DIALOGUE section!
+3. Reply directly to whatever the user says or asks. Keep your response conversational, supportive, and concise (1-2 sentences).
+4. Add furigana bracket notation ONLY to Kanji so the learner can read along: 漢字[かんじ]. Do NOT add furigana to Hiragana or Katakana.
    (Correct: 私[わたし]は歌[うた]が大好[だいす]きだよ！✨)
    (Incorrect: こんにちは[こんにちは])
 ${userPersonaText}${memoryContextText}${briefingGoalText}${turnProgressionText}
+5. DO NOT output any internal thoughts, planning, or English translations. Output ONLY the dialogue and suggestions.
+
 === FORMAT ===
-You MUST output strictly in the following JSON format. Do not add any markdown formatting or text outside the JSON object.
-{
-  "thought_process": "Plan your response here in English. Consider the persona, the user's message, and how to guide the conversation.",
-  "dialogue": "Your natural in-character Japanese reply with Kanji furigana brackets here",
-  "suggestions": [
-    {"text": "返答の選択肢1 (Japanese only)", "romaji": "Romaji here", "english": "English meaning", "isCorrect": true, "explanation": "Natural response"},
-    {"text": "返答の選択肢2 (Japanese only)", "romaji": "Romaji here", "english": "English meaning", "isCorrect": false, "explanation": "A bit too casual or unnatural"},
-    {"text": "返答の選択肢3 (Japanese only)", "romaji": "Romaji here", "english": "English meaning", "isCorrect": false, "explanation": "Wrong context"}
-  ]
-}`;
-}
+You MUST structure your response EXACTLY like this using XML tags. Do not deviate. DO NOT include thoughts!
 
-/**
- * Safely extracts thought_process and dialogue from an incomplete streaming JSON payload.
- */
-export function parsePartialJsonStream(rawContent) {
-  const content = String(rawContent || '').trim();
-  if (!content) {
-    return { thoughtProcess: '', dialogue: '', isThinkingStream: false };
-  }
+<dialogue>
+[Your natural in-character Japanese reply with Kanji furigana brackets here. STRICTLY NO ENGLISH! NO THOUGHTS!]
+</dialogue>
 
-  // Attempt a full parse first in case it's a complete JSON object
-  try {
-    const parsed = JSON.parse(content);
-    return {
-      thoughtProcess: parsed.thought_process || '',
-      dialogue: parsed.dialogue || '',
-      isThinkingStream: false,
-    };
-  } catch (e) {
-    // If it's partial, we use robust regex to extract the keys
-  }
+<suggestions>
+[{"text": "short Japanese user reply", "romaji": "romaji here", "english": "English translation", "isCorrect": true, "explanation": "English explanation of nuance"}, {"text": "unnatural Japanese reply", "romaji": "romaji here", "english": "English translation", "isCorrect": false, "explanation": "wrong particle"}, ...]
+</suggestions>
 
-  // Use regex to lazily match the "thought_process" and "dialogue" values
-  const thoughtMatch = content.match(/"thought_process"\s*:\s*"([\s\S]*?)"(?=\s*,\s*"dialogue"|$)/);
-  const dialogueMatch = content.match(/"dialogue"\s*:\s*"([\s\S]*?)"(?=\s*,\s*"suggestions"|$)/);
-
-  const decodeStr = (str) => {
-    return str
-      .replace(/\\n/g, '\n')
-      .replace(/\\r/g, '\r')
-      .replace(/\\t/g, '\t')
-      .replace(/\\"/g, '"')
-      .replace(/\\\\/g, '\\');
-  };
-
-  let thoughtProcess = '';
-  if (thoughtMatch) {
-    thoughtProcess = decodeStr(thoughtMatch[1]);
-  } else {
-    const partialThought = content.match(/"thought_process"\s*:\s*"([\s\S]*)$/);
-    if (partialThought) {
-      thoughtProcess = decodeStr(partialThought[1]);
-    }
-  }
-
-  let dialogue = '';
-  if (dialogueMatch) {
-    dialogue = decodeStr(dialogueMatch[1]);
-  } else {
-    const partialDialogue = content.match(/"dialogue"\s*:\s*"([\s\S]*)$/);
-    if (partialDialogue) {
-      dialogue = decodeStr(partialDialogue[1]);
-    }
-  }
-
-  // Extreme fallback: Model completely ignored JSON format and just output raw text with English reasoning
-  if (!thoughtProcess && !dialogue && content) {
-    const jpIdx = content.search(/[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]{2,}/);
-    if (jpIdx !== -1 && jpIdx > 10) {
-      // We found Japanese further down. The stuff before it is likely preamble/reasoning.
-      thoughtProcess = content.slice(0, jpIdx).trim();
-      dialogue = content.slice(jpIdx).trim();
-    } else {
-      // Either starts with Japanese immediately, or no Japanese at all.
-      dialogue = content;
-    }
-  }
-
-  const isThinkingStream = (content.includes('"thought_process"') && !content.includes('"dialogue"')) || (thoughtProcess && !dialogue);
-
-  return {
-    thoughtProcess,
-    dialogue,
-    isThinkingStream,
-  };
+=== EXAMPLE ===
+User: こんにちは！
+Assistant:
+<dialogue>
+こんにちは！元気[げんき]ですか？
+</dialogue>
+<suggestions>
+[
+  {"text": "はい、元気です", "romaji": "Hai, genki desu", "english": "Yes, I am well", "isCorrect": true, "explanation": "Standard natural reply"},
+  {"text": "こんにちは", "romaji": "Konnichiwa", "english": "Hello", "isCorrect": false, "explanation": "A bit repetitive"}
+]
+</suggestions>`;
 }

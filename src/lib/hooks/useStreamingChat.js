@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { getPersonaById } from '../../prompts/personas.js';
-import { assembleSystemPrompt, getAIModelConfig, isStreamingEnabled, parsePartialJsonStream } from '../ai/config.js';
+import { assembleSystemPrompt, getAIModelConfig, isStreamingEnabled } from '../ai/config.js';
 import { parseModelReply } from '../ai.js';
 
 /**
@@ -203,16 +203,25 @@ export function useStreamingChat({
               const parsedData = JSON.parse(jsonStr);
               if (parsedData.token) {
                 accumulatedRaw += parsedData.token;
-                const partialParsed = parsePartialJsonStream(accumulatedRaw);
+                let cleanText = accumulatedRaw;
                 
-                setIsThinking(partialParsed.isThinkingStream);
+                const dialogueMatch = cleanText.match(/<dialogue>([\s\S]*?)(?:<\/dialogue>|$)/i);
+                if (dialogueMatch) {
+                  cleanText = dialogueMatch[1];
+                } else {
+                  cleanText = ''; // STRICT MODE: Show nothing until <dialogue> tag starts
+                }
+                
+                cleanText = cleanText.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim();
+                
+                setIsThinking(cleanText.length === 0);
 
                 setMessages((prev) =>
                   prev.map((msg) =>
                     msg.id === assistantMsgId
                       ? {
                           ...msg,
-                          content: partialParsed.dialogue,
+                          content: cleanText,
                           rawContent: accumulatedRaw,
                         }
                       : msg
