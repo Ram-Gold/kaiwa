@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { getPersonaById } from '../../prompts/personas.js';
-import { assembleSystemPrompt, getAIModelConfig, isStreamingEnabled } from '../ai/config.js';
+import { assembleSystemPrompt, getAIModelConfig, isStreamingEnabled, parsePartialJsonStream } from '../ai/config.js';
 import { parseModelReply } from '../ai.js';
 
 /**
@@ -202,22 +202,17 @@ export function useStreamingChat({
             try {
               const parsedData = JSON.parse(jsonStr);
               if (parsedData.token) {
-                setIsThinking(false);
                 accumulatedRaw += parsedData.token;
-                let cleanDisplay = accumulatedRaw.split(/SUGGESTIONS:/i)[0].trim();
-                cleanDisplay = cleanDisplay.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-                cleanDisplay = cleanDisplay.replace(/^Here(?:'s| is) (?:a )?thinking process:[\s\S]*?(?=[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff])/i, '').trim();
-                const jpIdx = cleanDisplay.search(/[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]{2,}/);
-                if (jpIdx > 10) {
-                  cleanDisplay = cleanDisplay.slice(jpIdx).trim();
-                }
+                const partialParsed = parsePartialJsonStream(accumulatedRaw);
+                
+                setIsThinking(partialParsed.isThinkingStream);
 
                 setMessages((prev) =>
                   prev.map((msg) =>
                     msg.id === assistantMsgId
                       ? {
                           ...msg,
-                          content: cleanDisplay || accumulatedRaw,
+                          content: partialParsed.dialogue,
                           rawContent: accumulatedRaw,
                         }
                       : msg

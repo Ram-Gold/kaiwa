@@ -42,34 +42,22 @@ export class AIProviderError extends Error {
 export function parseModelReply(rawContent) {
   const content = String(rawContent || '').trim();
   const suggestions = extractSuggestions(content);
-  let text = stripSuggestions(content).trim();
+  
+  // Use the robust JSON parser to extract the dialogue
+  const parsed = parsePartialJsonStream(content);
+  let text = parsed.dialogue;
 
-  // Strip XML think tags if present
-  text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-
-  // Strip English thinking preambles like "Here's a thinking process: ..."
-  text = text.replace(/^Here(?:'s| is) (?:a )?thinking process:[\s\S]*?(?=[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff])/i, '').trim();
-
-  // Fallback: If JSON was returned, extract dialogue field
-  if (text.startsWith('{') && text.includes('"dialogue"')) {
-    try {
-      const parsed = JSON.parse(text);
-      if (parsed.dialogue) {
-        text = parsed.dialogue;
-      }
-    } catch {}
-  }
-
-  // If the model still generated an English preamble before its Japanese speech, slice directly to the Japanese
-  const jpIdx = text.search(/[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]{2,}/);
-  if (jpIdx > 10) {
-    text = text.slice(jpIdx).trim();
+  // Fallback: If model completely failed JSON format, use raw text minus suggestions
+  if (!text) {
+    text = stripSuggestions(content).trim();
+    // Strip XML think tags if present as a last resort
+    text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
   }
 
   return {
     text: text || '返事が空でした。もう一度送ってください。',
     suggestions: parseSuggestionsArray(suggestions),
-    thoughtProcess: '',
+    thoughtProcess: parsed.thoughtProcess || '',
   };
 }
 
@@ -317,8 +305,8 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
     const tokenBudget = provider === 'ollama' ? 4000 : 6000;
     const { recent, olderToSummarize } = splitConversationHistory(historyToUse, tokenBudget);
     
+    
     // --- STEP 2: SYSTEM PROMPT & OUTPUT CONTRACT SPECIFICATION ---
-    const useThinking = isStreamingEnabled();
     
     // Inject user's About Me & Persona Context from settings
     let userPersona = '';
@@ -368,6 +356,7 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
         ],
         temperature: 0.7,
         max_tokens: 600,
+        response_format: { type: 'json_object' },
       };
     } else if (provider === 'openrouter') {
       payload = {
@@ -379,6 +368,7 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
         ],
         temperature: 0.7,
         max_tokens: 600,
+        response_format: { type: 'json_object' },
       };
     } else if (provider === 'gemini') {
       payload = {
@@ -450,40 +440,17 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
   const data = await response.json();
   let rawReply = '';
 
-  const thinkingOn = isStreamingEnabled();
-
+  // Always extract only the actual content — never include thinking/reasoning tokens
   if (provider === 'ollama') {
-    const thinking = (thinkingOn && data?.message?.thinking) ? `<think>${data.message.thinking}</think>\n\n` : '';
-    const content = data?.message?.content || '';
-    rawReply = `${thinking}${content}`.trim();
+    rawReply = (data?.message?.content || '').trim();
   } else if (provider === 'openai' || provider === 'gemini' || provider === 'openrouter') {
-    const msg = data?.choices?.[0]?.message;
-    const content = msg?.content || '';
-    if (thinkingOn) {
-      const reasoning = msg?.reasoning_content || msg?.reasoning;
-      if (reasoning && content) {
-        rawReply = `<think>${reasoning}</think>\n\n${content}`.trim();
-      } else {
-        rawReply = content || reasoning || '';
-      }
-    } else {
-      // Thinking OFF: discard reasoning entirely, use only content
-      rawReply = content;
-    }
+    rawReply = (data?.choices?.[0]?.message?.content || '').trim();
   } else if (provider === 'claude') {
     if (Array.isArray(data?.content)) {
       const textBlock = data.content.find((b) => b.type === 'text');
-      if (thinkingOn) {
-        const thinkingBlock = data.content.find((b) => b.type === 'thinking');
-        const thinkingText = thinkingBlock?.thinking ? `<think>${thinkingBlock.thinking}</think>\n\n` : '';
-        const dialogueText = textBlock?.text || (data.content[0]?.text || '');
-        rawReply = `${thinkingText}${dialogueText}`.trim();
-      } else {
-        // Thinking OFF: only use the text block
-        rawReply = textBlock?.text || data.content[0]?.text || '';
-      }
+      rawReply = (textBlock?.text || data.content[0]?.text || '').trim();
     } else {
-      rawReply = data?.content?.[0]?.text || '';
+      rawReply = (data?.content?.[0]?.text || '').trim();
     }
   }
 

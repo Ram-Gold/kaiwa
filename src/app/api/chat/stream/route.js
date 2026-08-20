@@ -142,8 +142,8 @@ export async function POST(req) {
               try {
                 const data = JSON.parse(dataStr);
                 if (data.type === 'content_block_delta') {
-                  // Forward both extended thinking and standard text as tokens
-                  const token = data.delta?.thinking || data.delta?.text || '';
+                  // Only forward actual text content — silently discard thinking/reasoning tokens
+                  const token = data.delta?.text || '';
                   if (token) {
                     controller.enqueue(
                       textEncoder.encode(`data: ${JSON.stringify({ token })}\n\n`)
@@ -159,9 +159,8 @@ export async function POST(req) {
           else if (normProvider === 'ollama') {
             try {
               const data = JSON.parse(trimmed);
-              // Ollama might separate thinking, but we enforce JSON format so it should output JSON text.
-              // We'll still forward any thinking tokens just in case it leaks.
-              const token = data.message?.thinking || data.message?.content || data.response;
+              // Only forward actual content — discard thinking tokens
+              const token = data.message?.content || data.response;
               if (token) {
                 controller.enqueue(
                   textEncoder.encode(`data: ${JSON.stringify({ token })}\n\n`)
@@ -182,8 +181,8 @@ export async function POST(req) {
                 const data = JSON.parse(dataStr);
                 const delta = data.choices?.[0]?.delta;
                 
-                // Some OpenRouter models support <think> reasoning_content, but with JSON mode we primarily expect text.
-                const token = delta?.reasoning_content || delta?.reasoning || delta?.content;
+                // Only forward actual content — discard reasoning_content/reasoning tokens
+                const token = delta?.content;
                 if (token) {
                   controller.enqueue(
                     textEncoder.encode(`data: ${JSON.stringify({ token })}\n\n`)

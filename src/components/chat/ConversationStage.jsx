@@ -407,6 +407,7 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
             messages: historyForApi.map((m) => ({ role: m.role, content: m.content })),
             max_tokens: 2048,
             temperature: modelConfig.temperature,
+            response_format: { type: 'json_object' },
           };
         } else {
           payload = {
@@ -417,6 +418,7 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
             ],
             temperature: modelConfig.temperature,
             max_tokens: 2048,
+            response_format: { type: 'json_object' },
           };
         }
 
@@ -454,9 +456,10 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
               const parsed = JSON.parse(tr.replace(/^data:\s*/, ''));
               if (parsed.token) {
                 accum += parsed.token;
-                const cleanDisplay = accum.split(/SUGGESTIONS:/i)[0].trim();
+                const partialParsed = parsePartialJsonStream(accum);
+                
                 setMessages((curr) =>
-                  curr.map((m) => (m.id === asstId ? { ...m, content: cleanDisplay || accum } : m))
+                  curr.map((m) => (m.id === asstId ? { ...m, content: partialParsed.dialogue } : m))
                 );
               }
             } catch {
