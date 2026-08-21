@@ -7,6 +7,8 @@ import { saveAiProviderSettings } from '../../lib/firebase/firestore';
 export const PROVIDER_STORAGE_KEY = 'kaiwa.ai.provider';
 export const API_KEYS_STORAGE_PREFIX = 'kaiwa.ai.apiKey.';
 export const OPENROUTER_MODEL_STORAGE_KEY = 'kaiwa.ai.openRouterModel';
+export const GEMINI_MODEL_STORAGE_KEY = 'kaiwa.ai.geminiModel';
+export const MISTRAL_MODEL_STORAGE_KEY = 'kaiwa.ai.mistralModel';
 
 export function loadStoredProvider() {
   if (typeof window === 'undefined' || typeof localStorage === 'undefined') return 'ollama';
@@ -15,13 +17,14 @@ export function loadStoredProvider() {
 
 export function loadStoredApiKeys() {
   if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
-    return { openai: '', gemini: '', claude: '', openrouter: '' };
+    return { openai: '', gemini: '', claude: '', openrouter: '', mistral: '' };
   }
   return {
     openai: localStorage.getItem(`${API_KEYS_STORAGE_PREFIX}openai`) || '',
     gemini: localStorage.getItem(`${API_KEYS_STORAGE_PREFIX}gemini`) || '',
     claude: localStorage.getItem(`${API_KEYS_STORAGE_PREFIX}claude`) || '',
     openrouter: localStorage.getItem(`${API_KEYS_STORAGE_PREFIX}openrouter`) || '',
+    mistral: localStorage.getItem(`${API_KEYS_STORAGE_PREFIX}mistral`) || '',
   };
 }
 
@@ -30,6 +33,20 @@ export function loadStoredOpenRouterModel() {
     return 'google/gemini-2.0-flash-lite-preview-02-05:free';
   }
   return localStorage.getItem(OPENROUTER_MODEL_STORAGE_KEY) || 'google/gemini-2.0-flash-lite-preview-02-05:free';
+}
+
+export function loadStoredGeminiModel() {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+    return 'gemini-2.0-flash';
+  }
+  return localStorage.getItem(GEMINI_MODEL_STORAGE_KEY) || 'gemini-2.0-flash';
+}
+
+export function loadStoredMistralModel() {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+    return 'mistral-large-latest';
+  }
+  return localStorage.getItem(MISTRAL_MODEL_STORAGE_KEY) || 'mistral-large-latest';
 }
 
 export default function AiProviderSettingsCard({
@@ -41,7 +58,7 @@ export default function AiProviderSettingsCard({
   const { user } = useAuth();
   const [draftProvider, setDraftProvider] = useState(provider);
   const [draftKey, setDraftKey] = useState('');
-  const [draftModel, setDraftModel] = useState(openRouterModel || 'google/gemini-2.0-flash-lite-preview-02-05:free');
+  const [draftModel, setDraftModel] = useState(openRouterModel || '');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -58,8 +75,16 @@ export default function AiProviderSettingsCard({
   useEffect(() => {
     if (draftProvider === 'ollama') {
       setDraftKey('');
+      setDraftModel('');
     } else {
       setDraftKey(apiKeys[draftProvider] || '');
+      if (draftProvider === 'gemini') {
+        setDraftModel(typeof window !== 'undefined' ? localStorage.getItem(GEMINI_MODEL_STORAGE_KEY) || 'gemini-2.0-flash' : 'gemini-2.0-flash');
+      } else if (draftProvider === 'mistral') {
+        setDraftModel(typeof window !== 'undefined' ? localStorage.getItem(MISTRAL_MODEL_STORAGE_KEY) || 'mistral-large-latest' : 'mistral-large-latest');
+      } else if (draftProvider === 'openrouter') {
+        setDraftModel(typeof window !== 'undefined' ? localStorage.getItem(OPENROUTER_MODEL_STORAGE_KEY) || 'google/gemini-2.0-flash-lite-preview-02-05:free' : 'google/gemini-2.0-flash-lite-preview-02-05:free');
+      }
     }
     // Clear notifications on provider switch
     setError('');
@@ -87,6 +112,9 @@ export default function AiProviderSettingsCard({
     if (prov === 'claude' && !cleanKey.startsWith('sk-ant-')) {
       return 'Invalid key format';
     }
+    if (prov === 'mistral' && !cleanKey) {
+      return 'API key required';
+    }
     return '';
   };
 
@@ -99,11 +127,17 @@ export default function AiProviderSettingsCard({
     if (isSaveDisabled) return;
 
     const cleanKey = draftKey.trim();
-    const cleanModel = draftModel.trim() || 'google/gemini-2.0-flash-lite-preview-02-05:free';
+    const cleanModel = draftModel.trim() || (draftProvider === 'gemini' ? 'gemini-2.0-flash' : draftProvider === 'mistral' ? 'mistral-large-latest' : 'google/gemini-2.0-flash-lite-preview-02-05:free');
 
     if (typeof window !== 'undefined' && window.localStorage) {
       window.localStorage.setItem(PROVIDER_STORAGE_KEY, draftProvider);
-      window.localStorage.setItem(OPENROUTER_MODEL_STORAGE_KEY, cleanModel);
+      if (draftProvider === 'openrouter') {
+        window.localStorage.setItem(OPENROUTER_MODEL_STORAGE_KEY, cleanModel);
+      } else if (draftProvider === 'gemini') {
+        window.localStorage.setItem(GEMINI_MODEL_STORAGE_KEY, cleanModel);
+      } else if (draftProvider === 'mistral') {
+        window.localStorage.setItem(MISTRAL_MODEL_STORAGE_KEY, cleanModel);
+      }
       if (draftProvider !== 'ollama') {
         window.localStorage.setItem(`${API_KEYS_STORAGE_PREFIX}${draftProvider}`, cleanKey);
       }
@@ -185,6 +219,7 @@ export default function AiProviderSettingsCard({
             <option value="openrouter">OpenRouter</option>
             <option value="gemini">Gemini</option>
             <option value="claude">Claude</option>
+            <option value="mistral">Mistral AI</option>
           </select>
         </div>
 
@@ -208,6 +243,8 @@ export default function AiProviderSettingsCard({
                   ? 'sk-or-v1-...'
                   : draftProvider === 'gemini'
                   ? 'AIzaSy... / AQ...'
+                  : draftProvider === 'mistral'
+                  ? 'Enter Mistral API Key'
                   : 'sk-ant-...'
               }
               autoComplete="off"
@@ -217,23 +254,52 @@ export default function AiProviderSettingsCard({
           </div>
         )}
 
-        {draftProvider === 'openrouter' && (
+        {['openrouter', 'gemini', 'mistral'].includes(draftProvider) && (
           <div>
             <label htmlFor="model-input" className="label-mono block font-bold">
               Model
             </label>
-            <input
-              id="model-input"
-              type="text"
-              value={draftModel}
-              onChange={(e) => {
-                setDraftModel(e.target.value);
-                setSuccess('');
-              }}
-              placeholder="e.g. google/gemini-2.0-flash-lite-preview-02-05:free"
-              autoComplete="off"
-              className="brutal-border mt-2 w-full bg-paper px-4 py-3 font-mono text-sm font-bold shadow-shadow"
-            />
+              {draftProvider === 'mistral' ? (
+                <select
+                  id="model-input"
+                  value={draftModel}
+                  onChange={(e) => {
+                    setDraftModel(e.target.value);
+                    setSuccess('');
+                  }}
+                  className="brutal-border mt-2 w-full bg-paper px-4 py-3 font-mono text-sm font-bold shadow-shadow"
+                >
+                  <option value="codestral-latest">Codestral</option>
+                  <option value="ministral-14b-latest">Ministral 14b</option>
+                  <option value="ministral-3b-latest">Ministral 3b</option>
+                  <option value="ministral-8b-latest">Ministral 8b</option>
+                  <option value="mistral-large-latest">Mistral Large</option>
+                  <option value="mistral-medium-latest">Mistral Medium</option>
+                  <option value="mistral-small-latest">Mistral Small</option>
+                  <optgroup label="More">
+                    <option value="labs-leanstral-1-5-1">Labs Leanstral 1 5 1</option>
+                    <option value="glm-5-2">Glm 5 2</option>
+                  </optgroup>
+                  <optgroup label="Legacy">
+                    <option value="mistral-medium-2505">Mistral Medium 2505</option>
+                    <option value="mistral-medium-2508">Mistral Medium 2508</option>
+                    <option value="devstral-2512">Devstral 2512</option>
+                  </optgroup>
+                </select>
+              ) : (
+                <input
+                  id="model-input"
+                  type="text"
+                  value={draftModel}
+                  onChange={(e) => {
+                    setDraftModel(e.target.value);
+                    setSuccess('');
+                  }}
+                  placeholder={draftProvider === 'openrouter' ? "e.g. google/gemini-2.0-flash-lite-preview-02-05:free" : "e.g. gemini-2.0-flash"}
+                  autoComplete="off"
+                  className="brutal-border mt-2 w-full bg-paper px-4 py-3 font-mono text-sm font-bold shadow-shadow"
+                />
+              )}
             <p className="mt-2 text-xs text-shu">
               Leave blank to use the default recommended free model.
             </p>

@@ -1,6 +1,6 @@
 import { getPersonaById } from '../prompts/personas.js';
 import { splitConversationHistory } from './contextManagement.js';
-import { isStreamingEnabled, assembleSystemPrompt } from './ai/config.js';
+import { isStreamingEnabled, assembleSystemPrompt, getAIModelConfig } from './ai/config.js';
 
 /**
  * ============================================================================
@@ -146,7 +146,7 @@ function normalizeHistory(conversationHistory = []) {
     .filter((message) => message.content);
 }
 
-async function summarizeOldMessages(provider, apiKey, messagesToSummarize) {
+async function summarizeOldMessages(provider, apiKey, messagesToSummarize, customModel = null) {
   if (!messagesToSummarize || messagesToSummarize.length === 0) return '';
   
   const formattedMessages = messagesToSummarize.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n');
@@ -154,28 +154,20 @@ async function summarizeOldMessages(provider, apiKey, messagesToSummarize) {
   const userMessage = `Messages to summarize:\n${formattedMessages}`;
   
   try {
+    const modelConfig = getAIModelConfig(provider, customModel);
     let payload;
     if (provider === 'ollama') {
       payload = {
-        model: 'llama3',
+        model: modelConfig.model,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage }
         ],
         stream: false,
       };
-    } else if (provider === 'openai') {
+    } else if (provider === 'openai' || provider === 'gemini' || provider === 'mistral') {
       payload = {
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userMessage }
-        ],
-        temperature: 0.2,
-      };
-    } else if (provider === 'gemini') {
-      payload = {
-        model: 'gemini-1.5-flash',
+        model: modelConfig.model,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage }
@@ -184,7 +176,7 @@ async function summarizeOldMessages(provider, apiKey, messagesToSummarize) {
       };
     } else if (provider === 'claude') {
       payload = {
-        model: 'claude-3-5-haiku-20241022',
+        model: modelConfig.model,
         system: systemPrompt,
         messages: [{ role: 'user', content: userMessage }],
         max_tokens: 1024,
@@ -207,7 +199,7 @@ async function summarizeOldMessages(provider, apiKey, messagesToSummarize) {
     const data = await response.json();
     let summary = '';
     if (provider === 'ollama') summary = data?.message?.content;
-    else if (provider === 'openai' || provider === 'gemini') summary = data?.choices?.[0]?.message?.content;
+    else if (provider === 'openai' || provider === 'gemini' || provider === 'mistral') summary = data?.choices?.[0]?.message?.content;
     else if (provider === 'claude') summary = data?.content?.[0]?.text;
     
     return summary ? summary.trim() : '';
@@ -230,7 +222,7 @@ async function summarizeOldMessages(provider, apiKey, messagesToSummarize) {
  * 5. Provider Payload Construction (Ollama / OpenRouter / OpenAI / Gemini / Claude).
  * ============================================================================
  */
-export async function sendMessage(provider, apiKey, personaInput, conversationHistory, userMessage, openRouterModel = null, userContext = {}) {
+export async function sendMessage(provider, apiKey, personaInput, conversationHistory, userMessage, customModel = null, userContext = {}) {
   const cleanKey = String(apiKey || '').trim();
   const cleanMessage = String(userMessage || '').trim();
   const persona =
@@ -318,7 +310,7 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
     let summaryText = '';
     // Summarize older history if necessary to prevent context window bloat
     if (olderToSummarize.length > 0) {
-      summaryText = await summarizeOldMessages(provider, cleanKey, olderToSummarize);
+      summaryText = await summarizeOldMessages(provider, cleanKey, olderToSummarize, customModel);
     }
 
     const activeSystemPrompt = assembleSystemPrompt(persona, { 
@@ -327,11 +319,12 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
       ...userContext,
     });
 
+    const modelConfig = getAIModelConfig(provider, customModel);
     let payload;
 
     if (provider === 'ollama') {
       payload = {
-        model: 'llama3',
+        model: modelConfig.model,
         messages: [
           { role: 'system', content: activeSystemPrompt },
           ...recent,
@@ -339,46 +332,24 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
         ],
         stream: false,
       };
-    } else if (provider === 'openai') {
+    } else if (provider === 'openai' || provider === 'openrouter' || provider === 'gemini' || provider === 'mistral') {
       payload = {
-        model: 'gpt-4o-mini',
+        model: modelConfig.model,
         messages: [
           { role: 'system', content: activeSystemPrompt },
           ...recent,
           { role: 'user', content: cleanMessage },
         ],
-        temperature: 0.7,
-        max_tokens: 600,
-      };
-    } else if (provider === 'openrouter') {
-      payload = {
-        model: openRouterModel || 'google/gemini-2.0-flash-lite-preview-02-05:free',
-        messages: [
-          { role: 'system', content: activeSystemPrompt },
-          ...recent,
-          { role: 'user', content: cleanMessage },
-        ],
-        temperature: 0.7,
-        max_tokens: 600,
-      };
-    } else if (provider === 'gemini') {
-      payload = {
-        model: 'gemini-1.5-flash',
-        messages: [
-          { role: 'system', content: activeSystemPrompt },
-          ...recent,
-          { role: 'user', content: cleanMessage },
-        ],
-        temperature: 0.7,
+        temperature: modelConfig.temperature,
         max_tokens: 600,
       };
     } else if (provider === 'claude') {
       payload = {
-        model: 'claude-3-5-haiku-20241022',
+        model: modelConfig.model,
         system: activeSystemPrompt,
         messages: [...recent, { role: 'user', content: cleanMessage }],
         max_tokens: 600,
-        temperature: 0.7,
+        temperature: modelConfig.temperature,
       };
     } else {
       throw new AIProviderError('unsupported_provider', `Unsupported AI provider: ${provider}`);
@@ -434,7 +405,7 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
   // Always extract only the actual content — never include thinking/reasoning tokens
   if (provider === 'ollama') {
     rawReply = (data?.message?.content || '').trim();
-  } else if (provider === 'openai' || provider === 'gemini' || provider === 'openrouter') {
+  } else if (provider === 'openai' || provider === 'gemini' || provider === 'openrouter' || provider === 'mistral') {
     rawReply = (data?.choices?.[0]?.message?.content || '').trim();
   } else if (provider === 'claude') {
     if (Array.isArray(data?.content)) {
@@ -458,7 +429,7 @@ export async function sendMessage(provider, apiKey, personaInput, conversationHi
 /**
  * Translates Japanese chat text to English.
  */
-export async function translateMessage(provider, apiKey, japaneseText) {
+export async function translateMessage(provider, apiKey, japaneseText, customModel = null) {
   const cleanKey = String(apiKey || '').trim();
   const cleanText = String(japaneseText || '').trim();
 
@@ -493,28 +464,20 @@ export async function translateMessage(provider, apiKey, japaneseText) {
 
   let response;
   try {
+    const modelConfig = getAIModelConfig(provider, customModel);
     let payload;
     if (provider === 'ollama') {
       payload = {
-        model: 'llama3',
+        model: modelConfig.model,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: cleanText },
         ],
         stream: false,
       };
-    } else if (provider === 'openai') {
+    } else if (provider === 'openai' || provider === 'openrouter' || provider === 'gemini' || provider === 'mistral') {
       payload = {
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: cleanText },
-        ],
-        temperature: 0.2,
-      };
-    } else if (provider === 'gemini') {
-      payload = {
-        model: 'gemini-1.5-flash',
+        model: modelConfig.model,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: cleanText },
@@ -523,7 +486,7 @@ export async function translateMessage(provider, apiKey, japaneseText) {
       };
     } else if (provider === 'claude') {
       payload = {
-        model: 'claude-3-5-haiku-20241022',
+        model: modelConfig.model,
         system: systemPrompt,
         messages: [{ role: 'user', content: cleanText }],
         max_tokens: 1024,
@@ -563,7 +526,7 @@ export async function translateMessage(provider, apiKey, japaneseText) {
 
   if (provider === 'ollama') {
     translation = data?.message?.content;
-  } else if (provider === 'openai' || provider === 'gemini' || provider === 'openrouter') {
+  } else if (provider === 'openai' || provider === 'gemini' || provider === 'openrouter' || provider === 'mistral') {
     translation = data?.choices?.[0]?.message?.content;
   } else if (provider === 'claude') {
     translation = data?.content?.[0]?.text;
@@ -745,17 +708,18 @@ export function evaluateSessionFallback(sessionData, customGoals = null) {
   };
 }
 
-export async function _fetchAiEvaluation(provider, apiKey, systemPrompt, formattedTranscript, openRouterModel = null) {
+export async function _fetchAiEvaluation(provider, apiKey, systemPrompt, formattedTranscript, customModel = null) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minutes timeout for sustained retries
 
   try {
     const cleanKey = String(apiKey || '').trim();
+    const modelConfig = getAIModelConfig(provider, customModel);
     let payload = {};
 
     if (provider === 'ollama') {
       payload = {
-        model: 'llama3.2',
+        model: modelConfig.model,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: formattedTranscript },
@@ -763,18 +727,9 @@ export async function _fetchAiEvaluation(provider, apiKey, systemPrompt, formatt
         stream: false,
         options: { temperature: 0.2 },
       };
-    } else if (provider === 'openrouter') {
+    } else if (provider === 'openrouter' || provider === 'openai' || provider === 'gemini' || provider === 'mistral') {
       payload = {
-        model: openRouterModel || 'google/gemini-2.0-flash-lite-preview-02-05:free',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: formattedTranscript },
-        ],
-        temperature: 0.2,
-      };
-    } else if (provider === 'openai' || provider === 'gemini') {
-      payload = {
-        model: provider === 'openai' ? 'gpt-4o-mini' : 'gemini-2.0-flash',
+        model: modelConfig.model,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: formattedTranscript },
@@ -783,7 +738,7 @@ export async function _fetchAiEvaluation(provider, apiKey, systemPrompt, formatt
       };
     } else if (provider === 'claude') {
       payload = {
-        model: 'claude-3-5-haiku-20241022',
+        model: modelConfig.model,
         system: systemPrompt,
         messages: [{ role: 'user', content: formattedTranscript }],
         max_tokens: 1024,
@@ -831,7 +786,7 @@ export async function _fetchAiEvaluation(provider, apiKey, systemPrompt, formatt
     const data = await response.json();
     let rawReply = '';
     if (provider === 'ollama') rawReply = data?.message?.content;
-    else if (provider === 'openai' || provider === 'gemini' || provider === 'openrouter') rawReply = data?.choices?.[0]?.message?.content;
+    else if (provider === 'openai' || provider === 'gemini' || provider === 'openrouter' || provider === 'mistral') rawReply = data?.choices?.[0]?.message?.content;
     else if (provider === 'claude') rawReply = data?.content?.[0]?.text;
 
     if (!rawReply) return null;

@@ -55,6 +55,9 @@ export async function POST(req) {
     } else if (provider === 'gemini') {
       url = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
       headers['Authorization'] = `Bearer ${apiKey}`;
+    } else if (provider === 'mistral') {
+      url = 'https://api.mistral.ai/v1/chat/completions';
+      headers['Authorization'] = `Bearer ${apiKey}`;
     } else if (provider === 'claude') {
       url = 'https://api.anthropic.com/v1/messages';
       headers['x-api-key'] = apiKey;

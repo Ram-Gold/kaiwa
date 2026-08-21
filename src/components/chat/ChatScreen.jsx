@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { sendMessage, translateMessage } from '../../lib/ai.js';
 import { getPersonaById } from '../../prompts/personas.js';
+import { loadStoredProvider, loadStoredApiKeys, loadStoredOpenRouterModel, loadStoredGeminiModel, loadStoredMistralModel } from '../dashboard/AiProviderSettingsCard.jsx';
 import Button from '../ui/Button.jsx';
 import ChatBubble from './ChatBubble.jsx';
 import RoleplayCards from './RoleplayCards.jsx';
@@ -10,8 +11,42 @@ import { saveChatSession, saveDictionaryWord } from '../../lib/firebase/firestor
 
 let messageCounter = 0;
 
-export default function ChatScreen({ provider, apiKey, personaId, onBackToDashboard }) {
+export default function ChatScreen({ provider: initialProvider, apiKey: initialApiKey, personaId, onBackToDashboard }) {
   const persona = useMemo(() => getPersonaById(personaId), [personaId]);
+  const [provider, setProvider] = useState(initialProvider);
+  const [apiKey, setApiKey] = useState(initialApiKey);
+  const [customModel, setCustomModel] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const p = initialProvider || loadStoredProvider();
+      if (p === 'openrouter') return loadStoredOpenRouterModel();
+      if (p === 'gemini') return loadStoredGeminiModel();
+      if (p === 'mistral') return loadStoredMistralModel();
+    }
+    return '';
+  });
+
+  useEffect(() => {
+    function refreshProviderSettings() {
+      const loadedProvider = loadStoredProvider();
+      const keys = loadStoredApiKeys();
+      setProvider(loadedProvider);
+      setApiKey(keys[loadedProvider] || '');
+      if (loadedProvider === 'openrouter') {
+        setCustomModel(loadStoredOpenRouterModel());
+      } else if (loadedProvider === 'gemini') {
+        setCustomModel(loadStoredGeminiModel());
+      } else if (loadedProvider === 'mistral') {
+        setCustomModel(loadStoredMistralModel());
+      } else {
+        setCustomModel('');
+      }
+    }
+
+    window.addEventListener('kaiwa:provider-updated', refreshProviderSettings);
+    return () => {
+      window.removeEventListener('kaiwa:provider-updated', refreshProviderSettings);
+    };
+  }, []);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isOptionsOpen, setIsOptionsOpen] = useState(true);
@@ -55,7 +90,8 @@ export default function ChatScreen({ provider, apiKey, personaId, onBackToDashbo
         apiKey,
         persona,
         [],
-        "(System: The user has just approached you. Please start the conversation according to your persona and generate 5 response options for the user.)"
+        "(System: The user has just approached you. Please start the conversation according to your persona and generate 5 response options for the user.)",
+        customModel
       );
       setMessages([createMessage('assistant', reply.text)]);
       setSuggestions(reply.suggestions);
@@ -107,7 +143,7 @@ export default function ChatScreen({ provider, apiKey, personaId, onBackToDashbo
     setIsLoading(true);
 
     try {
-      const reply = await sendMessage(provider, apiKey, persona, historyForApi, cleanMessage);
+      const reply = await sendMessage(provider, apiKey, persona, historyForApi, cleanMessage, customModel);
       setMessages((current) => [
         ...current,
         createMessage('assistant', reply.text),
@@ -189,7 +225,7 @@ export default function ChatScreen({ provider, apiKey, personaId, onBackToDashbo
     setTranslatingIds((current) => ({ ...current, [message.id]: true }));
 
     try {
-      const english = await translateMessage(provider, apiKey, message.content);
+      const english = await translateMessage(provider, apiKey, message.content, customModel);
       setTranslations((current) => ({ ...current, [message.id]: english }));
     } catch (error) {
       setTranslations((current) => ({

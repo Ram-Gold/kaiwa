@@ -10,7 +10,7 @@ import { speakJapanese } from '../../lib/speech.js';
 import { translateJapaneseToEnglish } from '../../lib/translation.js';
 import { toRomajiText } from '../../lib/japaneseText.js';
 import { sendMessage, evaluateSession, evaluateSessionFallback, parseModelReply } from '../../lib/ai.js';
-import { loadStoredProvider, loadStoredApiKeys, loadStoredOpenRouterModel } from '../dashboard/AiProviderSettingsCard.jsx';
+import { loadStoredProvider, loadStoredApiKeys, loadStoredOpenRouterModel, loadStoredGeminiModel, loadStoredMistralModel } from '../dashboard/AiProviderSettingsCard.jsx';
 import { useAuth } from '../../lib/auth/AuthContext';
 import { saveChatSession, saveDictionaryWord } from '../../lib/firebase/firestore.js';
 import { useRouter } from 'next/navigation';
@@ -205,8 +205,13 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
     }
     return '';
   });
-  const [openRouterModel, setOpenRouterModel] = useState(() => {
-    if (typeof window !== 'undefined') return loadStoredOpenRouterModel();
+  const [customModel, setCustomModel] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const p = loadStoredProvider();
+      if (p === 'openrouter') return loadStoredOpenRouterModel();
+      if (p === 'gemini') return loadStoredGeminiModel();
+      if (p === 'mistral') return loadStoredMistralModel();
+    }
     return '';
   });
 
@@ -281,7 +286,15 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
       const keys = loadStoredApiKeys();
       setProvider(loadedProvider);
       setApiKey(keys[loadedProvider] || '');
-      setOpenRouterModel(loadStoredOpenRouterModel());
+      if (loadedProvider === 'openrouter') {
+        setCustomModel(loadStoredOpenRouterModel());
+      } else if (loadedProvider === 'gemini') {
+        setCustomModel(loadStoredGeminiModel());
+      } else if (loadedProvider === 'mistral') {
+        setCustomModel(loadStoredMistralModel());
+      } else {
+        setCustomModel('');
+      }
     }
 
     refreshProviderSettings();
@@ -314,7 +327,7 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
         personaId || scenario.id || 'sensei',
         [],
         "こんにちは！",
-        openRouterModel,
+        customModel,
         { turn: 1, maxTurns: MAX_TURNS, briefing: scenario }
       );
       const elapsed = Date.now() - startTime;
@@ -397,7 +410,7 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
       if (streamingEnabled) {
         const activePersona = getPersonaById(personaId || scenario.id || 'sensei');
         const systemPrompt = assembleSystemPrompt(activePersona, turnContext);
-        const modelConfig = getAIModelConfig(provider, openRouterModel);
+        const modelConfig = getAIModelConfig(provider, customModel);
 
         let payload;
         if (provider === 'anthropic' || provider === 'claude') {
@@ -523,7 +536,7 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
           personaId || scenario.id || 'sensei',
           historyForApi,
           cleanText,
-          openRouterModel,
+          customModel,
           turnContext
         );
         const batchElapsed = Date.now() - batchStartTime;
@@ -596,7 +609,7 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
 
       let evaluatedReport = null;
       try {
-        evaluatedReport = await evaluateSession(provider, apiKey, sessionData, openRouterModel);
+        evaluatedReport = await evaluateSession(provider, apiKey, sessionData, customModel);
       } catch (e) {
         console.warn('Failed to evaluate session:', e);
         evaluatedReport = evaluateSessionFallback(sessionData);
