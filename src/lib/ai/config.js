@@ -98,77 +98,22 @@ export function setStreamingEnabled(enabled) {
  * ============================================================================
  */
 export function assembleSystemPrompt(persona, userContext = {}) {
-  const basePrompt = typeof persona === 'string' ? persona : (persona?.systemPrompt || 'You are a helpful Japanese tutor.');
-  const personaName = persona?.name || 'Kaiwa Tutor';
-
-  const userPersonaText = userContext.userPersona?.trim()
-    ? `\nLearner Context: ${userContext.userPersona.trim()}\n`
-    : '';
-
-  const memoryContextText = userContext.memorySummary?.trim()
-    ? `\nConversation Memory: ${userContext.memorySummary.trim()}\n`
-    : '';
-
-  let briefingGoalText = '';
-  if (userContext.briefing) {
-    const b = userContext.briefing;
-    const headsUpList = (b.headsUp || []).map((h) => `- ${h}`).join('\n');
-    const prepList = (b.prep || []).join(', ');
-    briefingGoalText = `
-=== ROLEPLAY SCENARIO & OBJECTIVES ===
-Scenario: ${b.title || ''} (${b.jpTitle || ''}) - Level ${b.level || 'N5'}
-Summary & Goal: ${b.summary || ''}
-Key Tasks & Coaching Tips for Learner:
-${headsUpList || '- Practice polite conversation in character.'}
-Target Practice Phrases: ${prepList || 'General N5 vocabulary'}
-`;
-  }
-
-  let turnProgressionText = '';
-  const currentTurn = Number(userContext.turn) || 1;
-  const maxTurns = Number(userContext.maxTurns) || 10;
-  const remaining = Math.max(0, maxTurns - currentTurn);
-
-  if (currentTurn >= maxTurns) {
-    turnProgressionText = `
-=== TURN PROGRESSION: FINAL TURN (${currentTurn}/${maxTurns}) ===
-This is the FINAL turn (Turn ${maxTurns}). The learner is saying their closing words/farewell.
-1. Deliver your warm in-character final farewell and goodbye to the learner (e.g. またね！, お疲れさまでした！, 応援しています！).
-2. Praise their effort warmly.
-3. Do NOT ask any new questions or introduce new topics since the session ends after your reply.
-`;
-  } else if (currentTurn >= maxTurns - 1) {
-    turnProgressionText = `
-=== TURN PROGRESSION: PENULTIMATE TURN (${currentTurn}/${maxTurns} - 1 turn remaining) ===
-The conversation will conclude in the next turn.
-1. Acknowledge what the learner said and naturally guide the scenario toward its conclusion.
-2. Prompt the learner for their final parting words or closing phrase.
-`;
-  } else {
-    turnProgressionText = `
-=== TURN PROGRESSION: TURN ${currentTurn}/${maxTurns} (${remaining} turns remaining) ===
-1. Guide the learner to achieve the scenario goals and use target phrases within the remaining turns.
-2. Keep the conversation moving forward purposefully toward the scenario objectives.
-`;
-  }
-
-  return `${basePrompt}
+  return `You are a Japanese conversation partner.
+Your task is to respond to the user's Japanese input and generate 5 plausible follow-up response cards for the user to choose from.
 
 === CONVERSATION RULES ===
-1. You are ${personaName}. Chat naturally, warmly, and in character with the user.
-2. STRICT JAPANESE LANGUAGE RULE: The DIALOGUE section MUST be STRICTLY in JAPANESE at all times. NEVER reply in English in the DIALOGUE section!
-3. Reply directly to whatever the user says or asks. Keep your response conversational, supportive, and concise (1-2 sentences).
-4. Add furigana bracket notation ONLY to Kanji so the learner can read along: 漢字[かんじ]. Do NOT add furigana to Hiragana or Katakana.
+1. STRICT JAPANESE LANGUAGE RULE: The DIALOGUE section MUST be STRICTLY in JAPANESE at all times. NEVER reply in English in the DIALOGUE section!
+2. Reply directly to whatever the user says or asks. Keep your response conversational, supportive, and concise (1-2 sentences).
+3. Add furigana bracket notation ONLY to Kanji so the learner can read along: 漢字[かんじ]. Do NOT add furigana to Hiragana or Katakana.
    (Correct: 私[わたし]は歌[うた]が大好[だいす]きだよ！✨)
    (Incorrect: こんにちは[こんにちは])
-${userPersonaText}${memoryContextText}${briefingGoalText}${turnProgressionText}
-5. DO NOT output any internal thoughts, planning, or English translations. Output ONLY the dialogue and suggestions.
+4. DO NOT output any internal thoughts, planning, or English translations. Output ONLY the dialogue and suggestions.
 
 === FORMAT ===
 You MUST structure your response EXACTLY like this using XML tags. Do not deviate. DO NOT include thoughts!
 
 <dialogue>
-[Your natural in-character Japanese reply with Kanji furigana brackets here. STRICTLY NO ENGLISH! NO THOUGHTS!]
+[Your natural Japanese reply with Kanji furigana brackets here. STRICTLY NO ENGLISH! NO THOUGHTS!]
 </dialogue>
 
 <suggestions>
@@ -184,7 +129,10 @@ Assistant:
 <suggestions>
 [
   {"text": "はい、元気です", "romaji": "Hai, genki desu", "english": "Yes, I am well", "isCorrect": true, "explanation": "Standard natural reply"},
-  {"text": "こんにちは", "romaji": "Konnichiwa", "english": "Hello", "isCorrect": false, "explanation": "A bit repetitive"}
+  {"text": "こんにちは", "romaji": "Konnichiwa", "english": "Hello", "isCorrect": false, "explanation": "A bit repetitive"},
+  {"text": "さようなら", "romaji": "Sayounara", "english": "Goodbye", "isCorrect": false, "explanation": "Inappropriate for a greeting"},
+  {"text": "りんご", "romaji": "Ringo", "english": "Apple", "isCorrect": false, "explanation": "Irrelevant random noun"},
+  {"text": "おやすみなさい", "romaji": "Oyasuminasai", "english": "Good night", "isCorrect": false, "explanation": "Wrong time of day for this greeting"}
 ]
 </suggestions>`;
 }
