@@ -3,11 +3,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { X, Sparkles, Check, ArrowRight, HelpCircle } from 'lucide-react';
-import JapaneseText from '../chat/JapaneseText.jsx';
+import JapaneseText, { DictionaryPopover } from '../chat/JapaneseText.jsx';
 import ExitConfirmationModal from '../shell/ExitConfirmationModal.jsx';
 import { cn } from '../../lib/utils.js';
 import { useAuth } from '../../lib/auth/AuthContext.jsx';
-import { getLessonQuestions, incrementModuleProgress, recordUserActivityStreak } from '../../lib/firebase/firestore.js';
+import { getLessonQuestions, incrementModuleProgress, recordUserActivityStreak, getDictionaryWords, saveDictionaryWord } from '../../lib/firebase/firestore.js';
 import confetti from 'canvas-confetti';
 
 const FALLBACK_QUIZ = [
@@ -73,6 +73,8 @@ export default function VocabularyQuiz({ briefingId, briefingTitle = 'Basic Verb
   const [xpEarned, setXpEarned] = useState(0);
   const [masteryProgress, setMasteryProgress] = useState(0);
   const [isExitModalOpen, setIsExitModalOpen] = useState(false);
+  const [activeDictionaryEntry, setActiveDictionaryEntry] = useState(null);
+  const [savedDictionaryTerms, setSavedDictionaryTerms] = useState(() => new Set());
 
   useEffect(() => {
     let isMounted = true;
@@ -111,6 +113,37 @@ export default function VocabularyQuiz({ briefingId, briefingTitle = 'Basic Verb
     loadQuestions();
     return () => { isMounted = false; };
   }, [briefingId, prepQuiz]);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    let isMounted = true;
+    getDictionaryWords(user.uid)
+      .then((words) => {
+        if (isMounted && words && Array.isArray(words)) {
+          setSavedDictionaryTerms(new Set(words.map((w) => w.term)));
+        }
+      })
+      .catch((err) => console.error('Failed to load dictionary words:', err));
+    return () => { isMounted = false; };
+  }, [user?.uid]);
+
+  useEffect(() => {
+    function handleShowDictionary(event) {
+      const incoming = event.detail;
+      setActiveDictionaryEntry((current) => (current?.term === incoming?.term ? null : incoming));
+    }
+
+    window.addEventListener('kaiwa:show-dictionary', handleShowDictionary);
+    return () => {
+      window.removeEventListener('kaiwa:show-dictionary', handleShowDictionary);
+    };
+  }, []);
+
+  const handleSaveToDictionary = useCallback((wordData) => {
+    if (!user?.uid || !wordData?.term) return;
+    saveDictionaryWord(user.uid, { ...wordData, source: 'basic-verbs' }).catch(console.error);
+    setSavedDictionaryTerms((prev) => new Set(prev).add(wordData.term));
+  }, [user?.uid]);
 
   const currentQuestion = quizQuestions[currentIndex];
 
@@ -372,7 +405,7 @@ export default function VocabularyQuiz({ briefingId, briefingTitle = 'Basic Verb
             {isSubmitted ? (
               currentQuestion.sentence.split('___').map((part, i, arr) => (
                 <span key={i} className="inline-flex items-baseline">
-                  <JapaneseText text={part} enableDictionary={false} />
+                  <JapaneseText text={part} enableDictionary={true} />
                   {i < arr.length - 1 && (
                     <span className={cn(
                       "inline-flex items-baseline px-1 font-black",
@@ -382,14 +415,14 @@ export default function VocabularyQuiz({ briefingId, briefingTitle = 'Basic Verb
                         text={isCorrect 
                           ? options[currentQuestion.correctIndex] 
                           : options[selectedAnswer]} 
-                        enableDictionary={false} 
+                        enableDictionary={true} 
                       />
                     </span>
                   )}
                 </span>
               ))
             ) : (
-              <JapaneseText text={currentQuestion.sentence} enableDictionary={false} />
+              <JapaneseText text={currentQuestion.sentence} enableDictionary={true} />
             )}
           </div>
         </div>
@@ -518,6 +551,21 @@ export default function VocabularyQuiz({ briefingId, briefingTitle = 'Basic Verb
         onConfirm={handleConfirmExit}
         onCancel={handleCancelExit}
       />
+      {activeDictionaryEntry && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-[1px]"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setActiveDictionaryEntry(null);
+          }}
+        >
+          <DictionaryPopover
+            entry={activeDictionaryEntry}
+            onClose={() => setActiveDictionaryEntry(null)}
+            onSave={handleSaveToDictionary}
+            isSaved={savedDictionaryTerms.has(activeDictionaryEntry?.term)}
+          />
+        </div>
+      )}
     </div>
   );
 }

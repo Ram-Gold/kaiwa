@@ -21,11 +21,14 @@ vi.mock('../../lib/auth/AuthContext.jsx', () => ({
   }),
 }));
 
+const mockSaveDictionaryWord = vi.fn().mockResolvedValue(true);
+const mockGetDictionaryWords = vi.fn().mockResolvedValue([]);
+
 vi.mock('../../lib/firebase/firestore.js', () => ({
   getLessonQuestions: vi.fn().mockResolvedValue([
     {
       id: 'q1',
-      sentence: '林檎を___。',
+      sentence: '<ruby>林檎<rt>りんご</rt></ruby>を___。',
       options: ['食べます', '行きます', '見ます', '飲みます'],
       correctIndex: 0,
       meaning: 'I eat apples.',
@@ -33,6 +36,18 @@ vi.mock('../../lib/firebase/firestore.js', () => ({
   ]),
   incrementModuleProgress: vi.fn().mockResolvedValue(20),
   recordUserActivityStreak: vi.fn().mockResolvedValue(true),
+  getDictionaryWords: (...args) => mockGetDictionaryWords(...args),
+  saveDictionaryWord: (...args) => mockSaveDictionaryWord(...args),
+}));
+
+vi.mock('../../lib/jlptVocabApi.js', () => ({
+  fetchJlptWordDefinition: vi.fn().mockResolvedValue({
+    term: '林檎',
+    reading: 'りんご',
+    meanings: ['apple'],
+    jlpt: 'N5',
+    examples: [],
+  }),
 }));
 
 vi.mock('canvas-confetti', () => ({
@@ -42,6 +57,8 @@ vi.mock('canvas-confetti', () => ({
 afterEach(() => {
   cleanup();
   mockPush.mockClear();
+  mockSaveDictionaryWord.mockClear();
+  mockGetDictionaryWords.mockClear();
 });
 
 import VocabularyQuiz from './VocabularyQuiz.jsx';
@@ -51,7 +68,7 @@ describe('VocabularyQuiz', () => {
     render(<VocabularyQuiz briefingId="basic-verbs" briefingTitle="Basic Verbs" />);
 
     await waitFor(() => {
-      expect(screen.getByText(/林檎を___。/i)).toBeInTheDocument();
+      expect(screen.getByText(/林檎/i)).toBeInTheDocument();
     });
 
     const optionNumber1 = screen.getByText('1').closest('button');
@@ -101,5 +118,35 @@ describe('VocabularyQuiz', () => {
 
     // Should navigate home
     expect(mockPush).toHaveBeenCalledWith('/');
+  });
+
+  it('opens DictionaryPopover when clicking a word in the sentence and allows bookmarking', async () => {
+    render(<VocabularyQuiz briefingId="basic-verbs" briefingTitle="Basic Verbs" />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/林檎/i)).toBeInTheDocument();
+    });
+
+    // Click the ruby word
+    const rubyWord = screen.getByTitle(/reading: りんご/i);
+    await userEvent.click(rubyWord);
+
+    // Verify DictionaryPopover opens with JLPT dictionary data
+    await waitFor(() => {
+      expect(screen.getByText(/jlpt dictionary/i)).toBeInTheDocument();
+      expect(screen.getByText(/apple/i)).toBeInTheDocument();
+    });
+
+    // Click save/bookmark button
+    const bookmarkBtn = screen.getByRole('button', { name: /save word to dictionary/i });
+    await userEvent.click(bookmarkBtn);
+
+    expect(mockSaveDictionaryWord).toHaveBeenCalledWith('test-user-123', expect.objectContaining({
+      term: '林檎',
+      source: 'basic-verbs',
+    }));
+
+    // Saved state
+    expect(screen.getByRole('button', { name: /word saved to dictionary/i })).toBeInTheDocument();
   });
 });
