@@ -8,6 +8,7 @@ import { translateJapaneseToEnglish } from '../../lib/translation.js';
 import { parsePartialJsonStream, isStreamingEnabled } from '../../lib/ai/config.js';
 import { formatDuration } from '../../lib/ai/metrics.js';
 import { cn } from '../../lib/utils.js';
+import { extractCleanJapaneseText } from '../../lib/japaneseText.js';
 
 function Avatar({ label = '会', tone = 'default' }) {
   const toneClasses = {
@@ -246,7 +247,7 @@ export default function StreamingChatBubble({
               <button
                 key={idx}
                 type="button"
-                onClick={() => onPickSuggestion && onPickSuggestion(opt.text)}
+                onClick={() => onPickSuggestion && onPickSuggestion(extractCleanJapaneseText(opt.text))}
                 className="brutal-border w-full text-left bg-white p-2.5 shadow-nav transition-all hover:bg-mustard active:scale-[0.99] flex flex-col gap-0.5"
               >
                 <span className="font-jp text-sm font-bold text-ink">

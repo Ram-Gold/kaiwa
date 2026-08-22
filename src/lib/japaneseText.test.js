@@ -62,6 +62,15 @@ describe('Japanese Text Tokenizer & Furigana Parser', () => {
 
     const rubyInput = 'こんにちは！<ruby>最近<rt>さいきん</rt></ruby>の<ruby>趣味<rt>しゅみ</rt></ruby>は何ですか？';
     expect(extractCleanJapaneseText(rubyInput)).toBe('こんにちは！最近の趣味は何ですか？');
+
+    const roleplayInput1 = '映画[えいが]を友達[ともだち]と見[み]ました';
+    expect(extractCleanJapaneseText(roleplayInput1)).toBe('映画を友達と見ました');
+
+    const roleplayInput2 = '友達[ともだち]と映画[えいが]';
+    expect(extractCleanJapaneseText(roleplayInput2)).toBe('友達と映画');
+
+    const fullwidthInput = '映画［えいが］を友達（ともだち）と見【み】ました';
+    expect(extractCleanJapaneseText(fullwidthInput)).toBe('映画を友達と見ました');
   });
 
   it('converts furigana-annotated text to accurate romaji', () => {

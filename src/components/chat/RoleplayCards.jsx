@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { cn } from '../../lib/utils';
 import { IoCheckmarkCircleSharp, IoCloseCircleSharp } from 'react-icons/io5';
 import JapaneseText from './JapaneseText.jsx';
+import { extractCleanJapaneseText } from '../../lib/japaneseText.js';
 
 export default function RoleplayCards({ disabled, onPickSuggestion, suggestions, onMistake }) {
   const [selectedIdx, setSelectedIdx] = useState(null);
@@ -17,7 +18,8 @@ export default function RoleplayCards({ disabled, onPickSuggestion, suggestions,
   const handlePick = (suggestion, index) => {
     setSelectedIdx(index);
     
-    const textToSubmit = isStringArray ? suggestion : suggestion.text;
+    const rawText = isStringArray ? suggestion : suggestion.text;
+    const textToSubmit = extractCleanJapaneseText(rawText);
     
     if (!isStringArray && !suggestion.isCorrect) {
       // Record the mistake before submitting

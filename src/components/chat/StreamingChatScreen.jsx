@@ -18,6 +18,7 @@ import GlobalSettingsModal from '../shell/GlobalSettingsModal.jsx';
 import { isStreamingEnabled, setStreamingEnabled } from '../../lib/ai/config.js';
 import { PROVIDER_STORAGE_KEY, API_KEYS_STORAGE_PREFIX, OPENROUTER_MODEL_STORAGE_KEY } from '../dashboard/AiProviderSettingsCard.jsx';
 import { cn } from '../../lib/utils.js';
+import { extractCleanJapaneseText } from '../../lib/japaneseText.js';
 
 export default function StreamingChatScreen({
   initialPersonaId = 'sensei',
@@ -64,9 +65,9 @@ export default function StreamingChatScreen({
 
   const handleSend = async (e) => {
     if (e) e.preventDefault();
-    if (!inputVal.trim() || isStreaming || isThinking) return;
+    const textToSend = extractCleanJapaneseText(inputVal).trim();
+    if (!textToSend || isStreaming || isThinking) return;
 
-    const textToSend = inputVal.trim();
     setInputVal('');
     await sendMessage(textToSend);
   };
@@ -79,7 +80,7 @@ export default function StreamingChatScreen({
   };
 
   const handlePickSuggestion = (suggestionText) => {
-    setInputVal(suggestionText);
+    setInputVal(extractCleanJapaneseText(suggestionText));
   };
 
   return (

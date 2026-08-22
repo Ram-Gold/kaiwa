@@ -52,6 +52,11 @@ export default async function BriefingPage({ params }) {
     notFound();
   }
 
+  const isRoleplay = briefing.kind?.toLowerCase() === 'roleplay';
+  const targetHref = isRoleplay
+    ? (briefing.startHref || `/chat/sensei?briefing=${briefingId}&type=roleplay`)
+    : (briefing.prepQuiz ? `/prep/${briefingId}` : (briefing.startHref || `/prep/${briefingId}`));
+
   return (
     <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-6xl items-center py-6 lg:py-10">
       <div className="grid w-full gap-6 xl:grid-cols-[minmax(0,1fr)_20rem] xl:items-center">
@@ -84,7 +89,7 @@ export default async function BriefingPage({ params }) {
           </div>
 
           <div className="absolute bottom-6 right-6 flex flex-wrap justify-end gap-3">
-            <Button as={Link} href={briefing.startHref} size="lg">
+            <Button as={Link} href={targetHref} size="lg">
               わかります →
             </Button>
           </div>

@@ -67,6 +67,33 @@ describe('pronunciation token matching', () => {
 
     expect(isCompleteRecitation(card, 'ありがとうござい')).toBe(true);
   });
+
+  it('builds kana and romaji tokens ignoring furigana bracket artifacts in suggestion phrases', () => {
+    const tokens = buildPronunciationTokens('映画[えいが]を友達[ともだち]と見[み]ました');
+    expect(tokens.map((token) => `${token.kana}-${token.romaji}`)).toEqual([
+      'え-e',
+      'い-i',
+      'が-ga',
+      'を-o',
+      'と-to',
+      'も-mo',
+      'だ-da',
+      'ち-chi',
+      'と-to',
+      'み-mi',
+      'ま-ma',
+      'し-shi',
+      'た-ta',
+    ]);
+  });
+
+  it('matches spoken transcript against either kana or clean Japanese for bracketed phrases', () => {
+    const phrase = '映画[えいが]を友達[ともだち]と見[み]ました';
+    const card = { phrase, tokens: buildPronunciationTokens(phrase) };
+
+    expect(isCompleteRecitation(card, 'えいがをともだちとみました')).toBe(true);
+    expect(isCompleteRecitation(card, '映画を友達と見ました')).toBe(true);
+  });
 });
 
 describe('shared element card flight', () => {
@@ -148,7 +175,8 @@ describe('ConversationStage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /practice phrase 何番線ですか/i }));
 
-    expect(screen.getByTestId('recitation-card-text')).toHaveTextContent('何番線ですか');
+    expect(screen.getByTestId('recitation-card-text')).toHaveTextContent('何');
+    expect(screen.getByTestId('recitation-card-text')).toHaveTextContent('番線ですか');
     expect(screen.getByRole('button', { name: /speak phrase 何番線ですか/i })).toBeInTheDocument();
   });
 
@@ -431,5 +459,34 @@ describe('ConversationStage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('turn-counter')).toHaveTextContent('1/10');
     });
+  });
+
+  it('renders ruby furigana on the centered card and inputs clean Japanese text into composer', async () => {
+    const furiganaBriefing = {
+      title: 'Movie Chat',
+      jpTitle: '映画の話',
+      kind: 'roleplay',
+      level: 'N5',
+      accent: 'mustard',
+      image: '/assets/bg_eki_homedoor_train_open.jpg',
+      prep: ['映画[えいが]を友達[ともだち]と見[み]ました'],
+    };
+
+    render(<ConversationStage briefing={furiganaBriefing} />);
+
+    // Click card to recite
+    const card = screen.getByRole('button', { name: /practice phrase 映画\[えいが\]を友達\[ともだち\]と見\[み\]ました/i });
+    await userEvent.click(card);
+
+    // Verify ruby elements are present for furigana on recitation card
+    const recitationCardText = screen.getByTestId('recitation-card-text');
+    const rubyElements = recitationCardText.querySelectorAll('ruby');
+    expect(rubyElements.length).toBeGreaterThanOrEqual(2);
+
+    // Skip/finish recitation
+    await userEvent.click(screen.getByRole('button', { name: /skip recitation for 映画\[えいが\]を友達\[ともだち\]と見\[み\]ました/i }));
+
+    // Verify composer receives clean Japanese text without furigana brackets
+    expect(screen.getByLabelText(/message text/i)).toHaveValue('映画を友達と見ました');
   });
 });

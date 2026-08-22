@@ -17,12 +17,16 @@ export function extractCleanJapaneseText(text) {
     .replace(/\[([\u4e00-\u9faf\u3400-\u4dbf\u3040-\u30ff]+)\]\([^\)]+\)/g, '$1')
     // Strip {kanji|furigana} -> kanji
     .replace(/\{([\u4e00-\u9faf\u3400-\u4dbf\u3040-\u30ff]+)\|[^\}]+\}/g, '$1')
-    // Strip kanji[furigana] -> kanji
-    .replace(/([\u4e00-\u9faf\u3400-\u4dbf]+)\[[\u3040-\u30ff]+\]/g, '$1')
-    // Strip kanji(furigana) -> kanji (when inside parentheses is kana only)
-    .replace(/([\u4e00-\u9faf\u3400-\u4dbf]+)\([\u3040-\u30ff]+\)/g, '$1')
-    // Strip kanji【furigana】 -> kanji
-    .replace(/([\u4e00-\u9faf\u3400-\u4dbf]+)【[\u3040-\u30ff]+】/g, '$1');
+    // Strip kanji[furigana] or word[furigana] -> word
+    .replace(/([\u4e00-\u9faf\u3400-\u4dbf\u3040-\u30ff]+)\[[\u3040-\u30ff]+\]/g, '$1')
+    // Strip fullwidth square brackets: word［furigana］ -> word
+    .replace(/([\u4e00-\u9faf\u3400-\u4dbf\u3040-\u30ff]+)［[\u3040-\u30ff]+］/g, '$1')
+    // Strip word(furigana) -> word (when inside parentheses is kana only)
+    .replace(/([\u4e00-\u9faf\u3400-\u4dbf\u3040-\u30ff]+)\([\u3040-\u30ff]+\)/g, '$1')
+    // Strip fullwidth parentheses: word（furigana） -> word
+    .replace(/([\u4e00-\u9faf\u3400-\u4dbf\u3040-\u30ff]+)（[\u3040-\u30ff]+）/g, '$1')
+    // Strip word【furigana】 -> word
+    .replace(/([\u4e00-\u9faf\u3400-\u4dbf\u3040-\u30ff]+)【[\u3040-\u30ff]+】/g, '$1');
 }
 
 /**
@@ -167,12 +171,12 @@ export function tokenizeJapaneseText(text, mode = 'japanese') {
       }
     }
 
-    // c) 漢字[かんじ], 漢字(かんじ), 漢字【かんじ】
+    // c) 漢字[かんじ], 漢字［かんじ］, 漢字(かんじ), 漢字（かんじ）, 漢字【かんじ】
     if (KANJI_PATTERN.test(source[index])) {
-      const kanjiBracketMatch = source.slice(index).match(/^([\u4e00-\u9faf\u3400-\u4dbf]+)(?:\[([\u3040-\u30ff]+)\]|\(([\u3040-\u30ff]+)\)|【([\u3040-\u30ff]+)】)/);
+      const kanjiBracketMatch = source.slice(index).match(/^([\u4e00-\u9faf\u3400-\u4dbf]+)(?:\[([\u3040-\u30ff]+)\]|［([\u3040-\u30ff]+)］|\(([\u3040-\u30ff]+)\)|（([\u3040-\u30ff]+)）|【([\u3040-\u30ff]+)】)/);
       if (kanjiBracketMatch) {
         const kanji = kanjiBracketMatch[1];
-        const furigana = kanjiBracketMatch[2] || kanjiBracketMatch[3] || kanjiBracketMatch[4];
+        const furigana = kanjiBracketMatch[2] || kanjiBracketMatch[3] || kanjiBracketMatch[4] || kanjiBracketMatch[5] || kanjiBracketMatch[6];
         const dictEntry = sortedDictionary.find((e) => e.term === kanji);
         const splitTokens = splitRubyForWord(kanji, furigana, dictEntry || { term: kanji, reading: furigana, script: 'kanji' });
         tokens.push(...splitTokens);

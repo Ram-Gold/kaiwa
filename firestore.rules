@@ -44,12 +44,22 @@ service cloud.firestore {
     match /lessons/{lessonId} {
       allow read: if true;
       allow write: if isAdmin();
+
+      match /questions/{questionId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
     }
 
     // Master Roleplays Catalog — public read, admin-only write
     match /roleplays/{roleplayId} {
       allow read: if true;
       allow write: if isAdmin();
+
+      match /questions/{questionId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
     }
 
     // App Settings (e.g., categories) — public read, admin-only write

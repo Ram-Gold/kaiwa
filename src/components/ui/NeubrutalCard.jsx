@@ -14,7 +14,7 @@ export default function NeubrutalCard({
   title = 'Basic Verbs',
   japaneseText = '行きます',
   romajiOrMeaning = 'To go / Ikimasu',
-  progress = 80,
+  progress = 0,
   showProgress = true,
   footerContent,
   showHint = false,
@@ -25,6 +25,7 @@ export default function NeubrutalCard({
 }) {
   const CardWrapper = href ? Link : 'div';
   const wrapperProps = href ? { href } : { role: onClick ? 'button' : undefined, tabIndex: 0, onClick };
+  const completions = Math.min(Math.round((progress || 0) / 20), 5);
 
   return (
     <div className="w-full flex flex-col items-center">

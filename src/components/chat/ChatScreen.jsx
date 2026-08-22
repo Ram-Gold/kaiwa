@@ -8,6 +8,7 @@ import RoleplayCards from './RoleplayCards.jsx';
 import { DictionaryPopover } from './JapaneseText.jsx';
 import { useAuth } from '../../lib/auth/AuthContext';
 import { saveChatSession, saveDictionaryWord } from '../../lib/firebase/firestore';
+import { extractCleanJapaneseText } from '../../lib/japaneseText.js';
 
 let messageCounter = 0;
 
@@ -125,7 +126,7 @@ export default function ChatScreen({ provider: initialProvider, apiKey: initialA
   }, [messages, suggestions]);
 
   async function submitMessage(messageText) {
-    const cleanMessage = messageText.trim();
+    const cleanMessage = extractCleanJapaneseText(messageText).trim();
     if (!cleanMessage || isLoading) {
       return;
     }

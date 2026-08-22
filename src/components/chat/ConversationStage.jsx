@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { IoBatteryFullSharp, IoBulbSharp, IoCellularSharp, IoCloseSharp, IoMicSharp, IoSendSharp, IoWifiSharp, IoVolumeHighSharp, IoLanguageSharp, IoGlobeOutline, IoSparklesSharp } from 'react-icons/io5';
 
@@ -8,7 +8,7 @@ import { cn } from '../../lib/utils.js';
 import JapaneseText, { DictionaryPopover } from './JapaneseText.jsx';
 import { speakJapanese } from '../../lib/speech.js';
 import { translateJapaneseToEnglish } from '../../lib/translation.js';
-import { toRomajiText } from '../../lib/japaneseText.js';
+import { toRomajiText, extractCleanJapaneseText, tokenizeJapaneseText } from '../../lib/japaneseText.js';
 import { sendMessage, evaluateSession, evaluateSessionFallback, parseModelReply } from '../../lib/ai.js';
 import { loadStoredProvider, loadStoredApiKeys, loadStoredOpenRouterModel, loadStoredGeminiModel, loadStoredMistralModel } from '../dashboard/AiProviderSettingsCard.jsx';
 import { useAuth } from '../../lib/auth/AuthContext';
@@ -369,7 +369,7 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
   }
 
   async function handleMessageSubmit(text) {
-    const cleanText = text.trim();
+    const cleanText = extractCleanJapaneseText(text).trim();
     if (!cleanText || isSending || isLoading || isCompleted) return;
 
     setIsSending(true);
@@ -701,7 +701,7 @@ export default function ConversationStage({ personaId, briefing = FALLBACK_BRIEF
   function completeRecitation(card, { awardedExp = false } = {}) {
     recognitionRef.current?.stop?.();
     recognitionRef.current = null;
-    setMessage(card.phrase);
+    setMessage(extractCleanJapaneseText(card.phrase));
     setSelectedCardId(null);
     setRecitationOverlayVisible(false);
     window.setTimeout(() => setRecitationCard(null), 220);
@@ -1426,85 +1426,132 @@ function RecitationCardOverlay({ card, flightOrigin, onSkip, spokenTranscript, s
       aria-live="polite"
       aria-hidden={!isVisible}
     >
-      <button
-        type="button"
-        aria-label={`Skip recitation for ${card.phrase}`}
-        data-state="reciting"
-        data-returning="false"
-        onClick={onSkip}
-        ref={cardRef}
-        style={isReturningToHand ? undefined : flightStyle ?? undefined}
-        className={cn(
-          'pointer-events-auto relative h-72 w-56 origin-center transform-gpu brutal-border p-5 text-left shadow-shadow transition-[transform,box-shadow,opacity,filter] duration-200 ease-out will-change-transform hover:-translate-y-2 hover:scale-110 active:scale-105',
-          isReturningToHand
-            ? 'pointer-events-none opacity-0'
-            : flightStyle
-              ? 'animate-[shared-card-flight_420ms_cubic-bezier(.2,1,.2,1)_both]'
-              : 'animate-[recitation-pop_360ms_cubic-bezier(.2,1.15,.2,1)_both]',
-          isVisible && !isReturningToHand ? 'opacity-100 scale-100' : 'opacity-0 scale-95',
-          tone,
-        )}
+      <div className="relative pointer-events-auto flex items-start">
+        <button
+          type="button"
+          aria-label={`Skip recitation for ${card.phrase}`}
+          data-state="reciting"
+          data-returning="false"
+          onClick={onSkip}
+          ref={cardRef}
+          style={isReturningToHand ? undefined : flightStyle ?? undefined}
+          className={cn(
+            'relative h-72 w-52 origin-center transform-gpu brutal-border p-5 text-left shadow-shadow transition-[transform,box-shadow,opacity,filter] duration-200 ease-out will-change-transform hover:-translate-y-1 hover:scale-105 active:scale-95 flex flex-col justify-between',
+            isReturningToHand
+              ? 'pointer-events-none opacity-0'
+              : flightStyle
+                ? 'animate-[shared-card-flight_420ms_cubic-bezier(.2,1,.2,1)_both]'
+                : 'animate-[recitation-pop_360ms_cubic-bezier(.2,1.15,.2,1)_both]',
+            isVisible && !isReturningToHand ? 'opacity-100 scale-100' : 'opacity-0 scale-95',
+            tone,
+          )}
+        >
+          <span data-testid="recitation-card-text" className="flex h-full flex-col items-start justify-start text-left font-jp text-2xl font-black leading-8">
+            <PronunciationTokens phrase={card.phrase} matchedTokenCount={matchedTokenCount} />
+            {showRomaji ? (
+              <span data-testid="recitation-romaji" className="mt-2 font-mono text-xs font-black italic leading-4 text-current/75">
+                {romajiText}
+              </span>
+            ) : null}
+          </span>
+          <span className={cn('absolute bottom-3 right-3 h-6 w-6 rounded-full border-2 border-ink shadow-nav', theme.glow)} aria-hidden="true" />
+        </button>
 
-      >
-        <span data-testid="recitation-card-text" className="flex h-full flex-col items-start justify-start text-left font-jp text-3xl font-black leading-9">
-          <PronunciationTokens phrase={card.phrase} matchedTokenCount={matchedTokenCount} />
-          {showRomaji ? (
-            <span data-testid="recitation-romaji" className="mt-2 font-mono text-xs font-black italic leading-4 text-current/75">
-              {romajiText}
-            </span>
-          ) : null}
-        </span>
-        <span className={cn('absolute bottom-3 right-3 h-6 w-6 brutal-border shadow-nav', theme.glow)} aria-hidden="true" />
-      </button>
-      <div className="pointer-events-auto absolute left-[calc(50%+7.5rem)] top-9 z-50 flex flex-col gap-2">
-        <button
-          type="button"
-          aria-label={`Speak phrase ${card.phrase}`}
-          title="Speak audio"
-          onClick={() => speakJapanese(card.phrase)}
-          className="brutal-border grid h-10 w-10 place-items-center rounded-base bg-paper text-ink shadow-shadow transition-transform hover:-translate-y-0.5 active:scale-95"
-        >
-          <IoVolumeHighSharp className="text-xl text-shu" aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          aria-label={`${showRomaji ? 'Hide' : 'Show'} romaji for ${card.phrase}`}
-          title="Toggle Romaji"
-          onClick={() => setShowRomaji((current) => !current)}
-          className="brutal-border grid h-10 w-10 place-items-center rounded-base bg-mustard text-ink shadow-shadow transition-transform hover:-translate-y-0.5 active:scale-95"
-        >
-          <IoLanguageSharp className="text-lg" aria-hidden="true" />
-        </button>
+        {/* Side buttons cleanly pinned right beside card */}
+        <div className="absolute left-[calc(100%+0.5rem)] top-2 z-50 flex flex-col gap-2">
+          <button
+            type="button"
+            aria-label={`Speak phrase ${card.phrase}`}
+            title="Speak audio"
+            onClick={() => speakJapanese(card.phrase)}
+            className="brutal-border grid h-10 w-10 place-items-center rounded-base bg-paper text-ink shadow-shadow transition-transform hover:-translate-y-0.5 active:scale-95"
+          >
+            <IoVolumeHighSharp className="text-xl text-shu" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            aria-label={`${showRomaji ? 'Hide' : 'Show'} romaji for ${card.phrase}`}
+            title="Toggle Romaji"
+            onClick={() => setShowRomaji((current) => !current)}
+            className="brutal-border grid h-10 w-10 place-items-center rounded-base bg-mustard text-ink shadow-shadow transition-transform hover:-translate-y-0.5 active:scale-95"
+          >
+            <IoLanguageSharp className="text-lg" aria-hidden="true" />
+          </button>
+        </div>
       </div>
-      <p className="mt-5 w-72 max-w-[80vw] brutal-border bg-paper px-3 py-2 text-center font-mono text-[10px] font-black uppercase tracking-[0.1em] text-ink shadow-nav">
+
+      <p className="mt-4 w-72 max-w-[85vw] brutal-border bg-paper px-3 py-2 text-center font-mono text-[10px] font-black uppercase tracking-[0.1em] text-ink shadow-nav">
         <span className="sr-only">Recite the card. </span>
         {statusCopy[status] ?? statusCopy.idle}
       </p>
-
     </div>
   );
 }
 
 function PronunciationTokens({ matchedTokenCount, phrase }) {
-  const displayUnits = Array.from(phrase);
+  const tokens = tokenizeJapaneseText(phrase, 'japanese');
+  let runningIndex = 0;
 
   return (
-    <span className="inline flex-wrap">
-      {displayUnits.map((unit, index) => {
-        const isSpoken = index < matchedTokenCount;
+    <span className="inline align-baseline">
+      {tokens.map((token, tokenIdx) => {
+        if (token.type === 'ruby') {
+          const isSpoken = runningIndex < matchedTokenCount;
+          const currentIndex = runningIndex;
+          runningIndex += 1;
 
+          return (
+            <ruby
+              key={`ruby-${token.kanji}-${tokenIdx}`}
+              data-spoken={isSpoken ? 'true' : 'false'}
+              data-testid={`recitation-token-${currentIndex}`}
+              className="kaiwa-ruby"
+            >
+              <span className={cn('kaiwa-rb font-bold text-inherit transition-colors', isSpoken && 'bg-mustard text-ink rounded-xs px-0.5')}>
+                {token.kanji}
+              </span>
+              <rt className="kaiwa-rt font-normal text-xs">{token.furigana}</rt>
+            </ruby>
+          );
+        }
+
+        if (token.type === 'dictionary') {
+          const isSpoken = runningIndex < matchedTokenCount;
+          const currentIndex = runningIndex;
+          runningIndex += 1;
+
+          return (
+            <span
+              key={`dict-${token.text}-${tokenIdx}`}
+              data-spoken={isSpoken ? 'true' : 'false'}
+              data-testid={`recitation-token-${currentIndex}`}
+              className={cn('inline transition-colors', isSpoken && 'bg-mustard text-ink rounded-xs px-0.5')}
+            >
+              {token.text}
+            </span>
+          );
+        }
+
+        const chars = Array.from(token.text);
         return (
-          <span
-            key={`${unit}-${index}`}
-            data-spoken={isSpoken ? 'true' : 'false'}
-            data-testid={`recitation-token-${index}`}
-            className={cn(
-              'inline rounded-sm px-0.5 transition-colors',
-              isSpoken && 'bg-mustard text-ink ring-2 ring-ink',
-            )}
-          >
-            {unit}
-          </span>
+          <React.Fragment key={`text-group-${tokenIdx}`}>
+            {chars.map((char, charIdx) => {
+              const isSpoken = runningIndex < matchedTokenCount;
+              const currentIndex = runningIndex;
+              runningIndex += 1;
+
+              return (
+                <span
+                  key={`text-${char}-${tokenIdx}-${charIdx}`}
+                  data-spoken={isSpoken ? 'true' : 'false'}
+                  data-testid={`recitation-token-${currentIndex}`}
+                  className={cn('inline transition-colors', isSpoken && 'bg-mustard text-ink rounded-xs px-0.5')}
+                >
+                  {char}
+                </span>
+              );
+            })}
+          </React.Fragment>
         );
       })}
     </span>
@@ -1675,7 +1722,7 @@ function PhraseCard({ card, index, isSelected, isReturnDestination, returnPhase,
         disabled={isReturnDestination && returnPhase === 'measuring'}
         style={deckReturnStyle ?? undefined}
         className={cn(
-          'pointer-events-auto h-64 w-48 origin-bottom transform-gpu brutal-border p-5 text-left shadow-nav transition-[transform,box-shadow,opacity,filter] duration-200 ease-out will-change-transform',
+          'pointer-events-auto h-72 w-52 origin-bottom transform-gpu brutal-border p-5 text-left shadow-nav transition-[transform,box-shadow,opacity,filter] duration-200 ease-out will-change-transform',
           interactiveCardMotion,
           isSelected && 'z-30 -translate-y-36 rotate-0 scale-[1.3] shadow-shadow duration-200',
           isReturnDestination && returnPhase === 'measuring' && 'opacity-0 pointer-events-none',
@@ -1688,7 +1735,7 @@ function PhraseCard({ card, index, isSelected, isReturnDestination, returnPhase,
           <span data-testid={`phrase-card-text-${index}`} className="flex h-full items-start justify-start text-left font-jp text-2xl font-black leading-8">
             <JapaneseText text={card.phrase} enableDictionary={false} />
           </span>
-          <span className={cn('absolute bottom-3 right-3 h-6 w-6 brutal-border shadow-nav', theme.glow)} aria-hidden="true" />
+          <span className={cn('absolute bottom-3 right-3 h-6 w-6 rounded-full border-2 border-ink shadow-nav', theme.glow)} aria-hidden="true" />
         </span>
       </button>
     </div>
@@ -1742,19 +1789,24 @@ function getCardTone(index) {
 
 export function isCompleteRecitation(card, transcript) {
   const tokens = getCardTokens(card);
-  const expected = normalizeSpokenJapanese(tokens.map((token) => token.kana).join(''));
+  const expectedKana = normalizeSpokenJapanese(tokens.map((token) => token.kana).join(''));
+  const cleanJapanese = normalizeSpokenJapanese(card?.phrase ?? '');
   const spoken = normalizeSpokenJapanese(transcript);
 
-  if (!expected || !spoken) {
+  if (!spoken) {
     return false;
   }
 
-  if (spoken.includes(expected)) {
+  if (expectedKana && spoken.includes(expectedKana)) {
+    return true;
+  }
+
+  if (cleanJapanese && spoken.includes(cleanJapanese)) {
     return true;
   }
 
   const matchedTokenCount = getMatchedTokenCount(tokens, transcript);
-  return matchedTokenCount / tokens.length >= 0.8;
+  return tokens.length > 0 && matchedTokenCount / tokens.length >= 0.8;
 }
 
 export function getSharedElementOffset(sourceRect, targetRect) {
@@ -1809,6 +1861,43 @@ export function buildPronunciationTokens(phrase) {
     return override;
   }
 
+  const parsedTokens = tokenizeJapaneseText(phrase, 'japanese');
+  const result = [];
+
+  for (const token of parsedTokens) {
+    if (token.type === 'ruby') {
+      const kanaChars = Array.from(katakanaToHiragana(token.furigana || ''));
+      for (const kana of kanaChars) {
+        result.push({
+          kana,
+          romaji: KANA_ROMAJI[kana] ?? toRomajiText(kana) ?? kana,
+        });
+      }
+    } else if (token.type === 'dictionary') {
+      const reading = token.entry?.reading ? token.entry.reading.split('/')[0].trim() : token.text;
+      const kanaChars = Array.from(normalizeSpokenJapanese(reading));
+      for (const kana of kanaChars) {
+        result.push({
+          kana,
+          romaji: KANA_ROMAJI[kana] ?? toRomajiText(kana) ?? kana,
+        });
+      }
+    } else {
+      const cleanText = normalizeSpokenJapanese(token.text);
+      const chars = Array.from(cleanText);
+      for (const kana of chars) {
+        result.push({
+          kana,
+          romaji: KANA_ROMAJI[kana] ?? toRomajiText(kana) ?? kana,
+        });
+      }
+    }
+  }
+
+  if (result.length > 0) {
+    return result;
+  }
+
   const normalizedPhrase = normalizeSpokenJapanese(phrase);
   return Array.from(normalizedPhrase).map((kana) => ({
     kana,
@@ -1817,9 +1906,10 @@ export function buildPronunciationTokens(phrase) {
 }
 
 function normalizeSpokenJapanese(value) {
+  const clean = extractCleanJapaneseText(value);
   const normalized = SPOKEN_READING_NORMALIZATIONS.reduce(
     (current, [term, reading]) => current.replaceAll(term, reading),
-    String(value || '').normalize('NFKC'),
+    String(clean || '').normalize('NFKC'),
   );
 
   return katakanaToHiragana(normalized)

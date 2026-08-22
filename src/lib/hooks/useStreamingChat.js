@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { getPersonaById } from '../../prompts/personas.js';
 import { assembleSystemPrompt, getAIModelConfig, isStreamingEnabled } from '../ai/config.js';
 import { parseModelReply } from '../ai.js';
+import { extractCleanJapaneseText } from '../japaneseText.js';
 
 /**
  * Custom React Hook for Token-by-Token Streaming AI Conversation
@@ -94,7 +95,7 @@ export function useStreamingChat({
         ? {
             id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
             role: 'user',
-            content: userInput,
+            content: extractCleanJapaneseText(userInput).trim(),
             timestamp: Date.now(),
           }
         : null;

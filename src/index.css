@@ -482,7 +482,7 @@ ruby.kaiwa-ruby {
   font-family: inherit;
   font-size: inherit;
   line-height: inherit;
-  margin: 0 1px;
+  margin: 0;
 }
 
 ruby.kaiwa-ruby rt.kaiwa-rt {
@@ -521,4 +521,92 @@ ruby.kaiwa-ruby rt.kaiwa-rt {
 .animate-split-flap {
   animation: splitFlap 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
   will-change: transform, opacity;
+}
+
+/* ── HTML <meter> Tag Neubrutal Progress Bar ─────────── */
+meter.kaiwa-meter {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  width: 100%;
+  border-radius: 9999px;
+  border: 2px solid #1C1C1C;
+  background: #FAF7F0;
+  overflow: hidden;
+  box-shadow: 1px 1px 0px 0px #1C1C1C;
+}
+
+meter.kaiwa-meter::-webkit-meter-bar {
+  background: #FAF7F0;
+  border-radius: 9999px;
+  border: none;
+}
+
+meter.kaiwa-meter::-webkit-meter-optimum-value {
+  background: #4A7A63; /* moss for high progress */
+  border-radius: 9999px;
+  transition: width 0.4s ease-out;
+}
+
+meter.kaiwa-meter::-webkit-meter-suboptimum-value {
+  background: #F2C14E; /* mustard */
+  border-radius: 9999px;
+}
+
+meter.kaiwa-meter::-webkit-meter-even-less-good-value {
+  background: #F2C14E; /* mustard for starting progress */
+  border-radius: 9999px;
+}
+
+meter.kaiwa-meter::-moz-meter-bar {
+  background: #F2C14E;
+  border-radius: 9999px;
+}
+
+meter.kaiwa-meter.meter-moss::-webkit-meter-optimum-value,
+meter.kaiwa-meter.meter-moss::-webkit-meter-suboptimum-value,
+meter.kaiwa-meter.meter-moss::-webkit-meter-even-less-good-value,
+meter.kaiwa-meter.meter-moss::-moz-meter-bar {
+  background: #4A7A63;
+}
+
+meter.kaiwa-meter.meter-mustard::-webkit-meter-optimum-value,
+meter.kaiwa-meter.meter-mustard::-webkit-meter-suboptimum-value,
+meter.kaiwa-meter.meter-mustard::-webkit-meter-even-less-good-value,
+meter.kaiwa-meter.meter-mustard::-moz-meter-bar {
+  background: #F2C14E;
+}
+
+/* ── Screenshot-Matched Neubrutal Progress Meter ─────── */
+meter.nb-progress-meter {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 0.875rem;
+  border-radius: 9999px;
+  border: 2px solid #000000;
+  background: #F1F5F9;
+  padding: 1.5px;
+  overflow: hidden;
+  display: block;
+}
+
+meter.nb-progress-meter::-webkit-meter-bar {
+  background: #F1F5F9;
+  border-radius: 9999px;
+  border: none;
+}
+
+meter.nb-progress-meter::-webkit-meter-optimum-value,
+meter.nb-progress-meter::-webkit-meter-suboptimum-value,
+meter.nb-progress-meter::-webkit-meter-even-less-good-value {
+  background: #000000;
+  border-radius: 9999px;
+  transition: width 0.4s ease-out;
+}
+
+meter.nb-progress-meter::-moz-meter-bar {
+  background: #000000;
+  border-radius: 9999px;
 }

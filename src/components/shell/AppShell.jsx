@@ -16,12 +16,13 @@ import { cn } from '../../lib/utils.js';
 
 export default function AppShell({ children }) {
   const pathname = usePathname();
+  const isPrep = pathname === '/prep' || pathname.startsWith('/prep/');
   const isBriefing = pathname === '/briefing' || pathname.startsWith('/briefing/');
   const isChat = pathname === '/chat' || pathname.startsWith('/chat/');
   const isGrading = pathname === '/grading' || pathname.startsWith('/grading/');
   const isFriendsRoute = pathname === '/friends' || pathname.startsWith('/friends/');
-  const isExerciseRoute = isBriefing || isChat;
-  const isFocusRoute = isBriefing || isChat || isGrading;
+  const isExerciseRoute = isBriefing || isChat || isPrep;
+  const isFocusRoute = isBriefing || isChat || isGrading || isPrep;
   const isProfileRoute = pathname === '/profile' || pathname.startsWith('/profile/');
   const isSettingsRoute = pathname === '/settings' || pathname.startsWith('/settings/');
   const hasNoRightRail = isFocusRoute || isFriendsRoute || isSettingsRoute;
@@ -83,14 +84,14 @@ export default function AppShell({ children }) {
               : 'lg:grid-cols-[16.5rem_minmax(0,1fr)_20.5rem] xl:grid-cols-[17rem_minmax(0,1fr)_21.5rem]',
         )}
       >
-        {isExerciseRoute ? (
+        {isPrep ? null : isExerciseRoute ? (
           <ExerciseHeaderControls onRequestExit={handleRequestExit} />
         ) : isFocusRoute ? (
           <CompactNavigationMenu onRequestExit={undefined} />
         ) : (
           <AppSidebar onRequestExit={undefined} />
         )}
-        <main className={cn('min-w-0 px-4 py-6 sm:px-6 lg:px-8 lg:py-10', isBriefing && 'lg:px-10', (isChat || isGrading) && 'p-0 sm:p-0 lg:p-0')}>
+        <main className={cn('min-w-0 px-4 py-6 sm:px-6 lg:px-8 lg:py-10', isBriefing && 'lg:px-10', (isChat || isGrading || isPrep) && 'p-0 sm:p-0 lg:p-0')}>
           {children}
         </main>
         {hasNoRightRail ? null : isProfileRoute ? <ProfileRail profile={defaultProfile} /> : <ProgressRail />}

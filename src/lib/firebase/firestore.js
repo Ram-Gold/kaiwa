@@ -552,27 +552,94 @@ export async function createMasterBadge(badgeId, badgeData) {
  * Returns a dictionary mapped by moduleId.
  */
 export async function getUserModuleProgress(uid) {
-  if (!uid) return {};
-  
-  const progressRef = collection(db, 'users', uid, 'module_progress');
-  const snap = await getDocs(progressRef);
-  
   const progressMap = {};
-  snap.forEach((doc) => {
-    progressMap[doc.id] = doc.data();
-  });
+
+  // Check localStorage first as fallback for guest/offline state
+  if (typeof window !== 'undefined') {
+    try {
+      const basicVerbsLocal = localStorage.getItem('kaiwa.progress.basic-verbs');
+      if (basicVerbsLocal !== null) {
+        progressMap['basic-verbs'] = { progress: parseInt(basicVerbsLocal, 10) || 0 };
+      }
+    } catch (e) {
+      console.warn('localStorage read error:', e);
+    }
+  }
+
+  if (!uid) return progressMap;
+  
+  try {
+    const progressRef = collection(db, 'users', uid, 'module_progress');
+    const snap = await getDocs(progressRef);
+    
+    snap.forEach((doc) => {
+      progressMap[doc.id] = doc.data();
+    });
+  } catch (err) {
+    console.warn('Failed to fetch user module progress from Firestore:', err);
+  }
   
   return progressMap;
 }
 
 /**
- * Updates or creates a module progress entry.
- * @param {string} uid User ID
- * @param {string} moduleId Module ID (e.g. 'introduction')
- * @param {number} progressAmount Integer 0-100
+ * Increments module progress by a set amount (default +20%, requiring 5 completions for 100%).
+ */
+export async function incrementModuleProgress(uid, moduleId, incrementBy = 20) {
+  if (!moduleId) return 20;
+
+  let newProgress = 20;
+
+  // Local storage update
+  if (typeof window !== 'undefined') {
+    try {
+      const currentStored = localStorage.getItem(`kaiwa.progress.${moduleId}`);
+      const parsed = currentStored !== null ? parseInt(currentStored, 10) : 0;
+      newProgress = Math.min(parsed + incrementBy, 100);
+      localStorage.setItem(`kaiwa.progress.${moduleId}`, String(newProgress));
+    } catch (e) {
+      console.warn('localStorage write error:', e);
+    }
+  }
+
+  if (!uid) return newProgress;
+
+  try {
+    const progressRef = doc(db, 'users', uid, 'module_progress', moduleId);
+    const snap = await getDoc(progressRef);
+    const currentVal = snap.exists() ? (snap.data().progress || 0) : 0;
+    newProgress = Math.min(currentVal + incrementBy, 100);
+    const currentCompletions = snap.exists() ? (snap.data().completionsCount || 0) : 0;
+
+    await setDoc(progressRef, {
+      progress: newProgress,
+      completionsCount: currentCompletions + 1,
+      status: newProgress >= 100 ? 'completed' : 'in_progress',
+      lastStudiedAt: serverTimestamp(),
+    }, { merge: true });
+
+    return newProgress;
+  } catch (err) {
+    console.warn('Firestore incrementModuleProgress error:', err);
+    return newProgress;
+  }
+}
+
+/**
+ * Updates or creates a module progress entry directly.
  */
 export async function updateModuleProgress(uid, moduleId, progressAmount) {
-  if (!uid || !moduleId) return;
+  if (!moduleId) return;
+
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(`kaiwa.progress.${moduleId}`, String(progressAmount));
+    } catch (e) {
+      console.warn('localStorage error:', e);
+    }
+  }
+
+  if (!uid) return;
   
   const progressRef = doc(db, 'users', uid, 'module_progress', moduleId);
   
@@ -589,57 +656,6 @@ export async function updateModuleProgress(uid, moduleId, progressAmount) {
 
 const DEFAULT_LESSONS_SEED = [
   {
-    id: 'introduction',
-    title: 'Introduction',
-    jpTitle: 'はじめまして',
-    category: 'Beginner',
-    kind: 'lesson',
-    level: 'N5',
-    minutes: 8,
-    accent: 'moss',
-    summary: 'Practice your first self-introduction with simple, confident sentences.',
-    headsUp: [
-      'Keep answers short: name, origin, and one like.',
-      'Use はじめまして at the start, then よろしくお願いします at the end.',
-      'KAIwa will nudge you if particles feel off.'
-    ],
-    prep: ['私は ___ です', '___ が好きです', 'よろしくお願いします']
-  },
-  {
-    id: 'common-phrases',
-    title: 'Common Phrases',
-    jpTitle: 'よく使う表現',
-    category: 'Beginner',
-    kind: 'lesson',
-    level: 'N5',
-    minutes: 12,
-    accent: 'mustard',
-    summary: 'Warm up everyday phrases for greetings, thanks, apologies, and quick replies.',
-    headsUp: [
-      'Listen for formality: です and ます keep it polite.',
-      'Short natural replies are better than long translated sentences.',
-      'Repeat a phrase once if you want KAIwa to drill it.'
-    ],
-    prep: ['ありがとうございます', 'すみません', '大丈夫です']
-  },
-  {
-    id: 'likes-dislikes',
-    title: 'Likes & Dislikes',
-    jpTitle: '好き・嫌い',
-    category: 'Life',
-    kind: 'lesson',
-    level: 'N5',
-    minutes: 10,
-    accent: 'correction',
-    summary: 'Talk about what you like, dislike, and want to try next.',
-    headsUp: [
-      'Use が with 好き: コーヒーが好きです.',
-      'Add とても or ちょっと to soften your answer.',
-      'Expect follow-up questions asking why.'
-    ],
-    prep: ['___ が好きです', '___ はちょっと苦手です', 'どうしてですか']
-  },
-  {
     id: 'basic-verbs',
     title: 'Basic Verbs',
     jpTitle: '基本動詞',
@@ -654,181 +670,19 @@ const DEFAULT_LESSONS_SEED = [
       'KAIwa may ask what you did today or what you do every morning.',
       'If stuck, answer with the verb stem and KAIwa will scaffold it.'
     ],
-    prep: ['食べます', '行きます', '見ました']
-  },
-  {
-    id: 'simple-sentences',
-    title: 'Simple Sentences',
-    jpTitle: '簡単な文',
-    category: 'Life',
-    kind: 'lesson',
-    level: 'N5',
-    minutes: 14,
-    accent: 'mustard',
-    summary: 'Build clean subject-topic sentences without overthinking grammar.',
-    headsUp: [
-      'Start with topic は, then say one clear thing.',
-      'It is okay to answer slowly and revise.',
-      'KAIwa will keep corrections small and actionable.'
+    prep: ['食べます', '行きます', '見ました'],
+    prepQuiz: [
+      {
+        sentence: 'りんごを___。',
+        options: ['食べます', '行きます', '見ます', '飲みます'],
+        correctIndex: 0,
+      },
+      {
+        sentence: '映画を___。',
+        options: ['行きます', '食べます', '見ました', '飲みます'],
+        correctIndex: 2,
+      },
     ],
-    prep: ['今日は ___ です', '私は ___ に行きます', 'これは ___ です']
-  },
-  {
-    id: 'personal-info',
-    title: 'Personal Info',
-    jpTitle: '自己紹介',
-    category: 'Life',
-    kind: 'lesson',
-    level: 'N5',
-    minutes: 9,
-    accent: 'moss',
-    summary: 'Answer common questions about yourself with safe local-first profile memory.',
-    headsUp: [
-      'Only share details you want saved locally on this device.',
-      'Practice name, country, work or school, and hobbies.',
-      'KAIwa can remember your preferred name for later sessions.'
-    ],
-    prep: ['お名前は？', 'どこから来ましたか', '趣味は何ですか']
-  },
-  {
-    id: 'ordering-food',
-    title: 'Ordering Food',
-    jpTitle: '注文する',
-    category: 'Food',
-    kind: 'lesson',
-    level: 'N5',
-    minutes: 11,
-    accent: 'correction',
-    summary: 'Order politely, ask for recommendations, and confirm what you want.',
-    headsUp: [
-      'Use ___ をください for simple orders.',
-      'Pointing language is useful: これ, それ, あれ.',
-      'Expect a confirmation question before checkout.'
-    ],
-    prep: ['これをください', 'おすすめは何ですか', '水をお願いします']
-  },
-  {
-    id: 'meme-replies',
-    title: 'Meme Replies',
-    jpTitle: 'ネット表現',
-    category: 'Memes',
-    kind: 'lesson',
-    level: 'N4',
-    minutes: 7,
-    accent: 'aizome',
-    summary: 'Practice light internet replies while keeping tone natural and friendly.',
-    headsUp: [
-      'Casual Japanese can sound too blunt if translated directly.',
-      'KAIwa will flag phrases that are funny but risky.',
-      'Short reactions are the goal here.'
-    ],
-    prep: ['かわいい', 'おもしろい', 'ほんとう？']
-  }
-];
-
-export async function seedLessonsToFirestore() {
-  for (const lesson of DEFAULT_LESSONS_SEED) {
-    const lessonRef = doc(db, 'lessons', lesson.id);
-    const { id, ...data } = lesson;
-    await setDoc(lessonRef, data, { merge: true });
-  }
-}
-
-/**
- * Fetch all lessons directly from Firestore.
- * If empty or blocked by permissions, seeds or falls back to default lessons.
- */
-export async function seedDatabase(userId = null) {
-  try {
-    console.log('Seeding initial data...');
-
-    // Seed categories
-    await setDoc(doc(db, 'appSettings', 'categories'), {
-      order: ['Beginner', 'Food', 'Memes', 'Life']
-    });
-
-    await seedLessonsToFirestore();
-    // (Other seed functions would go here)
-  } catch (err) {
-    console.error('Seeding failed:', err);
-  }
-}
-
-export async function getLessons() {
-  try {
-    const lessonsRef = collection(db, 'lessons');
-    let snap = await getDocs(lessonsRef);
-    
-    if (snap.empty) {
-      try {
-        await seedLessonsToFirestore();
-        snap = await getDocs(lessonsRef);
-      } catch (seedErr) {
-        console.warn('Could not seed lessons to Firestore (check auth / security rules):', seedErr);
-        return DEFAULT_LESSONS_SEED.map(l => ({ ...l, href: `/briefing/${l.id}` }));
-      }
-    }
-    
-    const lessonsList = [];
-    snap.forEach((docSnap) => {
-      lessonsList.push({
-        id: docSnap.id,
-        ...docSnap.data(),
-        href: `/briefing/${docSnap.id}`
-      });
-    });
-    
-    return lessonsList.length > 0 ? lessonsList : DEFAULT_LESSONS_SEED.map(l => ({ ...l, href: `/briefing/${l.id}` }));
-  } catch (err) {
-    console.warn('Firestore getLessons error, falling back to default catalog:', err);
-    return DEFAULT_LESSONS_SEED.map(l => ({ ...l, href: `/briefing/${l.id}` }));
-  }
-}
-
-/**
- * Fetch a single lesson from Firestore by ID.
- * Falls back to null safely if permissions or network fail during SSR.
- */
-export async function getLessonById(lessonId) {
-  if (!lessonId) return null;
-  try {
-    const lessonRef = doc(db, 'lessons', lessonId);
-    const snap = await getDoc(lessonRef);
-    if (!snap.exists()) return null;
-    return {
-      id: snap.id,
-      ...snap.data(),
-      startHref: `/chat/sensei?briefing=${snap.id}&type=lesson`
-    };
-  } catch (err) {
-    console.warn(`Firestore getLessonById error for ${lessonId}, falling back to static briefing:`, err);
-    return null;
-  }
-}
-
-/* ==========================================================================
-   6. ROLEPLAYS CATALOG
-   ========================================================================== */
-
-const DEFAULT_ROLEPLAYS_SEED = [
-  {
-    id: 'train-station',
-    title: 'Train Station',
-    jpTitle: '駅で迷った時',
-    category: 'Beginner',
-    kind: 'roleplay',
-    level: 'N5',
-    minutes: 8,
-    accent: 'mustard',
-    image: '/assets/bg_eki_homedoor_train_open.jpg',
-    summary: 'You are at a station and need help finding the right platform.',
-    headsUp: [
-      'Say where you want to go first.',
-      'Listen for platform numbers and direction words.',
-      'すみません is your safest opener.'
-    ],
-    prep: ['___ に行きたいです', '何番線ですか', 'ありがとうございます'],
-    startHref: '/chat/sensei?briefing=train-station&type=roleplay'
   },
   {
     id: 'idol-cheki',
@@ -848,80 +702,220 @@ const DEFAULT_ROLEPLAYS_SEED = [
     ],
     prep: ['ライブ最高でした', '応援しています', 'また来ます'],
     startHref: '/chat/idol?briefing=idol-cheki&type=roleplay'
-  },
+  }
+];
+
+export const DEFAULT_LESSON_QUESTIONS = {
+  'basic-verbs': [
+    {
+      id: 'q1',
+      order: 1,
+      sentence: '<ruby>林檎<rt>りんご</rt></ruby>を___。',
+      options: ['<ruby>食<rt>た</rt></ruby>べます', '<ruby>行<rt>い</rt></ruby>きます', '<ruby>見<rt>み</rt></ruby>ます', '<ruby>飲<rt>の</rt></ruby>みます'],
+      correctIndex: 0,
+      explanation: 'りんご (apple) is paired with 食べます (to eat).'
+    },
+    {
+      id: 'q2',
+      order: 2,
+      sentence: '<ruby>映画<rt>えいが</rt></ruby>を___。',
+      options: ['<ruby>行<rt>い</rt></ruby>きます', '<ruby>食<rt>た</rt></ruby>べます', '<ruby>見<rt>み</rt></ruby>ました', '<ruby>飲<rt>の</rt></ruby>みます'],
+      correctIndex: 2,
+      explanation: '映画 (movie) is paired with 見ました (watched).'
+    },
+    {
+      id: 'q3',
+      order: 3,
+      sentence: 'お<ruby>茶<rt>ちゃ</rt></ruby>を___。',
+      options: ['<ruby>飲<rt>の</rt></ruby>みます', '<ruby>買<rt>か</rt></ruby>います', '<ruby>食<rt>た</rt></ruby>べます', '<ruby>話<rt>はな</rt></ruby>します'],
+      correctIndex: 0,
+      explanation: 'お茶 (tea) is paired with 飲みます (to drink).'
+    },
+    {
+      id: 'q4',
+      order: 4,
+      sentence: '<ruby>学校<rt>がっこう</rt></ruby>へ___。',
+      options: ['<ruby>行<rt>い</rt></ruby>きます', '<ruby>聞<rt>き</rt></ruby>きます', '<ruby>食<rt>た</rt></ruby>べます', '<ruby>見<rt>み</rt></ruby>ます'],
+      correctIndex: 0,
+      explanation: '学校へ (to school) is paired with 行きます (to go).'
+    },
+    {
+      id: 'q5',
+      order: 5,
+      sentence: '<ruby>本<rt>ほん</rt></ruby>を___。',
+      options: ['<ruby>読<rt>よ</rt></ruby>みます', '<ruby>食<rt>た</rt></ruby>べます', '<ruby>行<rt>い</rt></ruby>きます', '<ruby>買<rt>か</rt></ruby>います'],
+      correctIndex: 0,
+      explanation: '本 (book) is paired with 読みます (to read).'
+    },
+    {
+      id: 'q6',
+      order: 6,
+      sentence: '<ruby>音楽<rt>おんがく</rt></ruby>を___。',
+      options: ['<ruby>聞<rt>き</rt></ruby>きます', '<ruby>話<rt>はな</rt></ruby>します', '<ruby>食<rt>た</rt></ruby>べます', '<ruby>見<rt>み</rt></ruby>ます'],
+      correctIndex: 0,
+      explanation: '音楽 (music) is paired with 聞きます (to listen).'
+    },
+    {
+      id: 'q7',
+      order: 7,
+      sentence: '<ruby>手紙<rt>てがみ</rt></ruby>を___。',
+      options: ['<ruby>書<rt>か</rt></ruby>きます', '<ruby>読<rt>よ</rt></ruby>みます', '<ruby>飲<rt>の</rt></ruby>みます', '<ruby>行<rt>い</rt></ruby>きます'],
+      correctIndex: 0,
+      explanation: '手紙 (letter) is paired with 書きます (to write).'
+    },
+    {
+      id: 'q8',
+      order: 8,
+      sentence: '<ruby>日本語<rt>にほんご</rt></ruby>で___。',
+      options: ['<ruby>話<rt>はな</rt></ruby>します', '<ruby>食<rt>た</rt></ruby>べます', '<ruby>買<rt>か</rt></ruby>います', '<ruby>見<rt>み</rt></ruby>ます'],
+      correctIndex: 0,
+      explanation: '日本語で (in Japanese) is paired with 話します (to speak).'
+    }
+  ]
+};
+
+export async function seedLessonQuestionsToFirestore(lessonId, questions = null) {
+  const list = questions || DEFAULT_LESSON_QUESTIONS[lessonId] || [];
+  if (!list.length) return;
+  for (const q of list) {
+    const qRef = doc(db, 'lessons', lessonId, 'questions', q.id);
+    await setDoc(qRef, q, { merge: true });
+  }
+}
+
+export async function getLessonQuestions(lessonId) {
+  const fallback = DEFAULT_LESSON_QUESTIONS[lessonId] || [];
+  if (!lessonId) return fallback;
+  try {
+    const qCollection = collection(db, 'lessons', lessonId, 'questions');
+    const snap = await getDocs(query(qCollection, orderBy('order', 'asc')));
+
+    if (snap.empty) {
+      return fallback;
+    }
+
+    const questionsList = [];
+    snap.forEach((docSnap) => {
+      questionsList.push({
+        id: docSnap.id,
+        ...docSnap.data()
+      });
+    });
+
+    return questionsList.length > 0 ? questionsList : fallback;
+  } catch (err) {
+    // If blocked by permissions or offline, seamlessly use the local fallback catalog
+    return fallback;
+  }
+}
+
+export async function seedLessonsToFirestore() {
+  for (const lesson of DEFAULT_LESSONS_SEED) {
+    const lessonRef = doc(db, 'lessons', lesson.id);
+    const { id, ...data } = lesson;
+    await setDoc(lessonRef, data, { merge: true });
+  }
+}
+
+/**
+ * Fetch all lessons directly from Firestore.
+ * If empty or blocked by permissions, seeds or falls back to default lessons.
+ */
+export async function seedDatabase(userId = null) {
+  try {
+    console.log('Seeding initial data...');
+
+    // Seed categories
+    await setDoc(doc(db, 'appSettings', 'categories'), {
+      order: ['Beginner', 'Memes']
+    });
+
+    await seedLessonsToFirestore();
+    await seedRoleplaysToFirestore();
+    await seedLessonQuestionsToFirestore('basic-verbs');
+  } catch (err) {
+    console.error('Seeding failed:', err);
+  }
+}
+
+export async function getLessons() {
+  const allowedLessonIds = ['basic-verbs', 'idol-cheki'];
+  try {
+    const lessonsRef = collection(db, 'lessons');
+    let snap = await getDocs(lessonsRef);
+    
+    if (snap.empty) {
+      try {
+        await seedLessonsToFirestore();
+        snap = await getDocs(lessonsRef);
+      } catch (seedErr) {
+        console.warn('Could not seed lessons to Firestore (check auth / security rules):', seedErr);
+        return DEFAULT_LESSONS_SEED.map(l => ({ ...l, href: l.id === 'basic-verbs' ? `/prep/${l.id}` : `/briefing/${l.id}` }));
+      }
+    }
+    
+    const lessonsList = [];
+    snap.forEach((docSnap) => {
+      if (allowedLessonIds.includes(docSnap.id)) {
+        lessonsList.push({
+          id: docSnap.id,
+          ...docSnap.data(),
+          href: docSnap.id === 'basic-verbs' ? `/prep/${docSnap.id}` : `/briefing/${docSnap.id}`
+        });
+      }
+    });
+    
+    return lessonsList.length > 0 ? lessonsList : DEFAULT_LESSONS_SEED.map(l => ({ ...l, href: l.id === 'basic-verbs' ? `/prep/${l.id}` : `/briefing/${l.id}` }));
+  } catch (err) {
+    console.warn('Firestore getLessons error, falling back to default catalog:', err);
+    return DEFAULT_LESSONS_SEED.map(l => ({ ...l, href: l.id === 'basic-verbs' ? `/prep/${l.id}` : `/briefing/${l.id}` }));
+  }
+}
+
+/**
+ * Fetch a single lesson from Firestore by ID.
+ * Falls back to null safely if permissions or network fail during SSR.
+ */
+export async function getLessonById(lessonId) {
+  if (!lessonId) return null;
+  try {
+    const lessonRef = doc(db, 'lessons', lessonId);
+    const snap = await getDoc(lessonRef);
+    if (!snap.exists()) return null;
+    return {
+      id: snap.id,
+      ...snap.data(),
+      startHref: snap.id === 'basic-verbs' ? '/' : `/chat/sensei?briefing=${snap.id}&type=lesson`
+    };
+  } catch (err) {
+    console.warn(`Firestore getLessonById error for ${lessonId}, falling back to static briefing:`, err);
+    return null;
+  }
+}
+
+/* ==========================================================================
+   6. ROLEPLAYS CATALOG
+   ========================================================================== */
+
+const DEFAULT_ROLEPLAYS_SEED = [
   {
-    id: 'colleague-hiroen',
-    title: 'Colleague Hiroen',
-    jpTitle: '同僚と雑談',
-    category: 'Life',
+    id: 'idol-cheki',
+    title: 'Idol Cheki',
+    jpTitle: 'ライブ後の一言',
+    category: 'Memes',
     kind: 'roleplay',
-    level: 'N3',
-    minutes: 12,
-    accent: 'aizome',
-    image: '/assets/bg_ryokan_hiroen.jpg',
-    summary: 'Practice a relaxed work-adjacent chat with a colleague after hours.',
-    headsUp: [
-      'Use polite casual balance: friendly, not too stiff.',
-      'Ask one follow-up before changing topics.',
-      'KAIwa will model softer phrasing when needed.'
-    ],
-    prep: ['お疲れさまです', '週末は何をしましたか', 'いいですね'],
-    startHref: '/chat/sensei?briefing=colleague-hiroen&type=roleplay'
-  },
-  {
-    id: 'convenience-store',
-    title: 'Convenience Store',
-    jpTitle: 'コンビニ会話',
-    category: 'Food',
-    kind: 'roleplay',
-    level: 'N5',
-    minutes: 7,
-    accent: 'moss',
-    summary: 'Handle checkout, bags, payment, and quick store questions.',
-    headsUp: [
-      'Most questions are yes/no at checkout.',
-      '聞き取れない is okay — ask for repetition.',
-      'Practice declining politely: 大丈夫です.'
-    ],
-    prep: ['袋はいりますか', 'カードでお願いします', '大丈夫です'],
-    startHref: '/chat/sensei?briefing=convenience-store&type=roleplay'
-  },
-  {
-    id: 'job-interview',
-    title: 'Job Interview',
-    jpTitle: '面接の練習',
-    category: 'Life',
-    kind: 'roleplay',
-    level: 'N2',
-    minutes: 15,
+    level: 'N4',
+    minutes: 6,
     accent: 'correction',
-    summary: 'Prepare concise, respectful interview answers with structured follow-ups.',
+    image: '/assets/bg_music_live_stage.jpg',
+    summary: 'You get a quick post-live cheki moment and want to say something warm.',
     headsUp: [
-      'Answer in short blocks: point, example, result.',
-      'Use polite endings consistently.',
-      'If you need time, say 少し考えてもいいですか.'
+      'Keep it short; the scene is fast.',
+      'Compliments should be simple and sincere.',
+      'KAIwa will help you avoid overly direct translations.'
     ],
-    prep: ['自己紹介をお願いします', '志望理由は何ですか', '少し考えてもいいですか'],
-    startHref: '/chat/sensei?briefing=job-interview&type=roleplay'
-  },
-  {
-    id: 'teacher-teaching',
-    title: 'Teacher Teaching',
-    jpTitle: '先生に質問する',
-    category: 'Beginner',
-    kind: 'roleplay',
-    level: 'N5',
-    minutes: 10,
-    accent: 'mustard',
-    image: '/assets/bg_school_room_back.jpg',
-    summary: 'Ask a teacher for clarification and practice saying what you do not understand.',
-    headsUp: [
-      'Be direct but polite about confusion.',
-      'Ask for examples when grammar feels abstract.',
-      'KAIwa will break explanations into smaller steps.'
-    ],
-    prep: ['わかりません', '例をください', 'もう一度お願いします'],
-    startHref: '/chat/sensei?briefing=teacher-teaching&type=roleplay'
+    prep: ['ライブ最高でした', '応援しています', 'また来ます'],
+    startHref: '/chat/idol?briefing=idol-cheki&type=roleplay'
   }
 ];
 
@@ -934,6 +928,7 @@ export async function seedRoleplaysToFirestore() {
 }
 
 export async function getRoleplays() {
+  const allowedRoleplayIds = ['idol-cheki'];
   try {
     const roleplaysRef = collection(db, 'roleplays');
     let snap = await getDocs(roleplaysRef);
@@ -950,11 +945,13 @@ export async function getRoleplays() {
     
     const roleplaysList = [];
     snap.forEach((docSnap) => {
-      roleplaysList.push({
-        id: docSnap.id,
-        ...docSnap.data(),
-        href: `/briefing/${docSnap.id}`
-      });
+      if (allowedRoleplayIds.includes(docSnap.id)) {
+        roleplaysList.push({
+          id: docSnap.id,
+          ...docSnap.data(),
+          href: `/briefing/${docSnap.id}`
+        });
+      }
     });
     
     return roleplaysList.length > 0 ? roleplaysList : DEFAULT_ROLEPLAYS_SEED.map(r => ({ ...r, href: `/briefing/${r.id}` }));
