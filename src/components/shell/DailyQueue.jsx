@@ -21,10 +21,21 @@ import {
 import Card from '../ui/Card.jsx';
 import Badge from '../ui/Badge.jsx';
 import { cn } from '../../lib/utils.js';
+import { useAuth } from '../../lib/auth/AuthContext.jsx';
+import {
+  getTodayDateKey,
+  get24HourCycleRemaining,
+  loadUserDailyState,
+  saveUserDailyState,
+  resolveIcon,
+} from '../../lib/dailyQuests.js';
+import { QUEST_POOL, TASK_POOL } from '../../data/dailyQuestsDataset.js';
+
+export { QUEST_POOL, TASK_POOL };
 
 export const DEFAULT_QUESTS = [
   {
-    id: 'quest-xp',
+    id: 'quest-xp-20',
     title: 'Earn 20 XP in lessons',
     jpTitle: '20 XP 獲得',
     category: 'XP',
@@ -40,7 +51,7 @@ export const DEFAULT_QUESTS = [
     href: '/#lessons',
   },
   {
-    id: 'quest-chat',
+    id: 'quest-chat-2',
     title: 'Complete 2 Kaiwa chats',
     jpTitle: '会話を2回達成',
     category: 'Kaiwa',
@@ -56,7 +67,7 @@ export const DEFAULT_QUESTS = [
     href: '/chat',
   },
   {
-    id: 'quest-time',
+    id: 'quest-time-15',
     title: 'Spend 15 mins learning',
     jpTitle: '15分間学習する',
     category: 'Time',
@@ -75,7 +86,7 @@ export const DEFAULT_QUESTS = [
 
 export const DEFAULT_TASKS = [
   {
-    id: 'task-1',
+    id: 'task-review-n5',
     title: 'Review 5 N5 phrases',
     jpLabel: '復習',
     category: 'Review',
@@ -85,7 +96,7 @@ export const DEFAULT_TASKS = [
     icon: BookOpen,
   },
   {
-    id: 'task-2',
+    id: 'task-complete-chat',
     title: 'Complete 1 Kaiwa chat',
     jpLabel: '会話',
     category: 'Kaiwa',
@@ -95,7 +106,7 @@ export const DEFAULT_TASKS = [
     icon: MessageSquare,
   },
   {
-    id: 'task-3',
+    id: 'task-ordering-food',
     title: 'Practice Ordering Food',
     jpLabel: 'ロールプレイ',
     category: 'Roleplay',
@@ -105,7 +116,7 @@ export const DEFAULT_TASKS = [
     icon: Layers,
   },
   {
-    id: 'task-4',
+    id: 'task-daily-streak',
     title: 'Daily 10-min streak',
     jpLabel: '日課',
     category: 'Time',
@@ -126,22 +137,73 @@ export const DEFAULT_TASKS = [
  */
 export default function DailyQueue({
   variant = 'spacious-zen',
-  initialQuests = DEFAULT_QUESTS,
-  initialTasks = DEFAULT_TASKS,
+  initialQuests = null,
+  initialTasks = null,
+  userId: customUserId = null,
   onQuestClaim,
   className = '',
 }) {
-  const [quests, setQuests] = useState(initialQuests);
-  const [tasks, setTasks] = useState(initialTasks);
+  const { user } = useAuth ? useAuth() : {};
+  const effectiveUserId = customUserId || user?.uid || 'guest';
+  const [currentDateKey, setCurrentDateKey] = useState(() => getTodayDateKey());
+  const [timeLeft, setTimeLeft] = useState(() => get24HourCycleRemaining());
+
+  const [quests, setQuests] = useState(() => {
+    if (initialQuests) return initialQuests;
+    const state = loadUserDailyState(effectiveUserId, currentDateKey);
+    return state.quests;
+  });
+
+  const [tasks, setTasks] = useState(() => {
+    if (initialTasks) return initialTasks;
+    const state = loadUserDailyState(effectiveUserId, currentDateKey);
+    return state.tasks;
+  });
+
   const [selectedVariant, setSelectedVariant] = useState(variant);
 
+  // Sync when initialQuests or initialTasks change
   useEffect(() => {
-    setQuests(initialQuests);
+    if (initialQuests) {
+      setQuests(initialQuests);
+    }
   }, [initialQuests]);
 
   useEffect(() => {
-    setTasks(initialTasks);
+    if (initialTasks) {
+      setTasks(initialTasks);
+    }
   }, [initialTasks]);
+
+  // Sync state if user changes and no explicit initialQuests passed
+  useEffect(() => {
+    if (!initialQuests && !initialTasks) {
+      const state = loadUserDailyState(effectiveUserId, currentDateKey);
+      setQuests(state.quests);
+      setTasks(state.tasks);
+    }
+  }, [effectiveUserId, currentDateKey, initialQuests, initialTasks]);
+
+  // 24-hour live countdown timer
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const remaining = get24HourCycleRemaining();
+      setTimeLeft(remaining);
+
+      // If midnight passed and dateKey changed, auto-refresh randomized daily quests
+      const today = getTodayDateKey();
+      if (today !== currentDateKey) {
+        setCurrentDateKey(today);
+        if (!initialQuests && !initialTasks) {
+          const freshState = loadUserDailyState(effectiveUserId, today);
+          setQuests(freshState.quests);
+          setTasks(freshState.tasks);
+        }
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [effectiveUserId, currentDateKey, initialQuests, initialTasks]);
 
   useEffect(() => {
     if (variant) {
@@ -179,28 +241,34 @@ export default function DailyQueue({
 
   const handleClaimQuest = (questId, e) => {
     triggerCelebration(e);
-    setQuests((prev) =>
-      prev.map((q) => (q.id === questId ? { ...q, claimed: true } : q))
-    );
+    setQuests((prev) => {
+      const updated = prev.map((q) => (q.id === questId ? { ...q, claimed: true } : q));
+      saveUserDailyState(effectiveUserId, { dateKey: currentDateKey, quests: updated, tasks });
+      return updated;
+    });
     if (onQuestClaim) onQuestClaim(questId);
   };
 
   const handleIncrementQuest = (questId) => {
-    setQuests((prev) =>
-      prev.map((q) => {
+    setQuests((prev) => {
+      const updated = prev.map((q) => {
         if (q.id === questId) {
           const nextVal = q.current < q.target ? q.current + 1 : 0;
           return { ...q, current: nextVal, claimed: nextVal < q.target ? false : q.claimed };
         }
         return q;
-      })
-    );
+      });
+      saveUserDailyState(effectiveUserId, { dateKey: currentDateKey, quests: updated, tasks });
+      return updated;
+    });
   };
 
   const handleToggleTask = (taskId) => {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, done: !t.done } : t))
-    );
+    setTasks((prev) => {
+      const updated = prev.map((t) => (t.id === taskId ? { ...t, done: !t.done } : t));
+      saveUserDailyState(effectiveUserId, { dateKey: currentDateKey, quests, tasks: updated });
+      return updated;
+    });
   };
 
   // Render variant
@@ -209,6 +277,7 @@ export default function DailyQueue({
       return (
         <SpaciousZenPrototype
           quests={quests}
+          timeLeft={timeLeft}
           onClaim={handleClaimQuest}
           onIncrement={handleIncrementQuest}
           className={className}
@@ -218,6 +287,7 @@ export default function DailyQueue({
       return (
         <SpaciousNeubrutalPrototype
           quests={quests}
+          timeLeft={timeLeft}
           onClaim={handleClaimQuest}
           onIncrement={handleIncrementQuest}
           className={className}
@@ -227,11 +297,12 @@ export default function DailyQueue({
       return (
         <ZenQueuePrototype
           tasks={tasks}
+          timeLeft={timeLeft}
           completedCount={tasks.filter((t) => t.done).length}
           totalCount={tasks.length}
-          progressPercent={Math.round((tasks.filter((t) => t.done).length / tasks.length) * 100)}
-          earnedXp={tasks.filter((t) => t.done).reduce((a, b) => a + b.xp, 0)}
-          totalXp={tasks.reduce((a, b) => a + b.xp, 0)}
+          progressPercent={tasks.length > 0 ? Math.round((tasks.filter((t) => t.done).length / tasks.length) * 100) : 0}
+          earnedXp={tasks.filter((t) => t.done).reduce((a, b) => a + (b.xp || 0), 0)}
+          totalXp={tasks.reduce((a, b) => a + (b.xp || 0), 0)}
           onToggle={handleToggleTask}
           className={className}
         />
@@ -240,11 +311,12 @@ export default function DailyQueue({
       return (
         <HankoQueuePrototype
           tasks={tasks}
+          timeLeft={timeLeft}
           completedCount={tasks.filter((t) => t.done).length}
           totalCount={tasks.length}
-          progressPercent={Math.round((tasks.filter((t) => t.done).length / tasks.length) * 100)}
-          earnedXp={tasks.filter((t) => t.done).reduce((a, b) => a + b.xp, 0)}
-          totalXp={tasks.reduce((a, b) => a + b.xp, 0)}
+          progressPercent={tasks.length > 0 ? Math.round((tasks.filter((t) => t.done).length / tasks.length) * 100) : 0}
+          earnedXp={tasks.filter((t) => t.done).reduce((a, b) => a + (b.xp || 0), 0)}
+          totalXp={tasks.reduce((a, b) => a + (b.xp || 0), 0)}
           onToggle={handleToggleTask}
           className={className}
         />
@@ -253,16 +325,17 @@ export default function DailyQueue({
       return (
         <SpaciousOmamoriPrototype
           quests={quests}
+          timeLeft={timeLeft}
           onClaim={handleClaimQuest}
           onIncrement={handleIncrementQuest}
           className={className}
         />
       );
-    case 'spacious-zen':
     default:
       return (
         <SpaciousZenPrototype
           quests={quests}
+          timeLeft={timeLeft}
           onClaim={handleClaimQuest}
           onIncrement={handleIncrementQuest}
           className={className}
@@ -272,11 +345,12 @@ export default function DailyQueue({
 }
 
 /* =========================================================================
-   NEW PROTOTYPE A: "SPACIOUS OMAMORI QUESTS" (御守 · Shrine Talismans)
+   PROTOTYPE A: "SPACIOUS OMAMORI QUESTS" (御守 · Shrine Talismans)
    Spacious, minimal, warm paper layout with Japanese Omamori blessing rewards
    ========================================================================= */
 export function SpaciousOmamoriPrototype({
-  quests,
+  quests = [],
+  timeLeft,
   onClaim,
   onIncrement,
   className = '',
@@ -290,8 +364,8 @@ export function SpaciousOmamoriPrototype({
         className
       )}
     >
-      {/* Spacious Header */}
-      <div className="flex items-center justify-between">
+      {/* Spacious Header with 24-Hour Timer */}
+      <div className="flex items-start justify-between gap-2">
         <div className="space-y-0.5">
           <div className="flex items-center gap-2">
             <span className="flex h-5 items-center justify-center rounded bg-ink px-1.5 font-jp text-[10px] font-bold text-paper">
@@ -306,18 +380,24 @@ export function SpaciousOmamoriPrototype({
           </p>
         </div>
 
-        <Link
-          href="/prototype"
-          className="font-mono text-[11px] font-black uppercase tracking-wider text-ink/60 hover:text-correction transition-colors"
-        >
-          View All
-        </Link>
+        <div className="flex flex-col items-end gap-0.5">
+          <div
+            title="Quests reset every 24 hours"
+            className="inline-flex items-center gap-1 rounded-full border border-ink/20 bg-paper px-2 py-0.5 font-mono text-[10px] font-black text-ink/75 shadow-xs"
+          >
+            <Clock className="h-3 w-3 text-correction animate-pulse" />
+            <span>{timeLeft?.formatted || '24h Timer'}</span>
+          </div>
+          <span className="font-mono text-[8px] font-black tracking-widest text-ink/40 uppercase">
+            24H CYCLE
+          </span>
+        </div>
       </div>
 
       {/* Spacious Quest Rows */}
       <div className="space-y-4">
         {quests.map((quest) => {
-          const Icon = quest.icon || Zap;
+          const Icon = resolveIcon(quest.icon || quest.iconName, Zap);
           const isComplete = quest.current >= quest.target;
           const pct = Math.min(Math.round((quest.current / quest.target) * 100), 100);
 
@@ -335,7 +415,8 @@ export function SpaciousOmamoriPrototype({
                   'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border-2 border-ink transition-all duration-200 select-none shadow-[2px_2px_0px_0px_#1C1C1C] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none',
                   quest.color === 'mustard' && 'bg-mustard text-ink',
                   quest.color === 'moss' && 'bg-moss text-paper',
-                  quest.color === 'correction' && 'bg-correction text-paper'
+                  quest.color === 'correction' && 'bg-correction text-paper',
+                  quest.color === 'aizome' && 'bg-aizome text-paper'
                 )}
               >
                 <Icon className="h-5 w-5 stroke-[2.5]" />
@@ -407,7 +488,7 @@ export function SpaciousOmamoriPrototype({
       <div className="flex items-center justify-between border-t-2 border-ink/10 pt-3 text-[11px] font-mono text-ink/60">
         <span>Daily Reward Chest</span>
         <span className="font-black text-ink">
-          {completedCount === quests.length ? '✨ All Blessings Claimed' : 'Complete all to unlock bonus'}
+          {completedCount === quests.length && quests.length > 0 ? '✨ All Blessings Claimed' : 'Complete all to unlock bonus'}
         </span>
       </div>
     </div>
@@ -415,11 +496,12 @@ export function SpaciousOmamoriPrototype({
 }
 
 /* =========================================================================
-   SIMPLIFIED SPACIOUS ZEN PROTOTYPE (日課 · Spacious Zen Quests)
+   PROTOTYPE B: "SPACIOUS ZEN PROTOTYPE" (日課 · Spacious Zen Quests)
    All Daily Quests in a single unified box with spacious rows & dividers
    ========================================================================= */
 export function SpaciousZenPrototype({
-  quests,
+  quests = [],
+  timeLeft,
   onClaim,
   onIncrement,
   className = '',
@@ -433,14 +515,24 @@ export function SpaciousZenPrototype({
         className
       )}
     >
-      {/* Unified Card Header */}
+      {/* Unified Card Header with 24-Hour Timer */}
       <div className="flex items-center justify-between border-b border-ink/10 pb-3">
-        <h3 className="font-display text-lg tracking-tight text-ink">
-          Daily Quests
-        </h3>
-        <span className="font-mono text-xs font-black uppercase tracking-wider text-ink/50">
-          {completedCount} / {quests.length} Done
-        </span>
+        <div>
+          <h3 className="font-display text-lg tracking-tight text-ink">
+            Daily Quests
+          </h3>
+          <span className="font-mono text-xs font-black uppercase tracking-wider text-ink/50">
+            {completedCount} / {quests.length} Done
+          </span>
+        </div>
+
+        <div
+          title="24-hour countdown timer"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-ink/20 bg-paper px-2.5 py-1 font-mono text-xs font-black text-ink/80 shadow-xs"
+        >
+          <Clock className="h-3.5 w-3.5 text-correction animate-pulse" />
+          <span>{timeLeft?.formatted || '24h Timer'}</span>
+        </div>
       </div>
 
       {/* Spacious Quest Rows inside the Single Box */}
@@ -510,7 +602,7 @@ export function SpaciousZenPrototype({
                 <div className="flex items-center justify-between font-mono text-[11px] font-bold text-ink/50">
                   <span>{pct}% complete</span>
                   <span className="text-ink font-black">
-                    {quest.current} / {quest.target}
+                    {quest.current} / {quest.target} {quest.unit || ''}
                   </span>
                 </div>
               </div>
@@ -523,11 +615,12 @@ export function SpaciousZenPrototype({
 }
 
 /* =========================================================================
-   NEW PROTOTYPE C: "SPACIOUS NEUBRUTAL FORGE" (鍛錬 · Tactile Stamp Forge)
+   PROTOTYPE C: "SPACIOUS NEUBRUTAL FORGE" (鍛錬 · Tactile Stamp Forge)
    Thick offset ink borders, tactile button stamps, high contrast
    ========================================================================= */
 export function SpaciousNeubrutalPrototype({
-  quests,
+  quests = [],
+  timeLeft,
   onClaim,
   onIncrement,
   className = '',
@@ -550,6 +643,11 @@ export function SpaciousNeubrutalPrototype({
               Tanren · Forge Your Skills
             </p>
           </div>
+        </div>
+
+        <div className="flex items-center gap-1 rounded-lg border-2 border-ink bg-paper px-2 py-1 font-mono text-[10px] font-black text-ink shadow-[1px_1px_0px_0px_#1C1C1C]">
+          <Clock className="h-3 w-3 text-correction" />
+          <span>{timeLeft?.formatted || '24h'}</span>
         </div>
       </div>
 
@@ -584,7 +682,7 @@ export function SpaciousNeubrutalPrototype({
                   style={{ width: `${pct}%` }}
                 />
                 <span className="absolute inset-0 flex items-center justify-center font-mono text-[10px] font-black text-ink">
-                  {quest.current} / {quest.target} {quest.unit}
+                  {quest.current} / {quest.target} {quest.unit || ''}
                 </span>
               </div>
 
@@ -610,7 +708,8 @@ export function SpaciousNeubrutalPrototype({
    COMPACT PROTOTYPE: ZEN MINIMALIST (日課 · Compact Checklist)
    ========================================================================= */
 export function ZenQueuePrototype({
-  tasks,
+  tasks = [],
+  timeLeft,
   completedCount,
   totalCount,
   progressPercent,
@@ -638,11 +737,17 @@ export function ZenQueuePrototype({
           </span>
         </div>
 
-        <span className="font-mono text-xs font-black text-ink/70">
-          <span className={cn(completedCount > 0 && 'text-moss')}>{completedCount}</span>
-          <span className="text-ink/30">/</span>
-          <span>{totalCount}</span>
-        </span>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 font-mono text-[10px] font-black text-correction bg-paper border border-ink/20 px-1.5 py-0.5 rounded">
+            <Clock className="h-2.5 w-2.5" />
+            <span>{timeLeft?.formattedDigital || timeLeft?.formatted}</span>
+          </div>
+          <span className="font-mono text-xs font-black text-ink/70">
+            <span className={cn(completedCount > 0 && 'text-moss')}>{completedCount}</span>
+            <span className="text-ink/30">/</span>
+            <span>{totalCount}</span>
+          </span>
+        </div>
       </div>
 
       <div className="relative mb-3 h-1.5 w-full overflow-hidden rounded-full bg-paper border border-ink/20">
@@ -659,7 +764,7 @@ export function ZenQueuePrototype({
         {tasks.map((task) => (
           <div
             key={task.id}
-            onClick={() => onToggle(task.id)}
+            onClick={() => onToggle && onToggle(task.id)}
             role="checkbox"
             aria-checked={task.done}
             tabIndex={0}
@@ -712,7 +817,8 @@ export function ZenQueuePrototype({
    COMPACT PROTOTYPE: NEUBRUTAL HANKO (判子 · Stamp Grid)
    ========================================================================= */
 export function HankoQueuePrototype({
-  tasks,
+  tasks = [],
+  timeLeft,
   completedCount,
   totalCount,
   progressPercent,
@@ -741,16 +847,21 @@ export function HankoQueuePrototype({
           </div>
         </div>
 
-        <div className="flex items-center gap-1">
-          {tasks.map((t, idx) => (
-            <div
-              key={idx}
-              className={cn(
-                'h-3.5 w-2 rounded-xs border border-ink transition-colors',
-                t.done ? 'bg-moss' : 'bg-paper'
-              )}
-            />
-          ))}
+        <div className="flex items-center gap-1.5">
+          <span className="font-mono text-[9px] font-black text-ink/70 bg-paper border border-ink/20 px-1.5 py-0.5 rounded shadow-xs">
+            ⏱️ {timeLeft?.formattedDigital || timeLeft?.formatted}
+          </span>
+          <div className="flex items-center gap-1">
+            {tasks.map((t, idx) => (
+              <div
+                key={idx}
+                className={cn(
+                  'h-3.5 w-2 rounded-xs border border-ink transition-colors',
+                  t.done ? 'bg-moss' : 'bg-paper'
+                )}
+              />
+            ))}
+          </div>
         </div>
       </div>
 
@@ -758,7 +869,7 @@ export function HankoQueuePrototype({
         {tasks.map((task) => (
           <div
             key={task.id}
-            onClick={() => onToggle(task.id)}
+            onClick={() => onToggle && onToggle(task.id)}
             role="checkbox"
             aria-checked={task.done}
             tabIndex={0}
@@ -776,7 +887,7 @@ export function HankoQueuePrototype({
                     : 'bg-white text-ink group-hover:bg-mustard'
                 )}
               >
-                {task.done ? '済' : task.jpLabel.slice(0, 1)}
+                {task.done ? '済' : (task.jpLabel || '課').slice(0, 1)}
               </span>
 
               <div className="min-w-0 truncate">
