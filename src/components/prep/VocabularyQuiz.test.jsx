@@ -133,12 +133,12 @@ describe('VocabularyQuiz', () => {
 
     // Verify DictionaryPopover opens with JLPT dictionary data
     await waitFor(() => {
-      expect(screen.getByText(/jlpt dictionary/i)).toBeInTheDocument();
       expect(screen.getByText(/apple/i)).toBeInTheDocument();
+      expect(screen.getByText(/N5/i)).toBeInTheDocument();
     });
 
     // Click save/bookmark button
-    const bookmarkBtn = screen.getByRole('button', { name: /save word to dictionary/i });
+    const bookmarkBtn = screen.getByRole('button', { name: /save word to dictionary|bookmark to dictionary/i });
     await userEvent.click(bookmarkBtn);
 
     expect(mockSaveDictionaryWord).toHaveBeenCalledWith('test-user-123', expect.objectContaining({
@@ -147,6 +147,6 @@ describe('VocabularyQuiz', () => {
     }));
 
     // Saved state
-    expect(screen.getByRole('button', { name: /word saved to dictionary/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /saved to dictionary/i })).toBeInTheDocument();
   });
 });

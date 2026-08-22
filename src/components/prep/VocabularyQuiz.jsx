@@ -552,19 +552,18 @@ export default function VocabularyQuiz({ briefingId, briefingTitle = 'Basic Verb
         onCancel={handleCancelExit}
       />
       {activeDictionaryEntry && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-[1px]"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setActiveDictionaryEntry(null);
-          }}
-        >
+        <>
+          <div
+            className="fixed inset-0 z-[90]"
+            onClick={() => setActiveDictionaryEntry(null)}
+          />
           <DictionaryPopover
             entry={activeDictionaryEntry}
             onClose={() => setActiveDictionaryEntry(null)}
             onSave={handleSaveToDictionary}
             isSaved={savedDictionaryTerms.has(activeDictionaryEntry?.term)}
           />
-        </div>
+        </>
       )}
     </div>
   );
